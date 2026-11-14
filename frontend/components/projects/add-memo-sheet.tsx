@@ -1,15 +1,25 @@
 'use client'
 
-import { useId, useRef, useState } from 'react'
-import { Loader2, Paperclip, X } from 'lucide-react'
+import { useId, useRef, useState, type ReactNode } from 'react'
+import { Check, Loader2, Paperclip, Pencil, RotateCcw, X } from 'lucide-react'
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Tag } from '@/components/ui/tag'
+import { Checkbox } from '@/components/ui/checkbox'
 import { failureReason } from '@/lib/files/action-failure'
 import { parseVtt } from '@/lib/memos/vtt'
-import { MEMO_DEFAULT_TITLE, MEMO_MAX_CHARS, MEMO_TITLE_MAX, type MemoSource } from '@/lib/memos/memo-shared'
+import {
+    MEMO_DEFAULT_TITLE,
+    MEMO_MAX_CHARS,
+    MEMO_TITLE_MAX,
+    cleanMemoTitle,
+    memoFileName,
+    memoMatchText,
+    type MemoListItem,
+    type MemoSource,
+} from '@/lib/memos/memo-shared'
 
 /** What the sheet hands over to be saved. */
 export interface AddMemoInput {
@@ -23,6 +33,73 @@ export interface AddMemoInput {
 }
 
 export type AddMemoOutcome = { ok: true } | { ok: false; error: string }
+
+/** What an edit hands over (§14.3): `body` null when the notes are as they were. */
+export interface MemoEditInput {
+    title: string
+    /** YYYY-MM-DD */
+    date: string
+    body: string | null
+    source: MemoSource
+    durationMinutes: number | null
+    speakers: number | null
+    /** New notes, and Brio to read them: "Identify action items in the new notes". */
+    identify: boolean
+}
+
+/** The memo being edited, as the sheet needs it to fill itself in and say what saving does. */
+export interface EditMemoContext {
+    memo: Pick<MemoListItem, 'title' | 'date' | 'source' | 'durationMinutes' | 'fileName'>
+    /** The notes as the file has them now, under its heading. */
+    body: string
+    /** Where it's kept: "Google Drive" or "OneDrive". */
+    storage: string | null
+    /** What waits on the memo now, which new notes stop. */
+    waiting: { actionItems: number; raid: number }
+    /** What was applied from it, as the card names it: kept, whatever changes. */
+    applied: { label: string; at: string }[]
+    /** Brio is there to read new notes. */
+    canIdentify: boolean
+    onSave: (input: MemoEditInput) => Promise<AddMemoOutcome>
+}
+
+const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`
+
+/** "the reminder you applied, “Chase the 1099-B”", from the card's "Reminder · Chase the 1099-B". */
+function appliedPhrase(label: string): string {
+    const [kind, ...rest] = label.split(' · ')
+    const what = rest.join(' · ')
+    if (kind === 'Reminder' && what) return `the reminder you applied, “${what}”`
+    if (kind === 'Due date' && what) return `the due date you moved, “${what}”`
+    return `the action item you applied, “${label}”`
+}
+
+/** What saving an edit does, as the sheet says it under the notes. */
+export function editSummary(params: {
+    edit: Pick<EditMemoContext, 'memo' | 'body' | 'storage' | 'waiting' | 'applied'>
+    title: string
+    date: string
+    body: string
+}): { rename: string | null; notesChanged: boolean; headingChanged: boolean; stops: string | null; kept: string | null } {
+    const { edit } = params
+    const notesChanged = memoMatchText(params.body) !== memoMatchText(edit.body)
+    const headingChanged = cleanMemoTitle(params.title) !== edit.memo.title || params.date !== edit.memo.date
+    const wanted = headingChanged && cleanMemoTitle(params.title) ? memoFileName(params.date, params.title, []) : null
+    const parts = [
+        ...(edit.waiting.actionItems > 0 ? [plural(edit.waiting.actionItems, 'action item')] : []),
+        ...(edit.waiting.raid > 0 ? [plural(edit.waiting.raid, 'RAID suggestion')] : []),
+    ]
+    const applied = edit.applied.length
+    return {
+        rename: wanted && wanted !== edit.memo.fileName ? wanted : null,
+        notesChanged,
+        headingChanged,
+        stops: notesChanged && parts.length > 0 ? parts.join(' and ') : null,
+        kept: !notesChanged || applied === 0 ? null
+            : applied === 1 ? appliedPhrase(edit.applied[0].label)
+            : `the ${applied} action items you applied`,
+    }
+}
 
 interface Attached {
     name: string
@@ -74,16 +151,24 @@ export function AddMemoSheet({
     open,
     onOpenChange,
     onSave,
+    edit,
 }: {
     open: boolean
     onOpenChange: (open: boolean) => void
-    onSave: (input: AddMemoInput) => Promise<AddMemoOutcome>
+    /** Adding: saves the new memo. Unused when editing. */
+    onSave?: (input: AddMemoInput) => Promise<AddMemoOutcome>
+    /**
+     * Editing a memo (§14.3): the same sheet, filled in, saying what saving does. Mount it afresh for
+     * each opening (a `key`), so it starts from the memo as it is then.
+     */
+    edit?: EditMemoContext
 }) {
     const ids = { title: useId(), date: useId(), body: useId() }
     const fileRef = useRef<HTMLInputElement>(null)
-    const [title, setTitle] = useState(MEMO_DEFAULT_TITLE)
-    const [date, setDate] = useState(() => localDay())
-    const [body, setBody] = useState('')
+    const [title, setTitle] = useState(() => edit?.memo.title ?? MEMO_DEFAULT_TITLE)
+    const [date, setDate] = useState(() => edit?.memo.date ?? localDay())
+    const [body, setBody] = useState(() => edit?.body ?? '')
+    const [identify, setIdentify] = useState(true)
     const [attached, setAttached] = useState<Attached | null>(null)
     const [fileError, setFileError] = useState<string | null>(null)
     const [saveError, setSaveError] = useState<string | null>(null)
@@ -139,21 +224,33 @@ export function AddMemoSheet({
 
     const length = body.length
     const tooLong = length > MEMO_MAX_CHARS
-    const canSave = !saving && !!title.trim() && !!date && !!body.trim() && !tooLong
+    const summary = edit ? editSummary({ edit, title, date, body }) : null
+    const changed = !summary || summary.notesChanged || summary.headingChanged
+    const canSave = !saving && !!title.trim() && !!date && !!body.trim() && !tooLong && changed
 
     const save = async () => {
         if (!canSave) return
         setSaving(true)
         setSaveError(null)
         try {
-            const outcome = await onSave({
-                title: title.trim(),
-                date,
-                body,
-                source: attached?.source ?? 'notes',
-                durationMinutes: attached?.durationMinutes ?? null,
-                speakers: attached?.source === 'transcript' ? attached.speakers : null,
-            })
+            const outcome = edit && summary
+                ? await edit.onSave({
+                    title: title.trim(),
+                    date,
+                    body: summary.notesChanged ? body : null,
+                    source: attached?.source ?? edit.memo.source,
+                    durationMinutes: attached ? attached.durationMinutes : edit.memo.durationMinutes,
+                    speakers: attached?.source === 'transcript' ? attached.speakers : null,
+                    identify: summary.notesChanged && edit.canIdentify && identify,
+                })
+                : await onSave!({
+                    title: title.trim(),
+                    date,
+                    body,
+                    source: attached?.source ?? 'notes',
+                    durationMinutes: attached?.durationMinutes ?? null,
+                    speakers: attached?.source === 'transcript' ? attached.speakers : null,
+                })
             if (!outcome.ok) {
                 setSaveError(outcome.error)
                 return
@@ -169,13 +266,21 @@ export function AddMemoSheet({
     return (
         <Sheet open={open} onOpenChange={(next) => { if (saving) return; if (next) onOpenChange(true); else close() }}>
             <SheetContent side="right" className="flex w-full flex-col sm:max-w-[560px]">
-                <div className="flex items-center gap-2 border-b border-line px-4 pb-3 pt-4">
-                    <SheetTitle className="text-h3 text-fg">Add internal memo</SheetTitle>
-                    <Tag color="gray">Internal only</Tag>
+                <div className="flex flex-col gap-1 border-b border-line px-4 pb-3 pt-4">
+                    <div className="flex items-center gap-2">
+                        <SheetTitle className="text-h3 text-fg">{edit ? 'Edit memo' : 'Add internal memo'}</SheetTitle>
+                        <Tag color="gray">Internal only</Tag>
+                    </div>
+                    {edit ? (
+                        <SheetDescription className="text-small text-fg-muted">
+                            A Markdown file in “Internal Memos”{edit.storage ? ` in your ${edit.storage}` : ''}. Saving changes the file there too.
+                        </SheetDescription>
+                    ) : (
+                        <SheetDescription className="sr-only">
+                            Notes from a call or meeting, saved as a Markdown file in the engagement&apos;s Internal Memos folder. Only Leads and Full Access contributors see it.
+                        </SheetDescription>
+                    )}
                 </div>
-                <SheetDescription className="sr-only">
-                    Notes from a call or meeting, saved as a Markdown file in the engagement&apos;s Internal Memos folder. Only Leads and Full Access contributors see it.
-                </SheetDescription>
 
                 <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-4">
                     <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3">
@@ -191,12 +296,18 @@ export function AddMemoSheet({
 
                     <div className="flex min-h-0 flex-1 flex-col gap-1.5">
                         <div className="flex items-center gap-2">
-                            <label htmlFor={ids.body} className="text-caption text-fg-muted">Notes or transcript</label>
+                            <label htmlFor={ids.body} className="text-caption text-fg-muted">{edit ? 'Notes' : 'Notes or transcript'}</label>
                             <span className="flex-1" />
-                            <Button type="button" variant="outline" size="sm" onClick={() => fileRef.current?.click()} disabled={saving}>
-                                <Paperclip className="h-3.5 w-3.5" aria-hidden />
-                                Attach .txt, .md or .vtt
-                            </Button>
+                            {edit ? (
+                                <Button type="button" variant="ghost" size="sm" onClick={() => fileRef.current?.click()} disabled={saving} className="text-action">
+                                    Replace with a file
+                                </Button>
+                            ) : (
+                                <Button type="button" variant="outline" size="sm" onClick={() => fileRef.current?.click()} disabled={saving}>
+                                    <Paperclip className="h-3.5 w-3.5" aria-hidden />
+                                    Attach .txt, .md or .vtt
+                                </Button>
+                            )}
                             <input
                                 ref={fileRef}
                                 type="file"
@@ -235,8 +346,10 @@ export function AddMemoSheet({
                             placeholder="Paste notes, Markdown or a transcript"
                             className="min-h-[280px] flex-1 resize-y text-ui leading-[22px]"
                         />
-                        {attached?.source === 'transcript' && (
+                        {attached?.source === 'transcript' ? (
                             <p className="text-small text-fg-muted">Timestamps and cue numbers are removed; each speaker&apos;s lines are joined.</p>
+                        ) : edit && (
+                            <p className="text-small text-fg-muted">Paste over it, edit it here, or replace it with a .txt, .md or .vtt file.</p>
                         )}
                         {tooLong && (
                             <p className="text-small text-danger" role="alert">
@@ -245,10 +358,52 @@ export function AddMemoSheet({
                         )}
                         {fileError && <p className="text-small text-danger" role="alert">{fileError}</p>}
                     </div>
+
+                    {edit && summary && (
+                        <section aria-labelledby={`${ids.body}-save`} className="flex-none rounded-card border border-line bg-surface-muted px-3.5 py-3">
+                            <h3 id={`${ids.body}-save`} className="text-small font-semibold text-fg">When you save</h3>
+                            {!changed ? (
+                                <p className="mt-1.5 text-small text-fg-muted">Change the title, the date or the notes to save.</p>
+                            ) : (
+                                <ul className="mt-1 divide-y divide-line">
+                                    {summary.rename && (
+                                        <SaveLine icon={<Pencil className="h-3.5 w-3.5" aria-hidden />}>
+                                            Renamed in {edit.storage ?? 'storage'} to <b className="font-semibold">{summary.rename}</b>
+                                        </SaveLine>
+                                    )}
+                                    {summary.headingChanged && !summary.notesChanged && (
+                                        <SaveLine icon={<Check className="h-3.5 w-3.5" aria-hidden />}>
+                                            Action items stay as they are. Only new notes are read again; a new title or date costs nothing.
+                                        </SaveLine>
+                                    )}
+                                    {summary.stops && (
+                                        <SaveLine icon={<RotateCcw className="h-3.5 w-3.5" aria-hidden />}>
+                                            The notes changed, so what Brio found in them before stops waiting: <b className="font-semibold">{summary.stops}</b>.
+                                        </SaveLine>
+                                    )}
+                                    {summary.kept && (
+                                        <SaveLine icon={<Check className="h-3.5 w-3.5" aria-hidden />}>
+                                            Kept as it is: {summary.kept}, and the RAID log&apos;s accepted entries.
+                                        </SaveLine>
+                                    )}
+                                    {summary.notesChanged && edit.canIdentify && (
+                                        <li className="py-2">
+                                            <label className="flex cursor-pointer items-start gap-2.5 text-small text-fg">
+                                                <Checkbox className="mt-0.5" checked={identify} onCheckedChange={(v) => setIdentify(v === true)} disabled={saving} />
+                                                <span>Identify action items in the new notes <span className="text-fg-muted">· 1 credit</span></span>
+                                            </label>
+                                        </li>
+                                    )}
+                                </ul>
+                            )}
+                        </section>
+                    )}
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 border-t border-line px-4 py-3">
-                    <span className="text-caption font-normal text-fg-muted">Saved as a Markdown file in Internal Memos, internal only.</span>
+                    <span className="text-caption font-normal text-fg-muted">
+                        {edit ? 'Recorded in the audit trail.' : 'Saved as a Markdown file in Internal Memos, internal only.'}
+                    </span>
                     <span className="flex-1" />
                     {saveError && <span className="w-full text-small text-danger" role="alert">{saveError}</span>}
                     <Button type="button" variant="ghost" size="sm" onClick={close} disabled={saving}>
@@ -256,10 +411,20 @@ export function AddMemoSheet({
                     </Button>
                     <Button type="button" size="sm" onClick={save} disabled={!canSave}>
                         {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
-                        Save memo
+                        {edit ? 'Save changes' : 'Save memo'}
                     </Button>
                 </div>
             </SheetContent>
         </Sheet>
+    )
+}
+
+/** One line of "When you save". */
+function SaveLine({ icon, children }: { icon: ReactNode; children: ReactNode }) {
+    return (
+        <li className="flex items-start gap-2.5 py-2 text-small text-fg">
+            <span className="mt-0.5 flex-none text-fg-muted">{icon}</span>
+            <span>{children}</span>
+        </li>
     )
 }

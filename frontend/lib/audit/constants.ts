@@ -54,6 +54,11 @@ export const AUDIT_EVENT = {
   // Document
   DOCUMENT_CREATED: 'DOCUMENT_CREATED',
   DOCUMENT_CHANGED: 'DOCUMENT_CHANGED',
+  // Internal memos (lib/memos): their own events, so they stay out of a client's view of the trail.
+  DOCUMENT_MEMO_ADDED: 'DOCUMENT_MEMO_ADDED',
+  DOCUMENT_MEMO_EDITED: 'DOCUMENT_MEMO_EDITED',
+  // Brio read a document's contents (an internal memo) to identify its action items.
+  DOCUMENT_AI_REVIEWED: 'DOCUMENT_AI_REVIEWED',
   DOCUMENT_DELETED: 'DOCUMENT_DELETED',
   DOCUMENT_RESTORED: 'DOCUMENT_RESTORED',
   DOCUMENT_MOVED: 'DOCUMENT_MOVED',

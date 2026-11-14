@@ -45,6 +45,8 @@ const MEMO: MemoListItem = {
     appliedCount: 1,
     toReview: 0,
     reviewedAt: null,
+    edited: null,
+    changedSinceRead: false,
     createdAt: '2026-11-12T17:00:00.000Z',
 }
 const OLDER: MemoListItem = {
@@ -68,7 +70,7 @@ type Call = { url: string; method: string; body: unknown }
 let calls: Call[] = []
 let listing: { memos: MemoListItem[]; readOnly: boolean; storage: string | null }
 let content: { status: number; body: unknown }
-const NOTHING_WAITING: MemoReviewPayload = { review: null, alreadyApplied: [], engagement: { id: 'p1', name: '2025 Individual Return', firmId: 'f1', ctaUrl: null }, raid: [] }
+const NOTHING_WAITING: MemoReviewPayload = { review: null, alreadyApplied: [], appliedOn: {}, applied: [], engagement: { id: 'p1', name: '2025 Individual Return', firmId: 'f1', ctaUrl: null }, raid: [] }
 let waiting: MemoReviewPayload = NOTHING_WAITING
 
 function stubFetch() {
@@ -320,6 +322,56 @@ describe('Memos', () => {
 
         fireEvent.click(within(actions).getByRole('button', { name: 'Dismiss all' }))
         await waitFor(() => expect(calls.some((c) => c.url === `/api/projects/p1/memos/${MEMO.id}/review` && c.method === 'DELETE')).toBe(true))
+    })
+
+    it('Edit opens the memo filled in, saves through the memo route, and the pane reads it afresh (§14.3)', async () => {
+        const edited: MemoListItem = {
+            ...MEMO, title: 'Call with Dana, pricing', fileName: '2026-11-12-Call-with-Dana,-pricing.md',
+            edited: { at: '2026-11-14T09:00:00.000Z', byName: 'Sam Rivera' },
+        }
+        const editedText = TEXT.replace('# Call with Dana', '# Call with Dana, pricing')
+        const base: typeof fetch = fetch
+        vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+            if (url === `/api/projects/p1/memos/${MEMO.id}` && init?.method === 'PATCH') {
+                calls.push({ url, method: 'PATCH', body: JSON.parse(String(init.body)) })
+                content = { status: 200, body: { data: { text: editedText, webUrl: null } } }
+                return new Response(JSON.stringify({ data: { memo: edited, fileName: edited.fileName, notesChanged: false, identifying: false } }), { status: 200 })
+            }
+            return base(url, init)
+        }))
+        await openMemos()
+        const pane = screen.getByRole('region', { name: 'Memo' })
+        await within(pane).findByRole('heading', { name: 'Call with Dana' })
+        fireEvent.click(within(pane).getByRole('button', { name: 'Edit' }))
+        expect(await screen.findByText('A Markdown file in “Internal Memos” in your OneDrive. Saving changes the file there too.')).toBeTruthy()
+        // The notes as the file has them, under its heading.
+        expect((screen.getByLabelText('Notes') as HTMLTextAreaElement).value).toBe('Dana Whitfield: We will send the K-1s by end of next week.\n\nAlex: Great.')
+        fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Call with Dana, pricing' } })
+        fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+        await waitFor(() => expect(calls.find((c) => c.method === 'PATCH')?.body).toEqual(expect.objectContaining({ title: 'Call with Dana, pricing', body: null, identify: false })))
+        await waitFor(() => expect(h.addToast).toHaveBeenCalledWith(expect.objectContaining({ title: 'Memo saved', message: 'Renamed to 2026-11-12-Call-with-Dana,-pricing.md in Internal Memos.' })))
+        const after = screen.getByRole('region', { name: 'Memo' })
+        expect(await within(after).findByRole('heading', { name: 'Call with Dana, pricing' })).toBeTruthy()
+        expect(within(after).getByText(/Edited Nov 14 by Sam Rivera/)).toBeTruthy()
+        expect(within(screen.getByTestId(`memo-row-${MEMO.id}`)).getByText(/· edited$/)).toBeTruthy()
+    })
+
+    it('a memo whose notes changed since Brio read them says so, with the sparkle', async () => {
+        listing.memos = [{ ...MEMO, changedSinceRead: true, edited: { at: '2026-11-14T09:00:00.000Z', byName: 'Sam Rivera' } }, OLDER]
+        await openMemos()
+        const actions = screen.getByRole('region', { name: 'Action items' })
+        expect((await within(actions).findByTestId('memo-changed-since-read')).textContent).toMatch(/^Changed since Brio(AI)? read it\. The sparkle reads it again\.$/)
+    })
+
+    it('a memo changed in storage since Brio read it says so too, and a moved line is never shown wrong', async () => {
+        const stored = memoReviewOf({ proposals: [FOUND.proposals[0]] as never, skipped: [], dropped: 0 }, TEXT, 'auto')
+        waiting = { ...NOTHING_WAITING, review: stored }
+        listing.memos = [{ ...MEMO, toReview: 1, reviewedAt: stored.at }, OLDER]
+        content = { status: 200, body: { data: { text: TEXT.replace('We will send the K-1s by end of next week.', 'K-1s are already in.'), webUrl: null } } }
+        await openMemos()
+        const actions = screen.getByRole('region', { name: 'Action items' })
+        expect(await within(actions).findByTestId('memo-changed-since-read')).toBeTruthy()
+        expect(within(actions).getByText('“The memo has changed since, so this line isn’t shown.”')).toBeTruthy()
     })
 
     it('a completed engagement reads its memos, and adds and applies nothing', async () => {

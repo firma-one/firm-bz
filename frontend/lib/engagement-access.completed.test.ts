@@ -89,6 +89,7 @@ const REFUSES: Record<string, number> = {
     'files-agent/apply': 1,
     'files-agent/scaffold': 1,
     'memos': 1, // Saving an internal memo writes a file to the engagement's storage.
+    'memos/[documentId]': 1, // Editing a memo rewrites and renames its file in the engagement's storage (§14.3).
     'memos/[documentId]/applied': 1, // Notes an applied action on a memo, and applying is refused too.
     'memos/[documentId]/review': 1, // Dismiss all on a memo's waiting action items (§13); reading them is a GET.
     'raid': 1, // Adding to the RAID log; a completed engagement's log is read only.

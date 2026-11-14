@@ -83,7 +83,8 @@ function PrivacyPolicyPageView() {
             documents, the search runs in your own storage provider — Google Drive, OneDrive or SharePoint — and
             we receive only which files matched. Our own index holds names and structure, not document text.
             Files indexed before October 2026 may still carry a short extract from the start of the document,
-            left by how search used to work; we are removing those.
+            left by how search used to work; we are removing those. The one line of a file we do keep is from an
+            internal memo, when you apply an action item from it (see section 05).
           </Clause>
           <Clause icon={BarChart3} title="Usage telemetry">
             Aggregated data on how you interact with the platform, to improve performance. We use Google
@@ -108,6 +109,7 @@ function PrivacyPolicyPageView() {
             'Enforcing access control and revocation policies ("Zombie Link" prevention).',
             "Sending critical security alerts regarding your shared assets.",
             "Generating audit logs for your engagements.",
+            "Running Brio, the AI assistant, as described in section 05.",
           ]}
         />
       </Section>
@@ -140,7 +142,8 @@ function PrivacyPolicyPageView() {
           <Clause icon={ShieldCheck} title="Encryption at rest">
             The sensitive fields we do hold are encrypted with AES-256-GCM before they are written to our
             database, each with its own initialization vector: your workspace, firm, client and engagement
-            names and descriptions, client contact details, the text of comments, and your storage
+            names and descriptions, client contact details, the text of comments, the words a RAID entry
+            or an applied action item keeps from the message or memo it came from, and your storage
             provider&apos;s access tokens. Keys are held outside the database and are versioned, so they can be
             rotated without losing access to older data.
           </Clause>
@@ -161,35 +164,51 @@ function PrivacyPolicyPageView() {
 
       <Section index={4}>
         <LegalLead>
-          {BRAND_NAME} includes an AI assistant, Brio, which answers questions about an engagement and can propose
-          changes to how its files are organized.
+          {BRAND_NAME} includes an AI assistant, Brio. It answers questions about your work, drafts replies and
+          updates for you to edit, identifies action items and RAID entries for you to apply or accept, and can
+          propose changes to how your files are organized.
         </LegalLead>
         <Clauses>
           <Clause icon={Server} title="What is sent">
-            When you ask Brio a question, we send Anthropic the question and the engagement details needed to
-            answer it — file and folder names, due dates, statuses, member roles and counts.{" "}
-            <strong>The contents of your documents are never sent.</strong> Brio reads the names and properties of
-            your files, not what is inside them.
+            For each request, we send Anthropic only what that request needs: your question, and details of the
+            engagement it concerns, such as client, engagement and deliverable names, file and folder names and
+            the descriptions you write for them, due dates, statuses, and people&apos;s names and roles. Email
+            addresses are not sent; when someone has not set a name, the part of their email address before the
+            @ stands in for one.
+          </Clause>
+          <Clause icon={FolderOpen} title="Text Brio reads">
+            <strong>Brio never opens the files you deliver.</strong> It reads text your team and your client
+            wrote only for the features that need it. It reads an internal memo when the memo is added, to
+            identify its action items and RAID entries, and again whenever someone asks it to; a firm can turn
+            off the first in its settings. To draft a reply, it reads that one conversation&apos;s shared
+            messages, never internal notes. To suggest RAID entries, it reads an engagement&apos;s new messages,
+            internal notes included, with each author&apos;s first name and role.
           </Clause>
           <Clause icon={ShieldCheck} title="Not used for training">
-            We use Anthropic&apos;s commercial API. Anthropic does not use what we send to train its models, and
-            under its terms does not retain the questions we send or the answers it returns. The exception is
+            We use Anthropic&apos;s commercial API. Its terms do not allow Anthropic to train its models on what
+            we send, and Anthropic deletes what we send and what it returns within 30 days. The exception is
             content its automated abuse-detection systems flag, or that it must keep to comply with the law,
-            which it may retain for up to two years. We do not use your data to train any model, and we do not
+            which it may keep for up to two years. We do not use your data to train any model, and we do not
             send it to any other AI provider.
           </Clause>
           <Clause icon={Check} title="Nothing without your approval">
-            Brio can rename and move files and create folders, and only ever after you approve each change. It
-            never deletes anything. Every change it makes is recorded in your engagement&apos;s audit trail,
-            attributed both to the assistant and to the person who approved it.
+            Brio proposes and a person decides. It can rename and move files and create folders, only ever after
+            you approve each change, and it never deletes anything. Every such change is recorded in your
+            engagement&apos;s audit trail, attributed both to the assistant and to the person who approved it.
+            Action items it identifies wait for someone to apply them, RAID entries it suggests wait for someone
+            to accept them, and a draft goes nowhere until a person sends it.
           </Clause>
           <Clause icon={BarChart3} title="What we keep">
-            Conversations with Brio are not stored on our servers — they are saved in your browser, on the device
-            you used, so you can reopen them. They are kept for up to 30 days unless you pin them, and you can
-            delete any of them, or all of them, from the assistant panel at any time. Clearing your browser data
-            removes them too. When you rate an answer, we record the rating and the category you pick, never the
-            question you asked or the answer you received. We also record how many AI requests an account makes,
-            to apply plan limits and bill correctly.
+            Conversations with Brio are not stored on our servers. They are saved in your browser, on the device
+            you used, for up to 30 days unless you pin them, and you can delete any of them, or all of them, from
+            the assistant panel at any time. Clearing your browser data removes them too. Briefs and engagement
+            summaries Brio writes are stored, so they can be shown again. We do not keep a memo&apos;s text: what
+            Brio identified in a memo points to its lines by position, and when you apply an action item, we keep
+            the line it came from, encrypted, as its citation. A RAID entry suggested from a discussion keeps the
+            words of the message it came from, encrypted; one suggested from a memo links to the memo instead. When you rate an
+            answer, we record the rating and the category you pick, never the question you asked or the answer
+            you received. We also record how many AI requests an account makes, to apply plan limits and bill
+            correctly.
           </Clause>
         </Clauses>
       </Section>
@@ -300,7 +319,9 @@ function PrivacyPolicyEmbedded() {
                   structures, and permission settings to organize your client portal.{" "}
                   <span className="font-medium text-purple-700">
                     We do not store the actual content of your files.
-                  </span>
+                  </span>{" "}
+                  The one line of a file we keep is from an internal memo, when you apply an action
+                  item from it.
                 </span>
               </li>
               <li className="flex items-start gap-3">
@@ -352,6 +373,12 @@ function PrivacyPolicyEmbedded() {
                   <Check className="h-4 w-4 text-purple-600" />
                 </div>
                 <span>Generating audit logs for your engagements.</span>
+              </li>
+              <li className="flex items-start gap-3">
+                <div className="mt-1">
+                  <Check className="h-4 w-4 text-purple-600" />
+                </div>
+                <span>Running Brio, the AI assistant, as described below.</span>
               </li>
             </ul>
           </div>
@@ -418,8 +445,9 @@ function PrivacyPolicyEmbedded() {
             <h3 className="mb-4 mt-0 text-xl font-bold text-slate-900">AI Assistant</h3>
             <p className="mb-4 text-slate-600">
               <BrandName gradient={false} className="inline [font-size:inherit] [line-height:inherit]" />{" "}
-              includes an AI assistant, Brio, which answers questions about an engagement and can
-              propose changes to how its files are organized.
+              includes an AI assistant, Brio. It answers questions, drafts replies and updates for
+              you to edit, identifies action items and RAID entries for you to apply or accept, and
+              can propose changes to how your files are organized.
             </p>
             <ul className="ml-1 mt-2 space-y-3">
               <li className="flex items-start gap-3">
@@ -427,9 +455,9 @@ function PrivacyPolicyEmbedded() {
                   <Check className="h-4 w-4 text-purple-600" />
                 </div>
                 <span>
-                  <strong>What is sent:</strong> your question and the engagement details needed to
-                  answer it — file and folder names, due dates, statuses, member roles and counts.{" "}
-                  <strong>The contents of your documents are never sent.</strong>
+                  <strong>What is sent:</strong> only what each request needs: your question and details of the
+                  engagement, such as its names, file and folder names, due dates, statuses, and
+                  people&apos;s names and roles. Email addresses are not sent.
                 </span>
               </li>
               <li className="flex items-start gap-3">
@@ -437,9 +465,21 @@ function PrivacyPolicyEmbedded() {
                   <Check className="h-4 w-4 text-purple-600" />
                 </div>
                 <span>
-                  <strong>Not used for training:</strong> we use Anthropic&apos;s commercial API.
-                  Anthropic does not use what we send to train its models. We do not use your data
-                  to train any model, and we do not send it to any other AI provider.
+                  <strong>Text Brio reads:</strong> <strong>Brio never opens the files you deliver.</strong> It reads an
+                  internal memo when it is added (a firm can turn this off) or when someone asks it to,
+                  a conversation&apos;s shared messages to draft a reply, and an engagement&apos;s new
+                  messages, internal notes included, to suggest RAID entries.
+                </span>
+              </li>
+              <li className="flex items-start gap-3">
+                <div className="mt-1">
+                  <Check className="h-4 w-4 text-purple-600" />
+                </div>
+                <span>
+                  <strong>Not used for training:</strong> we use Anthropic&apos;s commercial API, whose terms do not allow
+                  Anthropic to train its models on what we send. Anthropic deletes it within 30 days,
+                  except content flagged for abuse or kept by law, for up to two years. We do not use
+                  your data to train any model, and we do not send it to any other AI provider.
                 </span>
               </li>
               <li className="flex items-start gap-3">
@@ -450,7 +490,8 @@ function PrivacyPolicyEmbedded() {
                   <strong>Nothing without your approval:</strong> Brio can rename and move files and
                   create folders, only ever after you approve each change. It never deletes
                   anything, and every change is recorded in your audit trail against both the
-                  assistant and the person who approved it.
+                  assistant and the person who approved it. Action items and RAID entries wait for a
+                  person to apply or accept them.
                 </span>
               </li>
               <li className="flex items-start gap-3">
@@ -458,11 +499,12 @@ function PrivacyPolicyEmbedded() {
                   <Check className="h-4 w-4 text-purple-600" />
                 </div>
                 <span>
-                  <strong>What we keep:</strong> conversations are not stored on our servers — they
-                  are saved in your browser for up to 30 days, and you can delete them there. When
-                  you rate an answer we record the
-                  rating and the category you pick, never the question or the answer. We also count
-                  AI requests to apply plan limits.
+                  <strong>What we keep:</strong> conversations are not stored on our servers. They are saved in
+                  your browser for up to 30 days, and you can delete them there. Briefs and summaries
+                  Brio writes are stored. We do not keep a memo&apos;s text, except the line an applied
+                  action item came from, encrypted, as its citation. When you rate an answer we record the rating
+                  and the category you pick, never the question or the answer. We also count AI
+                  requests to apply plan limits.
                 </span>
               </li>
             </ul>

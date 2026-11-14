@@ -58,6 +58,16 @@ export interface MemoSettings {
     applied: MemoAppliedAction[]
     /** Brio's action items waiting on the memo (§13), identified when it was added or by hand; null when none. */
     review: MemoReview | null
+    /** The last edit here (§14.3): when, and the name of who made it. Null for a memo never edited. */
+    edited: MemoEdit | null
+    /** ISO, when its notes last changed here. What Brio found in them before then no longer waits. */
+    notesChangedAt: string | null
+}
+
+/** An edit made to a memo here: a new title, day or notes. */
+export interface MemoEdit {
+    at: string
+    byName: string
 }
 
 /** One row of the card, as the memos route answers it. */
@@ -77,6 +87,10 @@ export interface MemoListItem {
     /** ISO, when Brio last identified its action items; null before it has. */
     reviewedAt: string | null
     createdAt: string
+    /** The last edit here, or null. */
+    edited: MemoEdit | null
+    /** Its notes changed here after Brio last read them, and Brio hasn't read them since. */
+    changedSinceRead: boolean
 }
 
 // ── Days ──────────────────────────────────────────────────────────────────────────────────────
@@ -235,6 +249,7 @@ function reviewOf(raw: unknown): MemoReview | null {
         skipped,
         dropped: countOf(r.dropped) ?? 0,
         dismissed: r.dismissed === true,
+        ...(typeof r.bodyHash === 'string' ? { bodyHash: r.bodyHash } : {}),
     }
 }
 
@@ -254,7 +269,14 @@ export function parseMemoSettings(settings: unknown): MemoSettings | null {
         createdAt: stringOf(m.createdAt),
         applied: appliedOf(m.applied),
         review: reviewOf(m.review),
+        edited: editOf(m.edited),
+        notesChangedAt: typeof m.notesChangedAt === 'string' ? m.notesChangedAt : null,
     }
+}
+
+function editOf(raw: unknown): MemoEdit | null {
+    const e = recordOf(raw)
+    return typeof e.at === 'string' ? { at: e.at, byName: stringOf(e.byName) } : null
 }
 
 /** The card's row for a memo file. `raidSuggested`: RAID suggestions from it still waiting (§13). */
@@ -276,6 +298,8 @@ export function memoListItem(
         toReview: waitingActionItems(memo) + raidSuggested,
         reviewedAt: memo.review?.at ?? null,
         createdAt: memo.createdAt || new Date(row.createdAt).toISOString(),
+        edited: memo.edited,
+        changedSinceRead: !!memo.notesChangedAt && !!memo.review && memo.notesChangedAt > memo.review.at,
     }
 }
 
@@ -310,19 +334,49 @@ export function appliedLabelOf(p: NotesProposal): string {
     return p.name
 }
 
+const titleWords = (s: string): Set<string> => new Set(normalize(s).split(/[^a-z0-9]+/).filter((w) => w.length >= 3))
+
+/**
+ * Two reminder titles for the same task: the same words, or most of them (Brio words a reminder a little
+ * differently when it reads a memo again, after an edit for one). Compared only on the same day.
+ */
+export function closeTitles(a: string, b: string): boolean {
+    if (normalize(a) === normalize(b)) return true
+    const x = titleWords(a)
+    const y = titleWords(b)
+    if (x.size < 2 || y.size < 2) return false
+    let shared = 0
+    x.forEach((w) => { if (y.has(w)) shared += 1 })
+    return shared / (x.size + y.size - shared) >= 0.6
+}
+
+/** The applied action a proposal matches: same kind and day, and the same deliverable or a close title. */
+function appliedMatch(p: NotesProposal, applied: MemoAppliedAction[]): MemoAppliedAction | undefined {
+    const t = appliedTargetOf(p)
+    if (!t) return undefined
+    return applied.find((a) => a.kind === t.kind && a.date === t.date
+        && (a.target === t.target
+            || (t.kind === 'reminder' && (closeTitles(a.target, t.target) || (!!a.quote && a.quote === t.quote)))))
+}
+
 /**
  * The proposals already applied from this memo: same kind, same day, and the same target. A reminder
- * Brio titles differently the second time still matches on the line of the memo it came from.
+ * Brio titles differently the second time still matches on a close title, or on the line of the memo
+ * it came from.
  */
 export function alreadyAppliedIds(proposals: NotesProposal[], applied: MemoAppliedAction[]): string[] {
     if (applied.length === 0) return []
-    return proposals.flatMap((p) => {
-        const t = appliedTargetOf(p)
-        if (!t) return []
-        const done = applied.some((a) => a.kind === t.kind && a.date === t.date
-            && (a.target === t.target || (t.kind === 'reminder' && !!a.quote && a.quote === t.quote)))
-        return done ? [p.id] : []
-    })
+    return proposals.flatMap((p) => (appliedMatch(p, applied) ? [p.id] : []))
+}
+
+/** When each proposal already applied from this memo was applied, by id (ISO). */
+export function alreadyAppliedOn(proposals: NotesProposal[], applied: MemoAppliedAction[]): Record<string, string> {
+    const on: Record<string, string> = {}
+    for (const p of proposals) {
+        const a = appliedMatch(p, applied)
+        if (a?.at) on[p.id] = a.at
+    }
+    return on
 }
 
 // ── The tree ──────────────────────────────────────────────────────────────────────────────────
@@ -385,6 +439,11 @@ export interface MemoReview {
     dropped: number
     /** Someone dismissed them all: nothing waits. */
     dismissed: boolean
+    /**
+     * A hash of the notes Brio read (memoBodyHash), so a memo changed since, here or in storage, says
+     * so. Absent on reviews from before it was kept.
+     */
+    bodyHash?: string
 }
 
 function anchorOf(raw: unknown): QuoteAnchor | null {
@@ -453,6 +512,35 @@ export function memoReviewOf(
         skipped: found.skipped.map((k) => ({ reason: k.reason, quoteAt: anchorQuote(matchText, k.quote) })),
         dropped: found.dropped,
         dismissed: false,
+        bodyHash: memoBodyHash(memoText),
+    }
+}
+
+/** A hash of a memo's notes, without its heading and byline: a new title or day doesn't change it. */
+export function memoBodyHash(text: string): string {
+    return quoteHash(memoMatchText(splitMemoMarkdown(text).body))
+}
+
+/**
+ * A review after the memo's heading changed but not its notes (a new title or day). An anchor is an
+ * offset into the whole file, so the heading moved every one: each quote is found again, where the
+ * heading's change puts it, or else wherever it now is. A quote that had already changed stays as it was.
+ */
+export function reanchorReview(review: MemoReview, oldText: string, newText: string): MemoReview {
+    const before = memoMatchText(oldText)
+    const after = memoMatchText(newText)
+    const delta = after.length - before.length
+    const move = (a: QuoteAnchor | null): QuoteAnchor | null => {
+        const quote = quoteFromAnchor(before, a)
+        if (!a || quote === null) return a
+        const shifted = { ...a, at: a.at + delta }
+        if (shifted.at >= 0 && quoteFromAnchor(after, shifted) !== null) return shifted
+        return anchorQuote(after, quote) ?? a
+    }
+    return {
+        ...review,
+        proposals: review.proposals.map((p) => ({ ...p, quoteAt: move(p.quoteAt) })),
+        skipped: review.skipped.map((k) => ({ ...k, quoteAt: move(k.quoteAt) })),
     }
 }
 
@@ -472,17 +560,32 @@ export function resolveMemoReview(review: MemoReview, memoText: string): { propo
     }
 }
 
-/** Whether a stored proposal was applied: the same kind, target and day as an applied action. */
-function isStoredApplied(p: StoredProposal, applied: MemoAppliedAction[]): boolean {
-    if (p.kind === 'deliverable') return false
+/** The applied action a stored proposal matches: the same kind and day, and the same deliverable or a close title. */
+function storedAppliedMatch(p: StoredProposal, applied: MemoAppliedAction[]): MemoAppliedAction | undefined {
+    if (p.kind === 'deliverable') return undefined
     const target = p.kind === 'reminder' ? normalize(p.title) : p.deliverableId
     const date = p.kind === 'reminder' ? p.date : p.newDate
-    return applied.some((a) => a.kind === p.kind && a.date === date && a.target === target)
+    return applied.find((a) => a.kind === p.kind && a.date === date
+        && (a.target === target || (p.kind === 'reminder' && closeTitles(a.target, target))))
+}
+
+function isStoredApplied(p: StoredProposal, applied: MemoAppliedAction[]): boolean {
+    return !!storedAppliedMatch(p, applied)
 }
 
 /** The stored proposals already applied from the memo, by id. */
 export function appliedStoredIds(review: MemoReview, applied: MemoAppliedAction[]): string[] {
     return review.proposals.filter((p) => isStoredApplied(p, applied)).map((p) => p.id)
+}
+
+/** When each stored proposal already applied from the memo was applied, by id (ISO). */
+export function appliedStoredOn(review: MemoReview, applied: MemoAppliedAction[]): Record<string, string> {
+    const on: Record<string, string> = {}
+    for (const p of review.proposals) {
+        const a = storedAppliedMatch(p, applied)
+        if (a?.at) on[p.id] = a.at
+    }
+    return on
 }
 
 /** Action items still waiting on the memo: identified, not dismissed, not applied. A new deliverable counts until dismissed. */
@@ -504,6 +607,10 @@ export interface MemoReviewPayload {
     /** Null when nothing waits: never identified, or dismissed. */
     review: MemoReview | null
     alreadyApplied: string[]
+    /** When each of those was applied, by proposal id (ISO). */
+    appliedOn: Record<string, string>
+    /** Every action applied from the memo, as the card names it: what an edit keeps. */
+    applied: { label: string; at: string }[]
     /** What a reminder needs to point back to its engagement. */
     engagement: { id: string; name: string; firmId: string; ctaUrl: string | null }
     raid: MemoRaidSuggestion[]

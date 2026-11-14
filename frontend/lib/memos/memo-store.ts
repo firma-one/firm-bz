@@ -11,15 +11,22 @@ import { userFacing } from '@/lib/actions/action-result'
 import { assignDocId } from '@/lib/doc-id'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 import { logger } from '@/lib/logger'
+import { openText, sealText } from '@/lib/encryption'
+import { googleDriveConnector } from '@/lib/google-drive-connector'
+import { renameOneDriveFile } from '@/lib/connectors/adapters/onedrive-file-ops'
 import {
     MEMO_APPLIED_MAX,
     MEMO_FOLDER_NAME,
     byNewestMemo,
+    cleanMemoTitle,
     isMemoFolder,
     memoFileName,
     memoListItem,
     memoMarkdown,
+    memoMatchText,
     parseMemoSettings,
+    reanchorReview,
+    splitMemoMarkdown,
     type MemoAppliedAction,
     type MemoListItem,
     type MemoReview,
@@ -360,6 +367,8 @@ export async function saveMemo(input: SaveMemoInput): Promise<SavedMemo> {
         createdAt: now,
         applied: [],
         review: null,
+        edited: null,
+        notesChangedAt: null,
     }
     // Internal only on its own too, so moving it out of the folder doesn't open it.
     const settings = { memo, lock: { type: 'private' } } as object
@@ -389,10 +398,17 @@ export async function saveMemo(input: SaveMemoInput): Promise<SavedMemo> {
     let docId = row.docId
     if (!docId) docId = await assignDocId(row.id, s.engagementId, s.engagementName).catch(() => null)
 
-    audit(AUDIT_EVENT.DOCUMENT_CREATED)
-        .firm(s.firmId).client(s.clientId ?? undefined).engagement(s.engagementId)
+    // Its own event, firm only: a memo is hidden from Limited Access contributors and Reviewers.
+    audit(AUDIT_EVENT.DOCUMENT_MEMO_ADDED)
+        .firm(s.firmId).client(s.clientId ?? undefined).engagement(s.engagementId).document(row.id)
         .actor(input.author.userId).scope(AUDIT_SCOPE.DOCUMENT)
-        .meta({ fileName: written.fileName, externalId: written.id, parentId: folder.externalId, memo: true })
+        .meta({
+            fileName: written.fileName,
+            externalId: written.id,
+            parentId: folder.externalId,
+            memo: true,
+            summary: input.source === 'transcript' ? 'Transcript' : 'Notes',
+        })
         .fireAndForget()
 
     return {
@@ -420,7 +436,7 @@ export async function listMemos(engagementId: string): Promise<MemoListItem[]> {
     const raidWaiting = await raidSuggestedByMemo(engagementId, rows.map((r) => r.id))
     return rows
         .flatMap((r) => {
-            const memo = parseMemoSettings(r.settings)
+            const memo = openMemoSettings(parseMemoSettings(r.settings))
             return memo ? [memoListItem(r, memo, raidWaiting.get(r.id) ?? 0)] : []
         })
         .sort(byNewestMemo)
@@ -445,7 +461,12 @@ export const MEMO_NOT_FOUND = 'This memo was not found in this engagement. Refre
 
 interface MemoRow {
     id: string
+    docId: string | null
     externalId: string
+    /** The memos folder it sits in (its storage id). */
+    parentId: string
+    fileName: string
+    createdAt: Date
     connectorId: string | null
     memo: MemoSettings
 }
@@ -458,20 +479,29 @@ export async function findMemo(engagementId: string, documentId: unknown): Promi
     if (typeof documentId !== 'string' || !UUID.test(documentId)) return null
     const doc = await prisma.engagementDocument.findFirst({
         where: { id: documentId, engagementId, isFolder: false, status: { not: 'ARCHIVED' } },
-        select: { id: true, externalId: true, parentId: true, connectorId: true, settings: true },
+        select: { id: true, docId: true, externalId: true, parentId: true, fileName: true, createdAt: true, connectorId: true, settings: true },
     })
-    const memo = doc ? parseMemoSettings(doc.settings) : null
+    const memo = doc ? openMemoSettings(parseMemoSettings(doc.settings)) : null
     if (!doc || !memo || !doc.parentId) return null
     const folder = await prisma.engagementDocument.findFirst({
         where: { engagementId, externalId: doc.parentId, isFolder: true },
         select: { settings: true },
     })
     if (!folder || !isMemoFolder(folder.settings)) return null
-    return { id: doc.id, externalId: doc.externalId, connectorId: doc.connectorId, memo }
+    return {
+        id: doc.id,
+        docId: doc.docId,
+        externalId: doc.externalId,
+        parentId: doc.parentId,
+        fileName: doc.fileName,
+        createdAt: doc.createdAt,
+        connectorId: doc.connectorId,
+        memo,
+    }
 }
 
 export type MemoText =
-    | { ok: true; text: string; memo: MemoSettings & { id: string } }
+    | { ok: true; text: string; memo: MemoSettings & { id: string; fileName: string } }
     | { ok: false; status: number; error: string }
 
 /**
@@ -506,7 +536,7 @@ export async function readMemoText(engagementId: string, documentId: unknown): P
         if (bytes.byteLength > MAX_MEMO_BYTES) {
             return { ok: false, status: 413, error: 'This memo has grown too long in storage to read at once. Split it into shorter memos.' }
         }
-        return { ok: true, text: bytes.toString('utf-8'), memo: { ...found.memo, id: found.id } }
+        return { ok: true, text: bytes.toString('utf-8'), memo: { ...found.memo, id: found.id, fileName: found.fileName } }
     } catch (e) {
         const failure = contentFailure(e, provider) ?? new StorageFailure('other', `Couldn't read this memo from ${provider}. Try again in a moment.`)
         logger.warn('[memos] reading a memo failed', { engagementId, documentId: found.id, reason: failure.reason })
@@ -552,7 +582,171 @@ export async function memoWebUrl(engagementId: string, documentId: unknown): Pro
     }
 }
 
+// ── Editing (§14.3) ───────────────────────────────────────────────────────────────────────────
+
+export interface EditMemoInput {
+    engagementId: string
+    documentId: unknown
+    title: string
+    /** YYYY-MM-DD */
+    date: string
+    /** The notes as they should now read; null leaves them as they are. */
+    body: string | null
+    /** With new notes, where they came from, as the sheet says it: a .vtt makes a transcript. */
+    source?: MemoSource
+    durationMinutes?: number | null
+    speakers?: number | null
+    actor: { userId: string; name: string }
+}
+
+export type EditMemoResult =
+    | {
+        ok: true
+        memo: MemoListItem
+        fileName: string
+        /** The notes changed: what Brio found in them before no longer waits. */
+        notesChanged: boolean
+        /** Saved, but storage didn't rename the file. */
+        warning?: string
+    }
+    | { ok: false; status: number; error: string }
+
+/** How a memo's file is renamed in its storage. */
+async function renameInStorage(provider: StorageProvider, connectorId: string, fileId: string, name: string): Promise<string> {
+    const renamed = provider === 'OneDrive'
+        ? await renameOneDriveFile(connectorId, fileId, name)
+        : await googleDriveConnector.renameFile(connectorId, fileId, name)
+    return renamed?.name || name
+}
+
+/**
+ * Edits a memo (.claude/plans/brio-features-round-2.md, §14.3): a new title or day, new notes, or both.
+ * The file in storage is rewritten (its heading carries the title and day) and renamed to match.
+ *
+ * Only new notes change what waits on it: Brio's action items from before stop waiting, and its RAID
+ * suggestions still waiting are taken away, for Brio to read the new notes. A new title or day changes
+ * no action item: each quote's anchor moves with the heading. Nothing applied is undone, and accepted RAID
+ * entries stay (their source names the memo by its title, so they follow the new one).
+ */
+export async function editMemo(input: EditMemoInput): Promise<EditMemoResult> {
+    const found = await findMemo(input.engagementId, input.documentId)
+    if (!found) return { ok: false, status: 404, error: MEMO_NOT_FOUND }
+
+    // The file as it is now: its notes are kept when only the heading changes, and anchors move from it.
+    const read = await readMemoText(input.engagementId, found.id)
+    if (!read.ok) return read
+    const oldText = read.text
+    const oldBody = splitMemoMarkdown(oldText).body
+
+    const title = cleanMemoTitle(input.title)
+    const notesChanged = input.body !== null && memoMatchText(input.body) !== memoMatchText(oldBody)
+    const body = notesChanged && input.body !== null ? input.body : oldBody
+    const headingChanged = title !== found.memo.title || input.date !== found.memo.date
+    const raidWaiting = async () => (await raidSuggestedByMemo(input.engagementId, [found.id])).get(found.id) ?? 0
+    if (!notesChanged && !headingChanged) {
+        return { ok: true, memo: memoListItem(found, found.memo, await raidWaiting()), fileName: found.fileName, notesChanged: false }
+    }
+
+    const s = await memoStorageFor(input.engagementId)
+    const markdown = memoMarkdown({ title, date: input.date, authorName: found.memo.authorName, body })
+    const bytes = Buffer.from(markdown, 'utf-8')
+    try {
+        await s.content.overwriteFileContent(s.connectorId, found.externalId, bytes, MEMO_MIME)
+    } catch (e) {
+        throw memoStorageFailure(e, s.provider)
+    }
+
+    // Renamed once the words are safe. A rename storage refuses is said; the memo keeps its old name.
+    let fileName = found.fileName
+    let warning: string | undefined
+    const taken = (await namesIn(s, found.parentId).catch(() => [] as string[]))
+        .filter((n) => n.toLowerCase() !== found.fileName.toLowerCase())
+    const wanted = memoFileName(input.date, title, taken)
+    if (wanted !== found.fileName) {
+        try {
+            fileName = await renameInStorage(s.provider, s.connectorId, found.externalId, wanted)
+        } catch (e) {
+            warning = `Saved, but ${s.provider} didn't rename the file. ${memoStorageFailure(e, s.provider).message}`
+        }
+    }
+
+    const now = new Date().toISOString()
+    const row = await prisma.engagementDocument.findUnique({ where: { id: found.id }, select: { settings: true, metadata: true } })
+    const settings = (row?.settings ?? {}) as Record<string, unknown>
+    const metadata = (row?.metadata ?? {}) as Record<string, unknown>
+    const prior = found.memo.review
+    const review: MemoReview | null = !prior ? null : notesChanged ? { ...prior, dismissed: true } : reanchorReview(prior, oldText, markdown)
+    const source: MemoSource = notesChanged ? (input.source ?? found.memo.source) : found.memo.source
+    // Written over the row's own `memo`, so the applied lines stay as stored (encrypted).
+    const memo: Record<string, unknown> = {
+        ...(settings.memo as Record<string, unknown> | undefined),
+        title,
+        date: input.date,
+        review,
+        edited: { at: now, byName: input.actor.name },
+        ...(notesChanged
+            ? {
+                notesChangedAt: now,
+                source,
+                durationMinutes: source === 'transcript' ? (input.durationMinutes ?? found.memo.durationMinutes) : null,
+                speakers: source === 'transcript' ? (input.speakers ?? found.memo.speakers) : null,
+            }
+            : {}),
+    }
+    const nextSettings = { ...settings, memo }
+    await prisma.engagementDocument.update({
+        where: { id: found.id },
+        data: {
+            settings: nextSettings as object,
+            fileName,
+            fileSize: BigInt(bytes.byteLength),
+            metadata: { ...metadata, modifiedTime: now, size: String(bytes.byteLength) } as object,
+            updatedBy: input.actor.userId,
+        },
+    })
+
+    // What Brio suggested from the old notes no longer waits; accepted entries are untouched.
+    if (notesChanged) {
+        await prisma.engagementRaidItem.deleteMany({
+            where: { engagementId: input.engagementId, status: 'SUGGESTED', sourceKind: 'MEMO', sourceRef: found.id },
+        })
+    }
+
+    audit(AUDIT_EVENT.DOCUMENT_MEMO_EDITED)
+        .firm(s.firmId).client(s.clientId ?? undefined).engagement(input.engagementId).document(found.id)
+        .actor(input.actor.userId).scope(AUDIT_SCOPE.DOCUMENT)
+        .meta({
+            fileName,
+            ...(fileName !== found.fileName ? { previousName: found.fileName } : {}),
+            externalId: found.externalId,
+            memo: true,
+            notesChanged,
+            titleOrDateChanged: headingChanged,
+            summary: notesChanged && headingChanged ? 'Notes, title or date changed' : notesChanged ? 'Notes changed' : 'Title or date changed',
+            ...(warning ? { renameFailed: true } : {}),
+        })
+        .fireAndForget()
+
+    const parsed = openMemoSettings(parseMemoSettings(nextSettings)) ?? found.memo
+    return {
+        ok: true,
+        memo: memoListItem({ ...found, fileName }, parsed, notesChanged ? 0 : await raidWaiting()),
+        fileName,
+        notesChanged,
+        ...(warning ? { warning } : {}),
+    }
+}
+
 // ── Applied actions ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * A memo's settings as read: each applied action's citation line decrypted. A line saved before it was
+ * encrypted comes back as it is.
+ */
+function openMemoSettings(memo: MemoSettings | null): MemoSettings | null {
+    if (!memo || memo.applied.length === 0) return memo
+    return { ...memo, applied: memo.applied.map((a) => ({ ...a, quote: openText(a.quote) })) }
+}
 
 /** Notes on the memo that an action from it was applied. Answers how many it has noted. */
 export async function recordMemoApplied(engagementId: string, documentId: unknown, action: Omit<MemoAppliedAction, 'at'>): Promise<number | null> {
@@ -562,9 +756,11 @@ export async function recordMemoApplied(engagementId: string, documentId: unknow
     const settings = (row?.settings ?? {}) as Record<string, unknown>
     const memo = (settings.memo ?? {}) as Record<string, unknown>
     const applied = [...found.memo.applied, { ...action, at: new Date().toISOString() }].slice(-MEMO_APPLIED_MAX)
+    // The citation line is the one piece of a memo's text we keep, so it's stored encrypted.
+    const stored = applied.map((a) => ({ ...a, quote: sealText(a.quote) }))
     await prisma.engagementDocument.update({
         where: { id: found.id },
-        data: { settings: { ...settings, memo: { ...memo, applied } } as object },
+        data: { settings: { ...settings, memo: { ...memo, applied: stored } } as object },
     })
     return applied.length
 }

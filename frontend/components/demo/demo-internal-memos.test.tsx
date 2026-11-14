@@ -39,7 +39,7 @@ describe('DemoInternalMemos', () => {
         await waitFor(() => expect(within(row).getByText('1 action item applied')).toBeTruthy(), { timeout: 3000 })
 
         fireEvent.click(within(row).getByRole('button', { name: 'Identify action items in Kickoff call' }))
-        expect(await within(row).findByText('Applied earlier from this memo', {}, { timeout: 3000 })).toBeTruthy()
+        expect(await within(row).findByText(/^Applied on [A-Z][a-z]{2} \d{1,2} from this memo, so it isn't applied twice\.$/, {}, { timeout: 3000 })).toBeTruthy()
         expect(fetch).not.toHaveBeenCalled()
     })
 

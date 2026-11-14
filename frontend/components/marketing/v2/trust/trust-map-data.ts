@@ -63,7 +63,7 @@ export function trustMapNodes(brand: string): TrustMapNode[] {
       title: 'Encrypted metadata',
       subtitle: 'Structure, never contents',
       detail:
-        'What is stored is the structure of your work, not the work: engagements, statuses, permissions and the audit log. Sensitive fields (client and engagement names, contact details, comments and storage tokens) are encrypted with AES-256-GCM before they are stored.',
+        'What is stored is the structure of your work, not the work: engagements, statuses, permissions and the audit log. Sensitive fields (client and engagement names, contact details, comments, the lines Brio cites and storage tokens) are encrypted with AES-256-GCM before they are stored.',
       points: ['Structure only, never file contents', 'Sensitive fields encrypted with AES-256-GCM', 'The audit log records every open and download'],
     },
     {
@@ -72,8 +72,8 @@ export function trustMapNodes(brand: string): TrustMapNode[] {
       title: 'Brio',
       subtitle: 'Never opens your deliverables',
       detail:
-        'Brio, the assistant for client delivery, works from names, statuses, dates and who is involved, and never opens the files you deliver. It reads comment text and internal memos only to draft a reply, suggest RAID entries or identify action items in call notes. It never changes anything without your consent, and nothing reaches a client until a person on your team sends or publishes it.',
-      points: ['Never opens the files you deliver', 'Never changes anything without your consent', 'Nothing reaches a client until your team sends it'],
+        'Brio, the assistant for client delivery, works from names, statuses, dates and who is involved, and never opens the files you deliver. It reads internal memos and discussion messages only to identify action items, suggest RAID entries or draft a reply. What it reads goes to Anthropic for that one request, under terms that do not allow training on it. It never changes anything without your consent, and nothing reaches a client until a person on your team sends or publishes it.',
+      points: ['Never opens the files you deliver', 'Not used to train AI models', 'Never changes anything without your consent'],
     },
   ];
 }
@@ -83,7 +83,7 @@ export const TRUST_MAP_EDGES: TrustMapEdge[] = [
   { id: 'client-firma', source: 'client', target: 'firma', label: 'Only what you share' },
   { id: 'firma-storage', source: 'firma', target: 'storage', label: 'OAuth 2.0 · no copy' },
   { id: 'firma-metadata', source: 'firma', target: 'metadata', label: 'AES-256-GCM' },
-  { id: 'firma-brio', source: 'firma', target: 'brio', label: 'Never file contents' },
+  { id: 'firma-brio', source: 'firma', target: 'brio', label: 'Never your deliverables' },
 ];
 
 export type TrustMapDirection = 'RIGHT' | 'DOWN';

@@ -3,7 +3,7 @@ import { blockIfEngagementCompleted } from '@/lib/engagement-access'
 import { memoFailureResponse, memoRouteAccess } from '@/lib/memos/memo-access'
 import { MEMO_NOT_FOUND, dismissMemoReview, findMemo } from '@/lib/memos/memo-store'
 import { notesEngagementRef } from '@/lib/memos/memo-review'
-import { appliedStoredIds, type MemoRaidSuggestion, type MemoReviewPayload } from '@/lib/memos/memo-shared'
+import { appliedStoredIds, appliedStoredOn, type MemoRaidSuggestion, type MemoReviewPayload } from '@/lib/memos/memo-shared'
 import { prisma } from '@/lib/prisma'
 
 export const dynamic = 'force-dynamic'
@@ -42,6 +42,9 @@ export async function GET(
         const data: MemoReviewPayload = {
             review,
             alreadyApplied: review ? appliedStoredIds(review, found.memo.applied) : [],
+            appliedOn: review ? appliedStoredOn(review, found.memo.applied) : {},
+            // What an edit keeps (§14.3): the card's names for what was applied, never the memo's lines.
+            applied: found.memo.applied.map((a) => ({ label: a.label, at: a.at })),
             engagement,
             raid: raidRows.map((r): MemoRaidSuggestion => ({ id: r.id, type: r.type as MemoRaidSuggestion['type'], title: r.title })),
         }

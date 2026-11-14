@@ -40,6 +40,12 @@ const h = vi.hoisted(() => {
         withdrawClientAccess: vi.fn(),
         loadPrivacyRows: vi.fn(),
         assertWithinDocumentCap: vi.fn(),
+        overwrite: vi.fn(),
+        renameDrive: vi.fn(),
+        renameOneDrive: vi.fn(),
+        raidDelete: vi.fn(async () => ({ count: 0 })),
+        // Every audit line written, with what its builder was given.
+        audits: [] as Array<Record<string, unknown>>,
     }
 })
 
@@ -56,7 +62,7 @@ const matches = (row: Row, where: Record<string, unknown>) => Object.entries(whe
 vi.mock('@/lib/prisma', () => ({
     prisma: {
         // What still waits from each memo (§13): none in these tests.
-        engagementRaidItem: { groupBy: async () => [] },
+        engagementRaidItem: { groupBy: async () => [], deleteMany: h.raidDelete },
         engagementDocument: {
             findMany: async ({ where, orderBy }: { where: Record<string, unknown>; orderBy?: unknown }) => {
                 const found = h.state.rows.filter((r) => matches(r, where))
@@ -98,7 +104,7 @@ vi.mock('@/lib/connectors/registry', () => ({
         getFolderName: async () => 'Internal Memos',
         listFolderChildren: async () => h.state.stored,
     }),
-    getContentAdapter: async () => ({ createFile: h.createFile, getRenderableContent: h.getRenderableContent }),
+    getContentAdapter: async () => ({ createFile: h.createFile, getRenderableContent: h.getRenderableContent, overwriteFileContent: h.overwrite }),
     getPermissionAdapter: async () => ({
         getEngagementFolderIds: async () => ({ generalFolderId: h.state.generalFolderId, confidentialFolderId: null, stagingFolderId: null }),
         getFileMetadata: async (_c: string, id: string) => ({ id, name: 'Internal Memos', trashed: h.state.trashed.has(id) }),
@@ -108,12 +114,23 @@ vi.mock('@/lib/files/private-documents', () => ({ loadPrivacyRows: h.loadPrivacy
 vi.mock('@/lib/billing/effective-billing-caps', () => ({ assertWithinDocumentCap: h.assertWithinDocumentCap }))
 vi.mock('@/lib/doc-id', () => ({ assignDocId: async () => 'RET-9' }))
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
-vi.mock('@/lib/audit', () => {
-    const builder: Record<string, unknown> = new Proxy({}, { get: (_t, key) => (key === 'fireAndForget' ? () => {} : () => builder) })
-    return { audit: () => builder, AUDIT_EVENT: { DOCUMENT_CREATED: 'DOCUMENT_CREATED' }, AUDIT_SCOPE: { DOCUMENT: 'DOCUMENT' } }
-})
+vi.mock('@/lib/audit', () => ({
+    audit: (event: string) => {
+        const entry: Record<string, unknown> = { event }
+        h.audits.push(entry)
+        const builder: Record<string, unknown> = new Proxy({}, {
+            get: (_t, key: string) => (key === 'fireAndForget' ? () => {} : (value: unknown) => { entry[key] = value; return builder }),
+        })
+        return builder
+    },
+    AUDIT_EVENT: { DOCUMENT_CREATED: 'DOCUMENT_CREATED', DOCUMENT_MEMO_ADDED: 'DOCUMENT_MEMO_ADDED', DOCUMENT_MEMO_EDITED: 'DOCUMENT_MEMO_EDITED' },
+    AUDIT_SCOPE: { DOCUMENT: 'DOCUMENT' },
+}))
+vi.mock('@/lib/google-drive-connector', () => ({ googleDriveConnector: { renameFile: h.renameDrive } }))
+vi.mock('@/lib/connectors/adapters/onedrive-file-ops', () => ({ renameOneDriveFile: h.renameOneDrive }))
 
-import { saveMemo, readMemoText, listMemos, memoStorageFailure } from './memo-store'
+import { saveMemo, readMemoText, listMemos, memoStorageFailure, recordMemoApplied, findMemo, editMemo, writeMemoReview } from './memo-store'
+import { memoReviewOf, resolveMemoReview } from '@/lib/memos/memo-shared'
 import { StorageFailure } from '@/lib/connectors/storage-failure'
 
 const AUTHOR = { userId: 'u1', name: 'Alex Jordan', firstName: 'Alex' }
@@ -139,6 +156,12 @@ beforeEach(() => {
     h.withdrawClientAccess.mockReset().mockResolvedValue({ kept: [], peopleStillHolding: 0, stillHolding: null })
     h.loadPrivacyRows.mockReset().mockImplementation(async () => h.state.rows)
     h.assertWithinDocumentCap.mockReset().mockResolvedValue(undefined)
+    // Storage keeps what was last written, as Drive would.
+    h.overwrite.mockReset().mockImplementation(async (_c: string, _id: string, bytes: Buffer) => { h.state.fileText = bytes.toString('utf-8') })
+    h.renameDrive.mockReset().mockImplementation(async (_c: string, id: string, name: string) => ({ id, name }))
+    h.renameOneDrive.mockReset().mockImplementation(async (_c: string, id: string, name: string) => ({ id, name }))
+    h.raidDelete.mockClear()
+    h.audits.length = 0
 })
 
 describe('the Internal Memos folder', () => {
@@ -258,6 +281,142 @@ describe('a memo file', () => {
         h.state.rows.push(row({ parentId: 'general', settings: { memo: { date: '2026-11-20', title: 'Loose', authorUserId: 'u1' } } }))
         expect((await listMemos('p1')).map((m) => m.title)).toEqual(['Check-in', 'Kickoff'])
         expect(h.getRenderableContent).not.toHaveBeenCalled()
+    })
+})
+
+describe('a memo added', () => {
+    it('is in the audit trail as an internal memo, firm only, against its file', async () => {
+        const saved = await save()
+        expect(h.audits).toContainEqual(expect.objectContaining({
+            event: 'DOCUMENT_MEMO_ADDED',
+            document: saved.memo.id,
+            actor: 'u1',
+            meta: expect.objectContaining({ fileName: '2026-11-12-Call-notes.md', memo: true, summary: 'Notes' }),
+        }))
+    })
+})
+
+describe('editing a memo (§14.3)', () => {
+    const ACTOR = { userId: 'u2', name: 'Sam Rivera' }
+    const BODY = '- Chase the 1099-B\n- Call Dana about the K-1'
+    const FOUND = {
+        proposals: [{ kind: 'reminder' as const, id: 'reminder-1', title: 'Chase the 1099-B', date: '2026-11-16', quote: 'Chase the 1099-B' }],
+        skipped: [],
+        dropped: 0,
+    }
+    /** A memo saved, its file as storage holds it, and Brio's action items waiting on it. */
+    const memoWithReview = async () => {
+        const saved = await save({ body: BODY })
+        h.state.fileText = (h.createFile.mock.calls[0][3] as Buffer).toString('utf-8')
+        await writeMemoReview('p1', saved.memo.id, memoReviewOf(FOUND, h.state.fileText, 'auto', new Date('2026-11-12T18:00:00Z')))
+        h.audits.length = 0
+        return saved.memo.id
+    }
+    const edit = (id: string, change: Partial<Parameters<typeof editMemo>[0]> = {}) =>
+        editMemo({ engagementId: 'p1', documentId: id, title: 'Call notes', date: '2026-11-12', body: null, actor: ACTOR, ...change })
+
+    beforeEach(() => {
+        process.env.ENCRYPTION_KEY_V1 = 'd'.repeat(64)
+        delete process.env.CURRENT_KEY_VERSION
+    })
+
+    it('a new title renames the file and rewrites its heading; the action items stay, on the same lines', async () => {
+        const id = await memoWithReview()
+        const out = await edit(id, { title: 'Call with Dana' })
+        expect(out).toEqual(expect.objectContaining({ ok: true, notesChanged: false, fileName: '2026-11-12-Call-with-Dana.md' }))
+        expect(h.state.fileText.startsWith('# Call with Dana\n')).toBe(true)
+        expect(h.state.fileText).toContain(BODY)
+        expect(h.renameDrive).toHaveBeenCalledWith('conn-1', 'memo-file-1', '2026-11-12-Call-with-Dana.md')
+
+        const memo = (await findMemo('p1', id))!
+        expect(memo.fileName).toBe('2026-11-12-Call-with-Dana.md')
+        expect(memo.memo.review?.dismissed).toBe(false)
+        // The heading grew, so every anchor moved with it: the quote still reads as Brio found it.
+        expect(resolveMemoReview(memo.memo.review!, h.state.fileText).proposals[0].quote).toBe('Chase the 1099-B')
+        expect(h.raidDelete).not.toHaveBeenCalled()
+        expect(h.audits).toEqual([expect.objectContaining({
+            event: 'DOCUMENT_MEMO_EDITED',
+            document: id,
+            actor: 'u2',
+            meta: expect.objectContaining({ fileName: '2026-11-12-Call-with-Dana.md', previousName: '2026-11-12-Call-notes.md', notesChanged: false, summary: 'Title or date changed' }),
+        })])
+    })
+
+    it('new notes stop what Brio found in the old ones, and its RAID suggestions still waiting; what was applied stays', async () => {
+        const id = await memoWithReview()
+        await recordMemoApplied('p1', id, { kind: 'reminder', target: 'chase the 1099-b', date: '2026-11-16', quote: 'chase the 1099-b', label: 'Reminder · Chase the 1099-B' })
+        const out = await edit(id, { body: '- Dana sends the figures by Friday' })
+        if (!out.ok) throw new Error(out.error)
+        expect(out.notesChanged).toBe(true)
+        expect(out.memo).toEqual(expect.objectContaining({ toReview: 0, changedSinceRead: true, appliedCount: 1, edited: expect.objectContaining({ byName: 'Sam Rivera' }) }))
+        expect(h.state.fileText).toBe('# Call notes\n\nThursday, November 12, 2026 · Alex Jordan\n\n- Dana sends the figures by Friday\n')
+        expect(h.renameDrive).not.toHaveBeenCalled()
+        const memo = (await findMemo('p1', id))!
+        expect(memo.memo.review?.dismissed).toBe(true)
+        expect(memo.memo.applied.map((a) => a.quote)).toEqual(['chase the 1099-b'])
+        expect(h.raidDelete).toHaveBeenCalledWith({ where: { engagementId: 'p1', status: 'SUGGESTED', sourceKind: 'MEMO', sourceRef: id } })
+        expect(h.audits[h.audits.length - 1]).toEqual(expect.objectContaining({ event: 'DOCUMENT_MEMO_EDITED', meta: expect.objectContaining({ notesChanged: true, summary: 'Notes changed' }) }))
+    })
+
+    it('a rename storage refuses is said, and the notes are saved anyway', async () => {
+        const id = await memoWithReview()
+        h.renameDrive.mockRejectedValue(new Error('Failed to rename file: 403'))
+        const out = await edit(id, { title: 'Call with Dana' })
+        expect(out).toEqual(expect.objectContaining({ ok: true, fileName: '2026-11-12-Call-notes.md' }))
+        expect(out.ok && out.warning).toBe("Saved, but Google Drive didn't rename the file. The Google Drive account connected to this client doesn't have permission to change this.")
+        expect(h.state.fileText.startsWith('# Call with Dana\n')).toBe(true)
+    })
+
+    it('renames in OneDrive through OneDrive', async () => {
+        h.state.connectorType = 'ONEDRIVE'
+        const id = await memoWithReview()
+        await edit(id, { date: '2026-11-13' })
+        expect(h.renameOneDrive).toHaveBeenCalledWith('conn-1', 'memo-file-1', '2026-11-13-Call-notes.md')
+        expect(h.renameDrive).not.toHaveBeenCalled()
+    })
+
+    it('nothing changed: nothing is written, and nothing is recorded', async () => {
+        const id = await memoWithReview()
+        const out = await edit(id, { body: `  ${BODY}  ` })
+        expect(out).toEqual(expect.objectContaining({ ok: true, notesChanged: false }))
+        expect(h.overwrite).not.toHaveBeenCalled()
+        expect(h.audits).toEqual([])
+    })
+
+    it('only a memo of this engagement', async () => {
+        h.state.rows.push(row({ id: '00000000-0000-4000-9000-999999999999', settings: { memo: { date: '2026-11-20', title: 'Loose', authorUserId: 'u1' } } }))
+        expect(await edit('00000000-0000-4000-9000-999999999999')).toEqual({ ok: false, status: 404, error: 'This memo was not found in this engagement. Refresh the list and try again.' })
+        expect(h.overwrite).not.toHaveBeenCalled()
+    })
+})
+
+describe('an applied action\'s citation line', () => {
+    const ACTION = { kind: 'reminder' as const, target: 'chase the 1099-b', date: '2026-11-16', quote: 'chase the brokerage 1099-b, still missing', label: 'Reminder · Chase the 1099-B' }
+
+    beforeEach(() => {
+        // A throwaway key for this suite, never a real one.
+        process.env.ENCRYPTION_KEY_V1 = 'b'.repeat(64)
+        delete process.env.CURRENT_KEY_VERSION
+    })
+
+    it('is stored encrypted, the one piece of a memo\'s text we keep, and reads back as written', async () => {
+        const saved = await save()
+        expect(await recordMemoApplied('p1', saved.memo.id, ACTION)).toBe(1)
+        const stored = (h.state.rows.find((r) => r.id === saved.memo.id)!.settings.memo as { applied: { quote: string }[] }).applied[0]
+        expect(stored.quote).toMatch(/^v1\$/)
+        expect(JSON.stringify(h.state.rows.map((r) => r.settings))).not.toMatch(/brokerage/)
+        expect((await findMemo('p1', saved.memo.id))!.memo.applied[0].quote).toBe(ACTION.quote)
+    })
+
+    it('stays encrypted as more are applied, and a line saved before encryption still reads', async () => {
+        const saved = await save()
+        const file = h.state.rows.find((r) => r.id === saved.memo.id)!
+        const memo = file.settings.memo as Record<string, unknown>
+        file.settings = { ...file.settings, memo: { ...memo, applied: [{ ...ACTION, quote: 'an older plain line', at: '2026-11-13T10:00:00Z' }] } }
+        await recordMemoApplied('p1', saved.memo.id, { ...ACTION, target: 'call dana', quote: 'call dana about the k-1' })
+        const applied = (file.settings.memo as { applied: { quote: string }[] }).applied
+        expect(applied.map((a) => /^v1\$/.test(a.quote))).toEqual([true, true])
+        expect((await findMemo('p1', saved.memo.id))!.memo.applied.map((a) => a.quote)).toEqual(['an older plain line', 'call dana about the k-1'])
     })
 })
 

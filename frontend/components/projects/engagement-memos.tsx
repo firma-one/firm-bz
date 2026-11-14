@@ -19,7 +19,7 @@ import {
     type NotesEngagementRef,
     type NotesProposalsFound,
 } from '@/components/projects/notes-proposals-panel'
-import { AddMemoSheet, type AddMemoInput, type AddMemoOutcome } from '@/components/projects/add-memo-sheet'
+import { AddMemoSheet, type AddMemoInput, type AddMemoOutcome, type EditMemoContext, type MemoEditInput } from '@/components/projects/add-memo-sheet'
 import { DiscussionsBarPortal } from '@/components/projects/discussions-switch'
 import { AiAbortedError } from '@/lib/ai/fetch-timeout'
 import { ASSISTANT, BRIO_GREEN } from '@/lib/ai/assistant'
@@ -30,6 +30,7 @@ import {
     appliedTargetOf,
     boldSpeakers,
     byNewestMemo,
+    memoBodyHash,
     memoMetaLine,
     resolveMemoReview,
     splitMemoMarkdown,
@@ -109,9 +110,10 @@ export function useEngagementMemos(projectId: string) {
     const [storage, setStorage] = useState<MemoStorageName | null>(null)
     const [loadError, setLoadError] = useState<string | null>(null)
     const [tick, setTick] = useState(0)
-    // Memos saved here whose action items (§13) are still being identified: the list is read again every
-    // few seconds while the tab is visible, until each has its review or three minutes have passed.
-    const [awaiting, setAwaiting] = useState<string[]>([])
+    // Memos saved or edited here whose action items (§13) are still being identified: the list is read again
+    // every few seconds while the tab is visible, until each has a review newer than `after` (the one it had
+    // when saved; none for a new memo) or three minutes have passed.
+    const [awaiting, setAwaiting] = useState<{ id: string; after: string | null }[]>([])
     const { apply: applyProposal, dialog: dueDialog } = useApplyNotesProposal(projectId)
 
     useEffect(() => {
@@ -124,7 +126,10 @@ export function useEngagementMemos(projectId: string) {
                 if (!live) return
                 const list = body.data.memos ?? []
                 setMemos(list)
-                setAwaiting((ids) => ids.filter((id) => !list.find((m) => m.id === id)?.reviewedAt))
+                setAwaiting((waits) => waits.filter((w) => {
+                    const reviewedAt = list.find((m) => m.id === w.id)?.reviewedAt ?? null
+                    return !reviewedAt || reviewedAt === w.after
+                }))
                 setReadOnly(!!body.data.readOnly)
                 setStorage(body.data.storage ?? null)
                 setLoadError(null)
@@ -164,8 +169,29 @@ export function useEngagementMemos(projectId: string) {
             const out = await res.json() as { data: { memo: MemoListItem; fileName: string }; warning?: string }
             const memo = out.data.memo
             setMemos((list) => [memo, ...(list ?? []).filter((m) => m.id !== memo.id)].sort(byNewestMemo))
-            setAwaiting((ids) => [...ids, memo.id])
+            setAwaiting((waits) => [...waits, { id: memo.id, after: null }])
             return { ok: true, memo, fileName: out.data.fileName, ...(out.warning ? { warning: out.warning } : {}) }
+        } catch (e) {
+            return { ok: false, error: failureReason(e) }
+        }
+    }, [projectId])
+
+    /** Edits a memo (§14.3): renamed and rewritten in storage; new notes read again when asked. */
+    const edit = useCallback(async (memo: MemoListItem, input: MemoEditInput): Promise<MemoSaveOutcome> => {
+        try {
+            const res = await fetch(`/api/projects/${projectId}/memos/${memo.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(input),
+            })
+            if (!res.ok) throw await failureFrom(res)
+            const out = await res.json() as { data: { memo: MemoListItem; fileName: string; identifying: boolean }; warning?: string }
+            const saved = out.data.memo
+            setMemos((list) => (list ?? []).map((m) => (m.id === saved.id ? saved : m)).sort(byNewestMemo))
+            if (out.data.identifying) {
+                setAwaiting((waits) => [...waits.filter((w) => w.id !== saved.id), { id: saved.id, after: saved.reviewedAt }])
+            }
+            return { ok: true, memo: saved, fileName: out.data.fileName, ...(out.warning ? { warning: out.warning } : {}) }
         } catch (e) {
             return { ok: false, error: failureReason(e) }
         }
@@ -229,9 +255,11 @@ export function useEngagementMemos(projectId: string) {
         setTick((t) => t + 1)
     }, [projectId])
 
+    const identifyingIds = useMemo(() => awaiting.map((w) => w.id), [awaiting])
+
     return {
-        memos, readOnly, storage, loadError, reload, save, findActions, apply, dueDialog,
-        loadReview, dismissReview, actOnRaid, identifyingIds: awaiting,
+        memos, readOnly, storage, loadError, reload, save, edit, findActions, apply, dueDialog,
+        loadReview, dismissReview, actOnRaid, identifyingIds,
     }
 }
 
@@ -261,6 +289,9 @@ export function EngagementMemosTab({
 }) {
     const { addToast } = useToast()
     const [adding, setAdding] = useState(false)
+    // The memo being edited, and a fresh sheet for each opening.
+    const [editing, setEditing] = useState<{ memo: MemoListItem; context: MemoEditOpening; key: number } | null>(null)
+    const [editOpen, setEditOpen] = useState(false)
 
     const loadContent = useCallback(async (memo: MemoListItem, signal: AbortSignal): Promise<MemoContent> => {
         const res = await fetch(`/api/projects/${projectId}/memos/${memo.id}/content`, { signal })
@@ -286,6 +317,22 @@ export function EngagementMemosTab({
         return { ok: true }
     }
 
+    const startEdit = (memo: MemoListItem, context: MemoEditOpening) => {
+        setEditing((prev) => ({ memo, context, key: (prev?.key ?? 0) + 1 }))
+        setEditOpen(true)
+    }
+
+    const saveEdit = async (memo: MemoListItem, input: MemoEditInput): Promise<AddMemoOutcome> => {
+        const out = await m.edit(memo, input)
+        if (!out.ok) return out
+        addToast({
+            type: out.warning ? 'warning' : 'success',
+            title: 'Memo saved',
+            message: out.warning ?? (out.fileName !== memo.fileName ? `Renamed to ${out.fileName} in Internal Memos.` : 'Your changes are in Internal Memos.'),
+        })
+        return { ok: true }
+    }
+
     return (
         <>
             <MemosView
@@ -306,8 +353,17 @@ export function EngagementMemosTab({
                 dismissReview={m.dismissReview}
                 actOnRaid={m.actOnRaid}
                 identifyingIds={m.identifyingIds}
+                onEdit={startEdit}
             />
             <AddMemoSheet open={adding} onOpenChange={setAdding} onSave={save} />
+            {editing && (
+                <AddMemoSheet
+                    key={editing.key}
+                    open={editOpen}
+                    onOpenChange={setEditOpen}
+                    edit={{ ...editing.context, onSave: (input) => saveEdit(editing.memo, input) }}
+                />
+            )}
         </>
     )
 }
@@ -348,9 +404,17 @@ export interface MemosViewProps {
     dismissReview?: (memo: MemoListItem) => Promise<void>
     /** Accepts or dismisses one of the memo's RAID suggestions. Throws an error carrying the words to show. */
     actOnRaid?: (memo: MemoListItem, itemId: string, action: 'accept' | 'dismiss') => Promise<void>
-    /** Memos whose action items are being identified right now (just added). */
+    /** Memos whose action items are being identified right now (just added, or edited). */
     identifyingIds?: readonly string[]
+    /**
+     * Opens the Edit sheet (§14.3) for a memo, with what the pane knows: its notes as read, what waits on
+     * it, and what was applied. `onSave` is the caller's. Absent: no Edit.
+     */
+    onEdit?: (memo: MemoListItem, context: MemoEditOpening) => void
 }
+
+/** When the memo pane opens the edit sheet: everything but where the edit is saved. */
+export type MemoEditOpening = Omit<EditMemoContext, 'onSave'>
 
 /**
  * The list, the memo and Action items. From 1040 px wide (the view, not the window): three columns of
@@ -400,9 +464,11 @@ export function MemosView({
     dismissReview,
     actOnRaid,
     identifyingIds,
+    onEdit,
 }: MemosViewProps) {
     const [query, setQuery] = useState('')
     // Files read this visit, so going back to a memo doesn't read it again. Never stored anywhere else.
+    // Kept by the memo and its last edit: an edited memo is read afresh.
     const [contents, setContents] = useState<Record<string, MemoContent>>({})
     const remember = useCallback((id: string, content: MemoContent) => setContents((prev) => ({ ...prev, [id]: content })), [])
 
@@ -485,7 +551,7 @@ export function MemosView({
                                                     <MemoDateBlock date={memo.date} />
                                                     <span className="min-w-0 flex-1">
                                                         <span className="block truncate text-ui font-semibold text-fg">{memo.title}</span>
-                                                        <span className="block text-small text-fg-muted">{memoMetaLine(memo)}</span>
+                                                        <span className="block text-small text-fg-muted">{memoMetaLine(memo)}{memo.edited ? ' · edited' : ''}</span>
                                                         {memo.toReview > 0 ? (
                                                             <span className="mt-0.5 block text-caption font-medium text-fg">{memo.toReview} to review</span>
                                                         ) : memo.appliedCount > 0 && (
@@ -506,11 +572,11 @@ export function MemosView({
                         </section>
                         {selected && (
                             <MemoPane
-                                key={selected.id}
+                                key={memoContentKey(selected)}
                                 memo={selected}
                                 storage={storage}
                                 readOnly={readOnly}
-                                cached={contents[selected.id]}
+                                cached={contents[memoContentKey(selected)]}
                                 onLoaded={remember}
                                 loadContent={loadContent}
                                 filesHref={filesHref}
@@ -521,6 +587,7 @@ export function MemosView({
                                 dismissReview={dismissReview}
                                 actOnRaid={actOnRaid}
                                 identifying={!!identifyingIds?.includes(selected.id)}
+                                onEdit={onEdit ? (context) => onEdit(selected, { ...context, storage, canIdentify: true }) : undefined}
                             />
                         )}
                     </MemosColumns>
@@ -529,6 +596,12 @@ export function MemosView({
         </>
     )
 }
+
+/** A memo's read text is kept by the memo and its last edit, so an edit reads it afresh. */
+const memoContentKey = (memo: MemoListItem) => `${memo.id}:${memo.edited?.at ?? ''}`
+
+/** "Nov 14": the day of an edit, as the pane says it. */
+const editDay = (iso: string) => new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 
 type PaneContent =
     | { status: 'loading' }
@@ -562,12 +635,13 @@ function MemoPane({
     dismissReview,
     actOnRaid,
     identifying,
+    onEdit,
 }: {
     memo: MemoListItem
     storage: MemoStorageName | null
     readOnly: boolean
     cached?: MemoContent
-    onLoaded: (id: string, content: MemoContent) => void
+    onLoaded: (key: string, content: MemoContent) => void
     loadContent: MemosViewProps['loadContent']
     filesHref?: MemosViewProps['filesHref']
     openUnavailable?: string
@@ -577,6 +651,7 @@ function MemoPane({
     dismissReview?: MemosViewProps['dismissReview']
     actOnRaid?: MemosViewProps['actOnRaid']
     identifying: boolean
+    onEdit?: (context: Omit<EditMemoContext, 'onSave' | 'storage' | 'canIdentify'>) => void
 }) {
     const [content, setContent] = useState<PaneContent>(() => (cached ? { status: 'ready', content: cached } : { status: 'loading' }))
     const [attempt, setAttempt] = useState(0)
@@ -590,7 +665,7 @@ function MemoPane({
             .then((c) => {
                 if (ctrl.signal.aborted) return
                 setContent({ status: 'ready', content: c })
-                onLoaded(memo.id, c)
+                onLoaded(memoContentKey(memo), c)
             })
             .catch((e: unknown) => {
                 if (!ctrl.signal.aborted) setContent({ status: 'error', reason: failureReason(e) })
@@ -700,8 +775,35 @@ function MemoPane({
     // What waits on the memo, its quotes filled in from the memo itself (only anchors are stored).
     const memoText = content.status === 'ready' ? content.content.text : null
     const waiting: MemoFound | null = waitingPayload?.review && memoText !== null
-        ? { ...resolveMemoReview(waitingPayload.review, memoText), alreadyApplied: waitingPayload.alreadyApplied, engagement: waitingPayload.engagement }
+        ? {
+            ...resolveMemoReview(waitingPayload.review, memoText),
+            alreadyApplied: waitingPayload.alreadyApplied,
+            appliedOn: waitingPayload.appliedOn,
+            engagement: waitingPayload.engagement,
+        }
         : null
+    // Its notes changed since Brio read them: edited here (and not read again), or in storage.
+    const review = waitingPayload?.review ?? null
+    const changedInStorage = !!review?.bodyHash && memoText !== null && memoBodyHash(memoText) !== review.bodyHash
+    const changedSinceRead = (memo.changedSinceRead || changedInStorage) && !found && !busy && !identifying
+    // Read again after an edit: the heading says so.
+    const caption = !found && review && memo.edited && review.at > memo.edited.at
+        ? `Read again after the edit on ${editDay(memo.edited.at)}. Edit any of them. Nothing changes until you apply it.`
+        : undefined
+
+    const openEdit = () => {
+        if (!onEdit || memoText === null) return
+        const appliedIds = new Set(waitingPayload?.alreadyApplied ?? [])
+        onEdit({
+            memo,
+            body: splitMemoMarkdown(memoText).body,
+            waiting: {
+                actionItems: review ? review.proposals.filter((p) => !appliedIds.has(p.id)).length : 0,
+                raid: waitingPayload?.raid.length ?? 0,
+            },
+            applied: waitingPayload?.applied ?? [],
+        })
+    }
     const shown = found ?? waiting
     const shownKey = found ? `run-${round}` : `waiting-${waitingPayload?.review?.at ?? ''}`
     const raidItems = waitingPayload?.raid ?? []
@@ -717,6 +819,11 @@ function MemoPane({
                     <Tag color="gray">Internal only</Tag>
                     <span className="min-w-0 truncate text-small text-fg-muted" title={memo.fileName}>{memo.fileName}</span>
                     <span className="flex-1" />
+                    {onEdit && !readOnly && (
+                        <Button type="button" variant="outline" size="sm" onClick={openEdit} disabled={content.status !== 'ready'}>
+                            Edit
+                        </Button>
+                    )}
                     {open}
                 </div>
 
@@ -729,7 +836,11 @@ function MemoPane({
                     ) : (
                         <article className="flex max-w-[720px] flex-col gap-2.5 px-6 py-5" aria-label={memo.title}>
                             <h3 className="text-h3 text-fg">{parts?.title || memo.title}</h3>
-                            {parts?.byline && <p className="text-small text-fg-muted">{parts.byline}</p>}
+                            {(parts?.byline || memo.edited) && (
+                                <p className="text-small text-fg-muted">
+                                    {[parts?.byline, memo.edited ? `Edited ${editDay(memo.edited.at)}${memo.edited.byName ? ` by ${memo.edited.byName}` : ''}` : null].filter(Boolean).join(' · ')}
+                                </p>
+                            )}
                             {body.trim()
                                 ? <ChatMarkdown content={body} className={MEMO_BODY_CLASS} />
                                 : <p className="text-small text-fg-muted">This memo has no notes under its title.</p>}
@@ -769,6 +880,12 @@ function MemoPane({
                     </div>
 
                     <div className="@[1040px]:min-h-0 @[1040px]:flex-1 @[1040px]:overflow-y-auto">
+                        {changedSinceRead && (
+                            <p className="flex items-start gap-1.5 border-b border-line px-4 py-2.5 text-small text-fg-muted" data-testid="memo-changed-since-read">
+                                <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+                                <span>Changed since <Brio /> read it. The sparkle reads it again.</span>
+                            </p>
+                        )}
                         {busy ? (
                             <div className="flex flex-col gap-2.5 px-4 py-4" aria-busy="true">
                                 <LoadingAnnouncement label={`${ASSISTANT.name} is reading the memo`} />
@@ -794,6 +911,7 @@ function MemoPane({
                                 footnote={MEMO_PROPOSALS_FOOTNOTE}
                                 layout="column"
                                 extra={raidSection}
+                                caption={found ? undefined : caption}
                             />
                         ) : raidSection ? (
                             raidSection

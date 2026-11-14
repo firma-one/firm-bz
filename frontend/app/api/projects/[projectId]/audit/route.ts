@@ -1,17 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { resolveProjectContext } from '@/lib/resolve-project-context'
-import { canViewProject, getProjectPersona } from '@/lib/permission-helpers'
+import { canManageProject, canViewProject, canViewProjectInternalTabs } from '@/lib/permission-helpers'
 import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
 import { Prisma } from '@prisma/client'
-import { FIRM_ONLY_AUDIT_EVENTS, isValidAuditEventType } from '@/lib/audit-event-types'
+import { isValidAuditEventType } from '@/lib/audit-event-types'
 import { withResolvedFileNames } from '@/lib/audit/file-names'
 import { resolveDisplayName } from '@/lib/auth/display-name'
 
 /**
  * GET /api/projects/[projectId]/audit
- * List project-scoped platform audit events (append-only, immutable). Visible to all personas with project access.
+ * List project-scoped platform audit events (append-only, immutable).
  * Query: limit (default 50), cursor, documentId, eventType, fromDate (ISO), toDate (ISO).
+ *
+ * Who: the same people the app shows the trail to, and no one else.
+ * - The whole trail (the Audit tab): a Lead or a firm admin (`project:can_manage`), as the page decides it.
+ * - One file's events (`documentId`, the Details pane's Activity): the firm's own people
+ *   (`project:can_view_internal`).
+ * A Contributor · Limited Access or a Reviewer sees neither, so is refused here too: the trail names
+ * internal-only files, memos and what the firm did among itself.
  */
 export async function GET(
   request: NextRequest,
@@ -30,9 +37,19 @@ export async function GET(
     if (!canView) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
     const { searchParams } = new URL(request.url)
+    const documentId = searchParams.get('documentId') ?? undefined
+    const allowed = documentId
+      ? await canViewProjectInternalTabs(ctx.orgId, ctx.clientId, ctx.projectId)
+      : await canManageProject(ctx.orgId, ctx.clientId, ctx.projectId)
+    if (!allowed) {
+      return NextResponse.json(
+        { error: documentId ? "A file's activity is for the firm's own people." : "This engagement's audit trail is for Leads and firm admins." },
+        { status: 403 },
+      )
+    }
+
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') ?? '50', 10)))
     const cursor = searchParams.get('cursor') ?? undefined
-    const documentId = searchParams.get('documentId') ?? undefined
     const eventTypes = searchParams.getAll('eventType').filter(Boolean)
     const fromDate = searchParams.get('fromDate') ?? undefined
     const toDate = searchParams.get('toDate') ?? undefined
@@ -49,11 +66,6 @@ export async function GET(
     const whereAny = where as any
     if (validEventTypes.length === 1) whereAny.eventType = validEventTypes[0]
     if (validEventTypes.length > 1) whereAny.eventType = { in: validEventTypes }
-    // What is the firm's own (a document's Blocked flag) stays out of a client's view of the trail.
-    const persona = await getProjectPersona(ctx.firmId, ctx.clientId, ctx.projectId)
-    if (persona === 'eng_ext_collaborator' || persona === 'eng_viewer') {
-      where.AND = [{ eventType: { notIn: [...FIRM_ONLY_AUDIT_EVENTS] } }]
-    }
     if (clientKeyword) where.client = { is: { name: { contains: clientKeyword, mode: 'insensitive' } } }
     if (projectKeyword) where.engagement = { is: { name: { contains: projectKeyword, mode: 'insensitive' } } }
     if (fromDate || toDate) {

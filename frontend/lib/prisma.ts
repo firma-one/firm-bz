@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client'
-import { encrypt, decrypt } from './encryption'
+import { encrypt, decrypt, isCiphertext } from './encryption'
 import { AGENT_EMAIL_DOMAIN } from './ai/agent-email'
 
 // PrismaClient is attached to the `global` object in development to prevent
@@ -24,8 +24,8 @@ import { AGENT_EMAIL_DOMAIN } from './ai/agent-email'
 // Helper to safely decrypt names
 function safeDecrypt(val: string | null | undefined): string {
   if (!val) return ''
-  // If it doesn't look like our ciphertext format (v1$, etc), assume it's legacy/plaintext
-  if (!val.startsWith('v') || !val.includes('$')) return val;
+  // If it isn't our ciphertext format (v1$base64), it's legacy plaintext
+  if (!isCiphertext(val)) return val;
   try {
     return decrypt(val)
   } catch (e) {
@@ -40,7 +40,7 @@ function safeEncrypt(val: any): any {
   const str = typeof val === 'string' ? val : String(val)
   if (str.length === 0) return val
   // Avoid double encryption
-  if (str.startsWith('v') && str.includes('$')) return str
+  if (isCiphertext(str)) return str
   return encrypt(str)
 }
 
@@ -52,6 +52,9 @@ const ENCRYPTED_FIELDS_MAP: Record<string, string[]> = {
   clientcontact:      ['name', 'email', 'phone', 'notes'],
   doccommentmessage:  ['content'],
   connector:          ['accessToken', 'refreshToken', 'name'],
+  // A RAID entry from a discussion keeps the words it came from (a copy of a comment's text).
+  // Quotes inside `extraSources` (JSON) are sealed in lib/raid/raid-store.ts.
+  engagementraiditem: ['quote'],
 }
 
 /**
@@ -196,11 +199,14 @@ function createExtendedPrismaClient() {
             if (filtered === null) return operation === 'createMany' ? { count: 0 } : null
           }
 
-          // 1. Encryption on Write
-          if (['create', 'update', 'upsert'].includes(operation)) {
+          // 1. Encryption on Write. The bulk writes too: RAID suggestions are saved with createMany,
+          // and a field written that way would otherwise be stored as plain text.
+          if (['create', 'update', 'upsert', 'createMany', 'createManyAndReturn', 'updateMany', 'updateManyAndReturn'].includes(operation)) {
             if (operation === 'upsert') {
               if (anyArgs.create) anyArgs.create = encryptData(anyArgs.create, model)
               if (anyArgs.update) anyArgs.update = encryptData(anyArgs.update, model)
+            } else if (Array.isArray(anyArgs.data)) {
+              anyArgs.data = anyArgs.data.map((row: unknown) => encryptData(row, model))
             } else if (anyArgs.data) {
               anyArgs.data = encryptData(anyArgs.data, model)
             }

@@ -41,6 +41,8 @@ export interface NotesProposalsFound {
     dropped: number
     /** From an internal memo: proposals already applied from it, shown as done and not selected. */
     alreadyApplied?: string[]
+    /** When each of those was applied, by id (ISO): "Applied on Nov 12 from this memo". */
+    appliedOn?: Record<string, string>
 }
 
 /** What an apply came to. `cancelled`: the person closed a question it asked, so nothing changed. */
@@ -252,18 +254,28 @@ export interface NotesProposalsReviewProps {
     layout?: 'card' | 'column'
     /** Shown under the action items, above Dismiss and Apply: an internal memo's RAID suggestions (§13). */
     extra?: React.ReactNode
+    /** In place of "Edit any of them…" under the heading, as after a memo was edited and read again. */
+    caption?: string
 }
 
 /** What a proposal applied from this memo before shows instead of Apply. */
 const APPLIED_BEFORE = 'Applied earlier from this memo'
 
-export function NotesProposalsReview({ found, apply, openDeliverable, onDismiss, readOnly = false, footnote, layout = 'card', extra }: NotesProposalsReviewProps) {
+/** "Applied on Nov 12 from this memo, so it isn't applied twice.", or the plain note when the day isn't known. */
+function appliedBeforeNote(at: string | undefined): string {
+    if (!at) return APPLIED_BEFORE
+    const day = new Date(at)
+    if (Number.isNaN(day.getTime())) return APPLIED_BEFORE
+    return `Applied on ${day.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} from this memo, so it isn't applied twice.`
+}
+
+export function NotesProposalsReview({ found, apply, openDeliverable, onDismiss, readOnly = false, footnote, layout = 'card', extra, caption }: NotesProposalsReviewProps) {
     const { proposals, skipped, dropped } = found
     const appliedBefore = new Set(found.alreadyApplied ?? [])
     // Reminders and due dates start selected, unless applied before; a new deliverable never is.
     const [selected, setSelected] = useState<Set<string>>(() => new Set(proposals.filter((p) => selectable(p) && !appliedBefore.has(p.id)).map((p) => p.id)))
     const [rows, setRows] = useState<Record<string, RowState>>(() => Object.fromEntries(
-        proposals.filter((p) => appliedBefore.has(p.id)).map((p) => [p.id, { status: 'applied', note: APPLIED_BEFORE } as RowState]),
+        proposals.filter((p) => appliedBefore.has(p.id)).map((p) => [p.id, { status: 'applied', note: appliedBeforeNote(found.appliedOn?.[p.id]) } as RowState]),
     ))
     const [edits, setEdits] = useState<Record<string, ProposalEdit>>({})
     const [applyingAll, setApplyingAll] = useState(false)
@@ -326,7 +338,7 @@ export function NotesProposalsReview({ found, apply, openDeliverable, onDismiss,
                     {count === 0 ? 'identified no action items in these notes' : `identified ${count} action item${count === 1 ? '' : 's'}`}
                 </h4>
                 <span className="flex-1" />
-                {count > 0 && <span className="text-caption font-normal text-fg-muted">Edit any of them. Nothing changes until you apply it.</span>}
+                {count > 0 && <span className="text-caption font-normal text-fg-muted">{caption ?? 'Edit any of them. Nothing changes until you apply it.'}</span>}
             </div>
 
             {proposals.map((p) => {

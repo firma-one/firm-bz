@@ -1,5 +1,5 @@
 import type { ReactNode } from "react"
-import { AlertTriangle, Check, Copyright, CreditCard, HardDrive, Mail, Scale } from "lucide-react"
+import { AlertTriangle, Check, Copyright, CreditCard, HardDrive, Mail, Scale, ShieldCheck } from "lucide-react"
 
 import { BrandName } from "@/components/brand/BrandName"
 import { DocView } from "@/components/marketing/v2/reading/doc-view"
@@ -50,7 +50,7 @@ function TermsOfServicePageView() {
       }
       meta={
         <>
-          Last updated <time dateTime="2026-10">October 2026</time>
+          Last updated <time dateTime="2026-11">November 2026</time>
         </>
       }
       toc={TOC}
@@ -112,11 +112,25 @@ function TermsOfServicePageView() {
             Brio can rename and move files and create folders. It proposes; you approve each change before
             anything happens, and nothing happens without that approval. A change you approve is your decision and
             your responsibility — it is recorded in your audit trail against both the assistant and your account.
+            What Brio identifies in a memo or suggests for the RAID log works the same way: nothing is applied
+            until a person applies or accepts it.
           </Clause>
           <Clause icon={HardDrive} title="It never deletes">
             Brio performs reversible operations only. It will not delete, trash or archive a file, a folder or a
             member, and it will not remove anyone&apos;s access. Asked to, it declines and points you to where you
             can do it yourself.
+          </Clause>
+          <Clause icon={ShieldCheck} title="What Brio reads">
+            Brio works from your engagements&apos; names, dates and statuses, and reads internal memos and
+            discussion messages only for the features that need them. It never opens the files you deliver. What
+            it reads goes to our AI provider, Anthropic, for that request, under terms that do not allow Anthropic
+            to train its models on it. You confirm you have the right to share what you add to {BRAND_NAME} for
+            this purpose, including anything it says about other people. A firm can turn off Brio&apos;s reading
+            of new memos in its settings, and{" "}
+            <a href="/privacy#ai" className="underline underline-offset-2">
+              section 05 of our Privacy Policy
+            </a>{" "}
+            sets out exactly what is sent and what is kept.
           </Clause>
           <Clause icon={CreditCard} title="AI credits">
             AI features consume credits included with your plan. Credits reset each billing period, do not carry
@@ -279,7 +293,7 @@ function TermsOfServiceEmbedded() {
                   <strong>You approve every change:</strong> Brio proposes renames, moves and new
                   folders; nothing happens until you approve each one. A change you approve is your
                   decision, recorded in your audit trail against both the assistant and your
-                  account.
+                  account. Action items and RAID entries wait for a person to apply or accept them.
                 </span>
               </li>
               <li className="flex items-start gap-3">
@@ -290,6 +304,18 @@ function TermsOfServiceEmbedded() {
                   <strong>It never deletes:</strong> Brio performs reversible operations only. It
                   will not delete, trash or archive a file, folder or member, and will not remove
                   anyone&apos;s access.
+                </span>
+              </li>
+              <li className="flex items-start gap-3">
+                <div className="mt-1">
+                  <Check className="h-4 w-4 text-purple-600" />
+                </div>
+                <span>
+                  <strong>What Brio reads:</strong> names, dates and statuses, plus internal memos and discussion
+                  messages for the features that need them; never the files you deliver. It goes to
+                  Anthropic for that request, under terms that rule out training on it. You confirm you
+                  may share what you add for this purpose. Details are in section 05 of our Privacy
+                  Policy.
                 </span>
               </li>
               <li className="flex items-start gap-3">

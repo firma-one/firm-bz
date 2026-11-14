@@ -16,6 +16,7 @@ export const AUDIT_EVENT_TYPES = [
   'ENGAGEMENT_FOLDER_ATTACHED',
   // Document lifecycle
   'DOCUMENT_CREATED', 'DOCUMENT_CHANGED', 'DOCUMENT_DELETED', 'DOCUMENT_RESTORED', 'DOCUMENT_MOVED',
+  'DOCUMENT_MEMO_ADDED', 'DOCUMENT_MEMO_EDITED', 'DOCUMENT_AI_REVIEWED',
   'DOCUMENT_VERSIONED', 'DOCUMENT_OPENED', 'DOCUMENT_DOWNLOADED', 'DOCUMENT_INDEXED',
   'DOCUMENT_FINALIZED', 'DOCUMENT_UNLOCKED', 'DOCUMENT_STATUS_CHANGED',
   'DOCUMENT_BLOCKED', 'DOCUMENT_UNBLOCKED',
@@ -33,8 +34,16 @@ export const AUDIT_EVENT_TYPES = [
 
 export type AuditEventType = typeof AUDIT_EVENT_TYPES[number]
 
-/** Events about what is the firm's own (a document's Blocked flag): never shown to a client. */
-export const FIRM_ONLY_AUDIT_EVENTS: readonly AuditEventType[] = ['DOCUMENT_BLOCKED', 'DOCUMENT_UNBLOCKED']
+/**
+ * Events about what is the firm's own: a document's Blocked flag, and internal memos (added, edited, read
+ * by Brio). Today no client reads the trail at all: the engagement audit route answers Leads and firm admins
+ * (the whole trail) and the firm's own people (one file's Activity) only. Any view of the trail ever shown to
+ * a Contributor · Limited Access or a Reviewer must leave these out.
+ */
+export const FIRM_ONLY_AUDIT_EVENTS: readonly AuditEventType[] = [
+  'DOCUMENT_BLOCKED', 'DOCUMENT_UNBLOCKED',
+  'DOCUMENT_MEMO_ADDED', 'DOCUMENT_MEMO_EDITED', 'DOCUMENT_AI_REVIEWED',
+]
 
 export function isValidAuditEventType(value: string): value is AuditEventType {
   return (AUDIT_EVENT_TYPES as readonly string[]).includes(value)

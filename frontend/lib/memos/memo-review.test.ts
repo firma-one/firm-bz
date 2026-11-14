@@ -20,6 +20,7 @@ const h = vi.hoisted(() => {
         write: vi.fn(async () => true),
         find: vi.fn(),
         raid: vi.fn(),
+        audits: [] as Array<Record<string, unknown>>,
     }
 })
 
@@ -37,16 +38,30 @@ vi.mock('@/lib/raid/raid-check', () => ({ runMemoRaidCheck: h.raid }))
 vi.mock('@/lib/memos/memo-store', () => ({ readMemoText: h.read, writeMemoReview: h.write }))
 vi.mock('@/lib/navigation/firm-paths', () => ({ engagementPath: () => '/e' }))
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
+vi.mock('@/lib/audit', () => ({
+    audit: (event: string) => {
+        const entry: Record<string, unknown> = { event }
+        h.audits.push(entry)
+        const builder: Record<string, unknown> = new Proxy({}, {
+            get: (_t, key: string) => (key === 'fireAndForget' ? () => {} : (value: unknown) => { entry[key] = value; return builder }),
+        })
+        return builder
+    },
+    AUDIT_EVENT: { DOCUMENT_AI_REVIEWED: 'DOCUMENT_AI_REVIEWED' },
+    AUDIT_SCOPE: { DOCUMENT: 'DOCUMENT' },
+}))
 
 import { reviewMemoOnAdd } from './memo-review'
 
 const NOW = new Date('2026-11-14T10:00:00Z')
-const review = () => reviewMemoOnAdd({ engagementId: 'p1', firmId: 'f1', memoId: MEMO_ID, now: NOW })
+const review = (more: Partial<Parameters<typeof reviewMemoOnAdd>[0]> = {}) =>
+    reviewMemoOnAdd({ engagementId: 'p1', firmId: 'f1', clientId: 'c1', actorUserId: 'u1', memoId: MEMO_ID, now: NOW, ...more })
 
 beforeEach(() => {
     h.configured = true
     h.firmSettings = {}
-    h.read.mockReset().mockResolvedValue({ ok: true, text: TEXT, memo: { id: MEMO_ID, title: 'Call with Dana', date: '2026-11-14' } })
+    h.read.mockReset().mockResolvedValue({ ok: true, text: TEXT, memo: { id: MEMO_ID, title: 'Call with Dana', date: '2026-11-14', fileName: '2026-11-14-Call-with-Dana.md' } })
+    h.audits.length = 0
     h.write.mockClear()
     h.find.mockReset().mockResolvedValue({
         ok: true,
@@ -99,6 +114,40 @@ describe('reviewMemoOnAdd', () => {
         h.read.mockRejectedValue(new Error('boom'))
         expect(await review()).toEqual({ status: 'failed' })
         expect(h.write).not.toHaveBeenCalled()
+    })
+
+    it('the audit trail says Brio read the memo: who added it, and what it found, never the words', async () => {
+        await review()
+        expect(h.audits).toEqual([expect.objectContaining({
+            event: 'DOCUMENT_AI_REVIEWED',
+            document: MEMO_ID,
+            actor: 'u1',
+            client: 'c1',
+            meta: expect.objectContaining({
+                fileName: '2026-11-14-Call-with-Dana.md', agent: 'Brio', trigger: 'added', actionItems: 1, raidSuggested: 1,
+                summary: '1 action item · 1 RAID suggestion · when it was added',
+            }),
+        })])
+        expect(JSON.stringify(h.audits)).not.toContain('figures')
+    })
+
+    it('a read that came back with nothing usable is still recorded; one that never happened is not', async () => {
+        h.find.mockResolvedValue({ ok: false, reason: 'no_answer' })
+        expect(await review()).toEqual({ status: 'no_answer' })
+        expect(h.audits).toEqual([expect.objectContaining({ meta: expect.objectContaining({ actionItems: null, summary: 'nothing usable came back · when it was added' }) })])
+        h.audits.length = 0
+        h.firmSettings = { brio: { memoReview: false } }
+        await review()
+        h.find.mockRejectedValue(new h.LimitError('Your group has used its AI credits for this period.'))
+        h.firmSettings = {}
+        await review()
+        expect(h.audits).toEqual([])
+    })
+
+    it('an edit asked for it: read even when the firm turned automatic reading off, and recorded as after an edit', async () => {
+        h.firmSettings = { brio: { memoReview: false } }
+        expect(await review({ requested: true, trigger: 'edited' })).toEqual({ status: 'reviewed', actionItems: 1, raidSuggested: 1 })
+        expect(h.audits[0]).toEqual(expect.objectContaining({ meta: expect.objectContaining({ trigger: 'edited', summary: '1 action item · 1 RAID suggestion · after its notes were edited' }) }))
     })
 
     it('can only suggest: it has no way to add a reminder, move a due date or accept a RAID entry', () => {

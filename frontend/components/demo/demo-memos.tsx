@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useToast } from '@/components/ui/toast'
-import { MemosView, type ApplicableProposal, type MemoContent, type MemoFound } from '@/components/projects/engagement-memos'
-import { AddMemoSheet, localDay, type AddMemoInput, type AddMemoOutcome } from '@/components/projects/add-memo-sheet'
+import { MemosView, type ApplicableProposal, type MemoContent, type MemoEditOpening, type MemoFound } from '@/components/projects/engagement-memos'
+import { AddMemoSheet, localDay, type AddMemoInput, type AddMemoOutcome, type MemoEditInput } from '@/components/projects/add-memo-sheet'
 import { AiAbortedError } from '@/lib/ai/fetch-timeout'
 import type { NotesProposal } from '@/lib/ai/notes-proposals'
 import type { DemoEngagement } from '@/lib/demo/static-demo-data'
@@ -11,13 +11,18 @@ import { getDemoDeliverables } from '@/lib/demo/demo-deliverables'
 import { prettyName } from '@/lib/demo/demo-summary'
 import {
     alreadyAppliedIds,
+    alreadyAppliedOn,
     appliedLabelOf,
     appliedStoredIds,
+    appliedStoredOn,
     appliedTargetOf,
     byNewestMemo,
+    cleanMemoTitle,
     memoFileName,
     memoMarkdown,
+    memoMatchText,
     memoReviewOf,
+    reanchorReview,
     waitingActionItems,
     type MemoAppliedAction,
     type MemoListItem,
@@ -41,6 +46,8 @@ export interface DemoMemo extends MemoListItem {
     /** What waits on it (§13), as the app keeps it: quotes as anchors only. */
     review: MemoReview | null
     raid: MemoRaidSuggestion[]
+    /** When its notes last changed here (§14.3), as the app keeps it. */
+    notesChangedAt: string | null
 }
 
 /** The memo's file, as the app reads it from storage: heading, byline, then the notes. */
@@ -50,7 +57,12 @@ function demoMemoText(m: Pick<DemoMemo, 'title' | 'date' | 'authorName' | 'body'
 
 /** The row's counts, as the app's list works them out. */
 function withCounts(m: DemoMemo): DemoMemo {
-    return { ...m, toReview: waitingActionItems(m) + m.raid.length, reviewedAt: m.review?.at ?? null }
+    return {
+        ...m,
+        toReview: waitingActionItems(m) + m.raid.length,
+        reviewedAt: m.review?.at ?? null,
+        changedSinceRead: !!m.notesChangedAt && !!m.review && m.notesChangedAt > m.review.at,
+    }
 }
 
 const DAY = 86_400_000
@@ -94,6 +106,9 @@ export function demoMemo(params: {
         appliedCount: params.applied?.length ?? 0,
         toReview: 0,
         reviewedAt: null,
+        edited: null,
+        changedSinceRead: false,
+        notesChangedAt: null,
         applied: params.applied ?? [],
         review: null,
         raid: [],
@@ -234,7 +249,8 @@ export function useDemoMemos(engagement: DemoEngagement, today: Date | null) {
     const findActions = useCallback(async (memo: MemoListItem, signal: AbortSignal): Promise<MemoFound> => {
         const demo = memosRef.current?.find((m) => m.id === memo.id)
         const found = demo ? demo.found(new Date()) : { proposals: [], skipped: [], dropped: 0 }
-        return wait(900, { ...found, alreadyApplied: alreadyAppliedIds(found.proposals, demo?.applied ?? []) }, signal)
+        const applied = demo?.applied ?? []
+        return wait(900, { ...found, alreadyApplied: alreadyAppliedIds(found.proposals, applied), appliedOn: alreadyAppliedOn(found.proposals, applied) }, signal)
     }, [wait])
 
     const apply = useCallback(async (memo: MemoListItem, _found: MemoFound, p: ApplicableProposal, original?: ApplicableProposal) => {
@@ -264,6 +280,8 @@ export function useDemoMemos(engagement: DemoEngagement, today: Date | null) {
         return wait(150, {
             review,
             alreadyApplied: review && demo ? appliedStoredIds(review, demo.applied) : [],
+            appliedOn: review && demo ? appliedStoredOn(review, demo.applied) : {},
+            applied: (demo?.applied ?? []).map((a) => ({ label: a.label, at: a.at })),
             engagement: { id: engagement.slug, name: engagement.name, firmId: 'tour', ctaUrl: null },
             raid: demo?.raid ?? [],
         }, signal)
@@ -311,7 +329,50 @@ export function useDemoMemos(engagement: DemoEngagement, today: Date | null) {
         return { ok: true, memo, fileName: memo.fileName }
     }, [wait, update])
 
-    return { memos, findActions, apply, loadContent, save, loadReview, dismissReview, actOnRaid, identifyingIds }
+    /**
+     * An edit (§14.3), as the app makes it: renamed, new notes stop what Brio found before (and are read
+     * again when asked), a new title or day keeps every action item. Nothing applied is undone.
+     */
+    const edit = useCallback(async (memo: MemoListItem, input: MemoEditInput): Promise<{ ok: true; memo: DemoMemo; fileName: string }> => {
+        await wait(500, null)
+        const now = new Date().toISOString()
+        const list = memosRef.current ?? []
+        const current = list.find((m) => m.id === memo.id)!
+        const title = cleanMemoTitle(input.title)
+        const notesChanged = input.body !== null && memoMatchText(input.body) !== memoMatchText(current.body)
+        const body = notesChanged && input.body !== null ? input.body : current.body
+        const fileName = memoFileName(input.date, title, list.filter((m) => m.id !== memo.id).map((m) => m.fileName))
+        const oldText = demoMemoText(current)
+        const next = withCounts({
+            ...current,
+            title,
+            date: input.date,
+            body,
+            fileName,
+            edited: { at: now, byName: 'Alex Jordan' },
+            ...(notesChanged
+                ? {
+                    notesChangedAt: now,
+                    source: input.source,
+                    durationMinutes: input.source === 'transcript' ? input.durationMinutes : null,
+                    review: current.review ? { ...current.review, dismissed: true } : null,
+                    raid: [],
+                    found: (day: Date) => addedMemoFound(body, day),
+                }
+                : { review: current.review ? reanchorReview(current.review, oldText, demoMemoText({ ...current, title, date: input.date })) : null }),
+        })
+        setMemos(list.map((m) => (m.id === memo.id ? next : m)).sort(byNewestMemo))
+        if (notesChanged && input.identify) {
+            setIdentifyingIds((ids) => [...ids.filter((id) => id !== memo.id), memo.id])
+            timers.current.push(setTimeout(() => {
+                update(memo.id, (m) => ({ ...m, review: memoReviewOf(m.found(new Date()), demoMemoText(m), 'auto') }))
+                setIdentifyingIds((ids) => ids.filter((id) => id !== memo.id))
+            }, IDENTIFY_MS))
+        }
+        return { ok: true, memo: next, fileName }
+    }, [wait, update])
+
+    return { memos, findActions, apply, loadContent, save, edit, loadReview, dismissReview, actOnRaid, identifyingIds }
 }
 
 export type DemoMemosController = ReturnType<typeof useDemoMemos>
@@ -324,11 +385,23 @@ export function DemoMemosTab({ memos: c, selectedId, onSelect }: {
 }) {
     const { addToast } = useToast()
     const [adding, setAdding] = useState(false)
+    const [editing, setEditing] = useState<{ memo: MemoListItem; context: MemoEditOpening; key: number } | null>(null)
+    const [editOpen, setEditOpen] = useState(false)
 
     const save = async (input: AddMemoInput): Promise<AddMemoOutcome> => {
         const out = await c.save(input)
         onSelect(out.memo.id)
         addToast({ type: 'success', title: 'Memo saved', message: `Saved as ${out.fileName} in Internal Memos.` })
+        return { ok: true }
+    }
+
+    const saveEdit = async (memo: MemoListItem, input: MemoEditInput): Promise<AddMemoOutcome> => {
+        const out = await c.edit(memo, input)
+        addToast({
+            type: 'success',
+            title: 'Memo saved',
+            message: out.fileName !== memo.fileName ? `Renamed to ${out.fileName} in Internal Memos.` : 'Your changes are in Internal Memos.',
+        })
         return { ok: true }
     }
 
@@ -349,8 +422,20 @@ export function DemoMemosTab({ memos: c, selectedId, onSelect }: {
                 dismissReview={c.dismissReview}
                 actOnRaid={c.actOnRaid}
                 identifyingIds={c.identifyingIds}
+                onEdit={(memo, context) => {
+                    setEditing((prev) => ({ memo, context, key: (prev?.key ?? 0) + 1 }))
+                    setEditOpen(true)
+                }}
             />
             <AddMemoSheet open={adding} onOpenChange={setAdding} onSave={save} />
+            {editing && (
+                <AddMemoSheet
+                    key={editing.key}
+                    open={editOpen}
+                    onOpenChange={setEditOpen}
+                    edit={{ ...editing.context, onSave: (input) => saveEdit(editing.memo, input) }}
+                />
+            )}
         </>
     )
 }

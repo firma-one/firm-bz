@@ -468,6 +468,30 @@ opens Discussions › Memos with the memo, not Files (`waitsOnMemo`, `memoSugges
      saving"): Edit beside Open in Drive opens the Add sheet filled in; a "When you save" box says what
      changes (rename; old waiting items and RAID suggestions stop waiting; applied ones kept) with
      "Identify action items in the new notes · 1 credit" ticked. Title or date only: no new review.
+   - **Approved and built 2026-11-14 (uncommitted).**
+     - **Route.** `PATCH /api/projects/[id]/memos/[documentId]` → `editMemo` (memo-store) rewrites the file
+       and renames it (Drive `renameFile`, OneDrive `renameOneDriveFile`). A rename storage refuses is a
+       warning; the notes are already saved.
+     - **New notes.**
+       - The old review is kept but dismissed, and `notesChangedAt` is set.
+       - The memo's SUGGESTED RAID rows are deleted.
+       - With the box ticked, `reviewMemoOnAdd({ requested: true, trigger: 'edited' })` runs in `after()`:
+         firm-charged, and the firm's automatic switch doesn't apply.
+     - **Title or date only.** `reanchorReview` moves every quote anchor with the heading. Nothing else
+       changes.
+     - **"Changed since Brio read it".** Each review stores `bodyHash` (`memoBodyHash`: the notes without
+       the heading). The pane compares it with the file it read, which catches edits made in Drive
+       directly with no modified-time check. `MemoListItem.changedSinceRead` covers an in-app edit that
+       wasn't read again.
+     - **"Applied earlier".** Dated ("Applied on Nov 12 from this memo, so it isn't applied twice.").
+       Matched on kind and day plus the deliverable or a close title (`closeTitles`, word Jaccard ≥ 0.6).
+     - **Audited, firm-only types** (lib/audit-event-types.ts), so Reviewers and Limited Access
+       contributors never see them:
+       - `DOCUMENT_MEMO_ADDED`
+       - `DOCUMENT_MEMO_EDITED`
+       - `DOCUMENT_AI_REVIEWED` ("Read by Brio": on add, after an edit, or from the sparkle; who set it
+         off, and counts only, never the words)
+     - **Mirrored on /tour.**
 4. **Reword the claims, not the code (Deepak, 2026-11-15).** Nothing is removed. An applied action keeps
    the line of the memo it came from (lowercase, `settings.memo.applied[].quote`) as its citation: useful,
    so it stays, and the copy stops saying "firmä keeps no copy of a memo's text" (home FAQ) or anything

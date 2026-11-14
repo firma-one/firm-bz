@@ -219,8 +219,8 @@ function TrustArchitecture() {
             className="mk-trust-card--wide-tablet"
           >
             Confidentiality is your currency. Tag internal docs and frameworks as Never Share, so they can never reach a client by
-            accident. {BRAND_NAME} keeps the structure (metadata) apart from your content, so file contents are never stored on
-            our servers.
+            accident. {BRAND_NAME} keeps the structure (metadata) apart from your content, so your files are never stored on our
+            servers.
           </PillarCard>
           <PillarCard
             num="04"
@@ -269,7 +269,7 @@ const SPECS: { tag: string; where: string; title: string; body: string }[] = [
     tag: 'AES-256',
     where: 'In our metadata database',
     title: 'Encrypted at rest',
-    body: 'Sensitive metadata (client and engagement names, contact details, comments and storage tokens) is encrypted with AES-256-GCM before it’s stored.',
+    body: 'Sensitive metadata (client and engagement names, contact details, comments, the lines Brio cites and storage tokens) is encrypted with AES-256-GCM before it’s stored.',
   },
   {
     tag: 'OAuth 2.0',

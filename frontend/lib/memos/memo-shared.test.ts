@@ -1,13 +1,23 @@
 import { describe, it, expect } from 'vitest'
 import {
+    MEMO_CHANGED_QUOTE,
     alreadyAppliedIds,
+    alreadyAppliedOn,
+    appliedStoredIds,
+    appliedStoredOn,
     appliedTargetOf,
     boldSpeakers,
+    closeTitles,
+    memoBodyHash,
     memoFileName,
     memoFileTitle,
+    memoListItem,
     memoMarkdown,
     memoMetaLine,
+    memoReviewOf,
     parseMemoSettings,
+    reanchorReview,
+    resolveMemoReview,
     splitMemoMarkdown,
     withoutMemoTree,
     type MemoAppliedAction,
@@ -169,13 +179,9 @@ describe('boldSpeakers', () => {
 // ── A memo reviewed in one place (§13) ────────────────────────────────────────────────────────
 
 import {
-    MEMO_CHANGED_QUOTE,
     anchorQuote,
-    appliedStoredIds,
     memoMatchText,
-    memoReviewOf,
     quoteFromAnchor,
-    resolveMemoReview,
     waitingActionItems,
 } from './memo-shared'
 
@@ -238,5 +244,72 @@ describe('a waiting review: quotes kept as places in the memo, never its words',
         expect(memo.review!.by).toBe('person')
         expect(memo.review!.proposals.map((p) => p.id)).toEqual(['reminder-1', 'deliverable-2'])
         expect(parseMemoSettings({ memo: { date: '2026-11-14', title: 'Call', authorUserId: 'u1' } })!.review).toBeNull()
+    })
+})
+
+describe('editing a memo (§14.3)', () => {
+    const text = (title: string, body: string) => memoMarkdown({ title, date: '2026-11-12', authorName: 'Alex Jordan', body })
+    const BODY = 'Dana: I’ll send the figures by Friday.\n\nAlex: Great, and chase the 1099-B.'
+    const FOUND = {
+        proposals: [{ kind: 'reminder' as const, id: 'reminder-1', title: 'Chase the 1099-B', date: '2026-11-16', quote: 'chase the 1099-B' }],
+        skipped: [{ quote: 'I’ll send the figures by Friday.', reason: 'has no date' }],
+        dropped: 0,
+    }
+
+    it('a new title moves every anchor with the heading: each quote still reads as Brio found it', () => {
+        const before = text('Call notes', BODY)
+        const after = text('Call with Dana Whitfield about the figures', BODY)
+        const review = memoReviewOf(FOUND, before, 'auto')
+        // Unmoved, the anchors point at the wrong words now.
+        expect(resolveMemoReview(review, after).proposals[0].quote).toBe(MEMO_CHANGED_QUOTE)
+        const moved = reanchorReview(review, before, after)
+        expect(resolveMemoReview(moved, after).proposals[0].quote).toBe('chase the 1099-B')
+        expect(resolveMemoReview(moved, after).skipped[0].quote).toBe("I'll send the figures by Friday.")
+    })
+
+    it('a quote that had already changed stays changed, never the wrong words', () => {
+        const before = text('Call notes', BODY)
+        const review = memoReviewOf(FOUND, before, 'auto')
+        const drifted = text('Call notes', 'Dana: nothing new.')
+        const moved = reanchorReview(review, drifted, text('Renamed', 'Dana: nothing new.'))
+        expect(resolveMemoReview(moved, text('Renamed', 'Dana: nothing new.')).proposals[0].quote).toBe(MEMO_CHANGED_QUOTE)
+    })
+
+    it('the notes\' hash ignores the heading, so a new title or day isn\'t "changed since Brio read it"', () => {
+        expect(memoBodyHash(text('Call notes', BODY))).toBe(memoBodyHash(text('Another title', BODY)))
+        expect(memoBodyHash(text('Call notes', BODY))).not.toBe(memoBodyHash(text('Call notes', `${BODY}\n\nDana: one more thing.`)))
+        expect(memoReviewOf(FOUND, text('Call notes', BODY), 'auto').bodyHash).toBe(memoBodyHash(text('Call notes', BODY)))
+    })
+
+    it('a reminder Brio words a little differently the second time is still the one applied', () => {
+        expect(closeTitles('Send Dana the revised launch timeline', 'Send Dana the revised timeline')).toBe(true)
+        expect(closeTitles('Send Dana the revised launch timeline', 'Send Dana the revised budget')).toBe(false)
+        expect(closeTitles('Call Dana', 'Call Sam')).toBe(false)
+        const applied: MemoAppliedAction[] = [{
+            kind: 'reminder', target: 'send dana the revised launch timeline', date: '2026-11-13', quote: '', label: 'Reminder · Send Dana the revised launch timeline', at: '2026-11-12T15:00:00.000Z',
+        }]
+        const proposals = [
+            { kind: 'reminder' as const, id: 'reminder-1', title: 'Send Dana the revised timeline', date: '2026-11-13', quote: 'x' },
+            { kind: 'reminder' as const, id: 'reminder-2', title: 'Send Dana the revised timeline', date: '2026-11-20', quote: 'x' },
+        ]
+        expect(alreadyAppliedIds(proposals, applied)).toEqual(['reminder-1'])
+        expect(alreadyAppliedOn(proposals, applied)).toEqual({ 'reminder-1': '2026-11-12T15:00:00.000Z' })
+        const review = memoReviewOf({ proposals, skipped: [], dropped: 0 }, 'x', 'auto')
+        expect(appliedStoredIds(review, applied)).toEqual(['reminder-1'])
+        expect(appliedStoredOn(review, applied)).toEqual({ 'reminder-1': '2026-11-12T15:00:00.000Z' })
+    })
+
+    it('the row says when its notes changed after Brio read them, and who edited it last', () => {
+        const review = memoReviewOf(FOUND, text('Call notes', BODY), 'auto', new Date('2026-11-12T18:00:00Z'))
+        const settings = (memo: Record<string, unknown>) => parseMemoSettings({ memo: { date: '2026-11-12', title: 'Call notes', authorUserId: 'u1', ...memo } })!
+        const row = { id: 'm1', docId: null, fileName: 'f.md', createdAt: '2026-11-12T17:00:00Z' }
+        const edited = { at: '2026-11-14T09:00:00.000Z', byName: 'Sam Rivera' }
+        expect(memoListItem(row, settings({ review, edited, notesChangedAt: edited.at }))).toEqual(expect.objectContaining({ changedSinceRead: true, edited }))
+        // Read again after the edit: nothing to say.
+        const reread = { ...review, at: '2026-11-14T09:01:00.000Z' }
+        expect(memoListItem(row, settings({ review: reread, edited, notesChangedAt: edited.at })).changedSinceRead).toBe(false)
+        // Only the title changed: no notesChangedAt.
+        expect(memoListItem(row, settings({ review, edited })).changedSinceRead).toBe(false)
+        expect(memoListItem(row, settings({})).edited).toBeNull()
     })
 })

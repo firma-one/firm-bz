@@ -30,6 +30,8 @@ const MEMO: MemoListItem = {
     appliedCount: 0,
     toReview: 0,
     reviewedAt: null,
+    edited: null,
+    changedSinceRead: false,
     createdAt: '2026-11-10T17:00:00.000Z',
 }
 const TRANSCRIPT: MemoListItem = {

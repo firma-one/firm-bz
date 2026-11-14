@@ -16,8 +16,8 @@ import {
     resolveToday,
 } from '@/lib/ai/notes-proposals'
 import { readMemoText, writeMemoReview } from '@/lib/memos/memo-store'
-import { notesEngagementRef } from '@/lib/memos/memo-review'
-import { alreadyAppliedIds, memoReviewOf, type MemoAppliedAction } from '@/lib/memos/memo-shared'
+import { auditMemoRead, notesEngagementRef } from '@/lib/memos/memo-review'
+import { alreadyAppliedIds, alreadyAppliedOn, memoReviewOf, type MemoAppliedAction } from '@/lib/memos/memo-shared'
 
 export const dynamic = 'force-dynamic'
 
@@ -82,6 +82,7 @@ export async function POST(
         let notes: string
         let applied: MemoAppliedAction[] | null = null
         let memoId: string | null = null
+        let memoFileName = ''
         if (body?.memoDocumentId !== undefined) {
             // An internal memo: its text comes from storage, read for this one request.
             const memo = await readMemoText(projectId, body.memoDocumentId)
@@ -89,6 +90,7 @@ export async function POST(
             notes = memo.text.trim()
             applied = memo.memo.applied
             memoId = memo.memo.id
+            memoFileName = memo.memo.fileName
             if (!notes) return NextResponse.json({ error: 'This memo is empty, so there is nothing to read.' }, { status: 400 })
             if (notes.length > MAX_MEMO_CHARS) {
                 return NextResponse.json(
@@ -121,7 +123,17 @@ export async function POST(
             today,
             scope: { firmId: ctx.firmId, userId: user.id, feature: 'notesProposals' },
         })
+        // A memo's words went to Brio: the audit trail says so, and who asked (§14).
+        const auditRead = (actionItems: number | null) => {
+            if (memoId) {
+                auditMemoRead({
+                    firmId: ctx.firmId, clientId: ctx.clientId, engagementId: projectId, memoId, fileName: memoFileName,
+                    actorUserId: user.id, trigger: 'person', actionItems,
+                })
+            }
+        }
         if (!outcome.ok) {
+            if (outcome.reason !== 'unconfigured') auditRead(null)
             if (outcome.reason === 'unconfigured') {
                 return NextResponse.json({ error: `${ASSISTANT.name} isn't available right now.` }, { status: 503 })
             }
@@ -131,13 +143,14 @@ export async function POST(
         // A memo's action items wait on it, so they're there the next time it's opened (§13): quotes as
         // anchors only, never the memo's words.
         if (memoId) await writeMemoReview(projectId, memoId, memoReviewOf(outcome, notes, 'person'))
+        auditRead(outcome.proposals.length)
 
         return NextResponse.json({
             data: {
                 proposals: outcome.proposals,
                 skipped: outcome.skipped,
                 dropped: outcome.dropped,
-                ...(applied ? { alreadyApplied: alreadyAppliedIds(outcome.proposals, applied) } : {}),
+                ...(applied ? { alreadyApplied: alreadyAppliedIds(outcome.proposals, applied), appliedOn: alreadyAppliedOn(outcome.proposals, applied) } : {}),
                 // What a reminder needs to point back here: the panel creates it with the same action a
                 // person uses by hand, which takes these from its caller.
                 engagement,

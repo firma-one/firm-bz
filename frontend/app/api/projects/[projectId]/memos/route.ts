@@ -102,8 +102,9 @@ export async function POST(
         })
 
         // Once the answer has gone: the memo's action items and RAID suggestions, waiting on it (§13).
-        const firmId = access.ctx.firmId
-        after(() => reviewMemoOnAdd({ engagementId: projectId, firmId, memoId: saved.memo.id }).then((outcome) => {
+        const { firmId, clientId } = access.ctx
+        const actorUserId = access.user.id
+        after(() => reviewMemoOnAdd({ engagementId: projectId, firmId, clientId, actorUserId, memoId: saved.memo.id, trigger: 'added' }).then((outcome) => {
             if (outcome.status !== 'reviewed' && outcome.status !== 'off') console.info('[memos] new memo not reviewed:', outcome.status)
         }))
 

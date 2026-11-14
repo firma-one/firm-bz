@@ -137,7 +137,8 @@ describe('POST', () => {
         expect(h.reviewMemoOnAdd).not.toHaveBeenCalled()
         expect(h.afterTasks).toHaveLength(1)
         await h.afterTasks[0]()
-        expect(h.reviewMemoOnAdd).toHaveBeenCalledWith({ engagementId: 'p1', firmId: 'f1', memoId: MEMO_ID })
+        // Who added it goes to the audit trail with Brio's read of it.
+        expect(h.reviewMemoOnAdd).toHaveBeenCalledWith({ engagementId: 'p1', firmId: 'f1', clientId: 'c1', actorUserId: 'u1', memoId: MEMO_ID, trigger: 'added' })
     })
 
     it('saves the memo with the caller as its author', async () => {

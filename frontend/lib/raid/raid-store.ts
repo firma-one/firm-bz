@@ -7,6 +7,7 @@ import { loadPeople, type Person } from '@/lib/files/file-creator'
 import { formatDisplayName } from '@/lib/comments/mentions'
 import { resolveNames } from '@/lib/auth/display-name'
 import { parseMemoSettings } from '@/lib/memos/memo-shared'
+import { openText, sealText } from '@/lib/encryption'
 import {
     RAID_NOTES_MAX,
     RAID_TITLE_MAX,
@@ -53,6 +54,7 @@ export interface RaidExtraSource {
     at: string
 }
 
+/** Read from the row: a thread quote is stored encrypted (sealExtraSources), like the row's own quote. */
 export function extraSourcesOf(value: unknown): RaidExtraSource[] {
     if (!Array.isArray(value)) return []
     return value.flatMap((v) => {
@@ -62,11 +64,16 @@ export function extraSourcesOf(value: unknown): RaidExtraSource[] {
             kind: s.kind,
             ref: s.ref,
             // Never a memo's words, whatever a row holds.
-            ...(s.kind === 'THREAD' && typeof s.quote === 'string' ? { quote: s.quote } : {}),
+            ...(s.kind === 'THREAD' && typeof s.quote === 'string' ? { quote: openText(s.quote) } : {}),
             internal: s.internal === true,
             at: typeof s.at === 'string' ? s.at : '',
         }]
     })
+}
+
+/** What a row's `extraSources` stores: each thread quote encrypted, as the Prisma extension does the row's own. */
+export function sealExtraSources(sources: RaidExtraSource[]): RaidExtraSource[] {
+    return sources.map((s) => (s.quote ? { ...s, quote: sealText(s.quote) } : s))
 }
 
 /** The person acting, for "Closed by Alex" and createdBy. */
@@ -364,7 +371,7 @@ export async function acceptRaidSuggestion(engagementId: string, actor: RaidActo
             prisma.engagementRaidItem.update({
                 where: { id: target.id },
                 data: {
-                    extraSources: [...extraSourcesOf(target.extraSources), merged] as unknown as Prisma.InputJsonValue,
+                    extraSources: sealExtraSources([...extraSourcesOf(target.extraSources), merged]) as unknown as Prisma.InputJsonValue,
                     internalSource: target.internalSource || item.internalSource,
                     updatedBy: actor.userId,
                 },
