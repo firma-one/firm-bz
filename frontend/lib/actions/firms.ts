@@ -518,7 +518,7 @@ export type FirmReminderEmailConfig = {
 // settings by id and is called from crons and webhooks with no session, so it can't be a server action.
 
 
-export type FirmUpdate = { name?: string; branding?: FirmBranding; currency?: FirmCurrency; betaFeatures?: Record<string, boolean>; internalMemo?: string | null; industry?: string | null; companySizeBracket?: string | null; companyWebsite?: string | null; linkedInUrl?: string | null; billingAddress?: string | null; notes?: string | null; allowDomainAccess?: boolean; allowedEmailDomain?: string | null; reminderEmailConfig?: FirmReminderEmailConfig; externalSections?: { engagementHealth: boolean; fileOrganization: boolean; documentActivity: boolean; brioForReviewers?: boolean }; brio?: { memoReview: boolean } }
+export type FirmUpdate = { name?: string; branding?: FirmBranding; currency?: FirmCurrency; betaFeatures?: Record<string, boolean>; internalMemo?: string | null; industry?: string | null; companySizeBracket?: string | null; companyWebsite?: string | null; linkedInUrl?: string | null; billingAddress?: string | null; notes?: string | null; allowDomainAccess?: boolean; allowedEmailDomain?: string | null; reminderEmailConfig?: FirmReminderEmailConfig; externalSections?: { engagementHealth: boolean; fileOrganization: boolean; documentActivity: boolean; brioForReviewers?: boolean }; brio?: { memoReview: boolean; maskNames?: boolean } }
 
 export async function updateFirm(firmSlug: string, data: FirmUpdate): Promise<ActionResult> {
     return asResult('updateFirm', () => updateFirmOrThrow(firmSlug, data))
@@ -595,10 +595,18 @@ async function updateFirmOrThrow(firmSlug: string, data: FirmUpdate): Promise<vo
         if (data.externalSections !== undefined) {
             payload.settings = { ...(payload.settings ?? current), externalSections: data.externalSections }
         }
-        // Brio's firm-wide switches (lib/memos/memo-review.ts: identify a new memo's action items).
+        // Brio's firm-wide switches: identify a new memo's action items (lib/memos/memo-review.ts), and
+        // replace names, emails and links before Brio reads (lib/ai/known-entities.ts, §14 item 5).
         if (data.brio !== undefined) {
             const brio = ((payload.settings ?? current) as { brio?: Record<string, unknown> }).brio ?? {}
-            payload.settings = { ...(payload.settings ?? current), brio: { ...brio, memoReview: data.brio.memoReview } }
+            payload.settings = {
+                ...(payload.settings ?? current),
+                brio: {
+                    ...brio,
+                    memoReview: data.brio.memoReview,
+                    ...(typeof data.brio.maskNames === 'boolean' ? { maskNames: data.brio.maskNames } : {}),
+                },
+            }
         }
     }
 

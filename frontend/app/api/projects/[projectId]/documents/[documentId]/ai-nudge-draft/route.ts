@@ -9,6 +9,7 @@ import { getGuardedAnthropic, aiFailureResponse } from '@/lib/ai/guarded-client'
 import { BRIO_DRAFT_FAILED } from '@/lib/ai/brio-failure'
 import { streamDraft } from '@/lib/ai/stream-draft'
 import { NUDGE_SYSTEM_PROMPT, buildNudgePrompt } from '@/lib/ai/nudge-draft'
+import { vaultForEngagement } from '@/lib/ai/known-entities'
 
 /**
  * POST /api/projects/[projectId]/documents/[documentId]/ai-nudge-draft  { recipientUserId }
@@ -71,7 +72,7 @@ export async function POST(
         const now = new Date()
         const since = st.activity?.updatedAt ? new Date(st.activity.updatedAt) : now
         const scope = { firmId: ctx.firmId, userId: user.id, feature: 'nudgeDraft' as const }
-        const client = await getGuardedAnthropic(scope)
+        const client = await getGuardedAnthropic(scope, { vault: await vaultForEngagement(projectId, ctx.firmId) })
         if (!client) return NextResponse.json({ error: 'AI is not configured' }, { status: 503 })
 
         return await streamDraft({

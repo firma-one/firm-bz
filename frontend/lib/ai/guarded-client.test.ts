@@ -33,20 +33,20 @@ beforeEach(() => {
 
 describe('getGuardedAnthropic', () => {
     it("checks the group's credits, then the person's own limits, for every feature, free ones too", async () => {
-        expect(await getGuardedAnthropic({ firmId: 'f1', userId: 'u1', feature: 'dayBrief' })).toBe(h.client)
+        expect(await getGuardedAnthropic({ firmId: 'f1', userId: 'u1', feature: 'dayBrief' }, { vault: null })).toBe(h.client)
         expect(h.order).toEqual(['credits', 'person'])
         expect(h.personLimit).toHaveBeenCalledWith({ userId: 'u1', feature: 'dayBrief' })
     })
 
     it("doesn't count a call the group's credits refused against the person", async () => {
         h.creditCap.mockRejectedValue(new AiCreditLimitError('out of credits', 'period', 25, 25))
-        await expect(getGuardedAnthropic({ firmId: 'f1', userId: 'u1', feature: 'chat' })).rejects.toThrow('out of credits')
+        await expect(getGuardedAnthropic({ firmId: 'f1', userId: 'u1', feature: 'chat' }, { vault: null })).rejects.toThrow('out of credits')
         expect(h.personLimit).not.toHaveBeenCalled()
     })
 
     it("over the person's limit, gives no client, and the route answers 429 in the limit's words", async () => {
         h.personLimit.mockRejectedValue(new AiCreditLimitError('Wait a moment and try again.', 'person', 10, 10))
-        const error = await getGuardedAnthropic({ firmId: 'f1', userId: 'u1', feature: 'chat' }).catch((e) => e)
+        const error = await getGuardedAnthropic({ firmId: 'f1', userId: 'u1', feature: 'chat' }, { vault: null }).catch((e) => e)
         const res = aiFailureResponse(error, 'Brio failed.', 'test')
         expect(res.status).toBe(429)
         expect(await res.json()).toMatchObject({ error: 'Wait a moment and try again.', kind: 'person' })

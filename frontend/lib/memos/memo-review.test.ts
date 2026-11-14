@@ -24,6 +24,8 @@ const h = vi.hoisted(() => {
     }
 })
 
+// Masking has its own tests (lib/ai/pseudonymize, masked-client, known-entities): no vault here.
+vi.mock('@/lib/ai/known-entities', () => ({ vaultForEngagement: async () => null, vaultForFirms: async () => null }))
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/prisma', () => ({ prisma: { firm: { findUnique: async () => ({ settings: h.firmSettings }) } } }))
 vi.mock('@/lib/ai/client', () => ({ isAiConfigured: () => h.configured }))

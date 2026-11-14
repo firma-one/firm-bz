@@ -5,8 +5,19 @@ import { assertWithinAiCreditCap, AiCreditLimitError } from './credit-cap'
 import { assertWithinPersonLimits } from './person-limit'
 import { recordAiUsage, type AiFeature } from './usage'
 import { logger } from '@/lib/logger'
+import { maskingClient } from './masked-client'
+import type { Vault } from './pseudonymize'
 
 export { AiCreditLimitError }
+
+/**
+ * What the model may read (§14 item 5): every call says. `vault` from lib/ai/known-entities.ts puts
+ * placeholders in place of names, emails, links and ID numbers, and the real words back in the answer.
+ * Null only when the firm turned masking off (Settings › Brio), which the loaders return.
+ */
+export interface AiMasking {
+    vault: Vault | null
+}
 
 export interface AiScope {
     firmId?: string | null
@@ -29,14 +40,16 @@ export interface AiScope {
  *
  * Throws `AiCreditLimitError` when over budget, or over the person's own limits (kind 'person',
  * lib/ai/person-limit.ts, every feature, free ones included) — before any tokens are spent.
+ *
+ * `masking` is required, so no call reaches the model without saying what it may read (§14 item 5).
  */
-export async function getGuardedAnthropic(scope: AiScope): Promise<Anthropic | null> {
+export async function getGuardedAnthropic(scope: AiScope, masking: AiMasking): Promise<Anthropic | null> {
     const client = getAnthropic()
     if (!client) return null
     await assertWithinAiCreditCap({ firmId: scope.firmId, groupId: scope.groupId, feature: scope.feature })
     // After the group's credits: a refusal there shouldn't count as a call the person started.
     await assertWithinPersonLimits({ userId: scope.userId, feature: scope.feature })
-    return client
+    return masking.vault ? maskingClient(client, masking.vault) : client
 }
 
 /**

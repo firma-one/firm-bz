@@ -19,6 +19,8 @@ const { prisma, loaders, create, meter, guard } = vi.hoisted(() => ({
     guard: vi.fn(),
 }))
 
+// Masking has its own tests (lib/ai/pseudonymize, masked-client, known-entities): no vault here.
+vi.mock('@/lib/ai/known-entities', () => ({ vaultForEngagement: async () => null, vaultForFirms: async () => null }))
 vi.mock('@/lib/prisma', () => ({ prisma }))
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
 vi.mock('@/lib/home/home-firms', () => ({ getHomeFirms: loaders.getHomeFirms }))
@@ -257,7 +259,7 @@ describe('generateDayBrief', () => {
         create.mockResolvedValue(reply())
         const result = await generateDayBrief(build(), { userId: 'u1' })
         expect(result).toEqual({ ok: true, text: '**Two threads wait**: QSR-9.\n\nQSR-12 is due tomorrow.' })
-        expect(guard).toHaveBeenCalledWith({ firmId: 'f1', userId: 'u1', feature: 'dayBrief' })
+        expect(guard).toHaveBeenCalledWith({ firmId: 'f1', userId: 'u1', feature: 'dayBrief' }, { vault: null })
         expect(meter).toHaveBeenCalledWith({ firmId: 'f1', userId: 'u1', feature: 'dayBrief' }, { inputTokens: 900, outputTokens: 300 })
         const params = create.mock.calls[0][0]
         expect(params).toMatchObject({ max_tokens: DAY_BRIEF_MAX_TOKENS, output_config: { effort: 'low' }, system: DAY_BRIEF_SYSTEM_PROMPT })

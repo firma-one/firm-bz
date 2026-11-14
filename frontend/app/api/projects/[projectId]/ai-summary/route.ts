@@ -13,6 +13,7 @@ import { buildEngagementContext } from '@/lib/ai/engagement-chat'
 import {
     SUMMARY_MAX_TOKENS, SUMMARY_SYSTEM_PROMPT, fingerprintInsights, readInsightsSummary,
 } from '@/lib/ai/engagement-summary'
+import { vaultForEngagement } from '@/lib/ai/known-entities'
 
 /**
  * POST /api/projects/[projectId]/ai-summary
@@ -79,7 +80,7 @@ export async function POST(
         }
 
         const scope = { firmId: ctx.firmId, userId: user.id, feature: 'summary' as const }
-        const client = await getGuardedAnthropic(scope)
+        const client = await getGuardedAnthropic(scope, { vault: await vaultForEngagement(projectId, ctx.firmId) })
         if (!client) return NextResponse.json({ error: 'AI is not configured' }, { status: 503 })
 
         const modelStream = await client.messages.create({

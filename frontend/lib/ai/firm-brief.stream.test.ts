@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const { meter, create } = vi.hoisted(() => ({ meter: vi.fn(async () => {}), create: vi.fn() }))
+// Masking has its own tests (lib/ai/pseudonymize, masked-client, known-entities): no vault here.
+vi.mock('@/lib/ai/known-entities', () => ({ vaultForEngagement: async () => null, vaultForFirms: async () => null }))
 vi.mock('./guarded-client', () => ({
     getGuardedAnthropic: async () => ({ messages: { create } }),
     meterAiCall: meter,

@@ -561,6 +561,28 @@ opens Discussions › Memos with the memo, not Files (`waitsOnMemo`, `memoSugges
      3. Wire the chats, which stream.
      4. Wire the rest.
      5. Firm switch, then the privacy and trust copy, only once it's live.
+   - **Built 2026-11-14 (uncommitted): steps 1 to 5, apart from the copy.**
+     - **Core:** `lib/ai/pseudonymize.ts`, `lib/ai/known-entities.ts`, `lib/ai/masked-client.ts`.
+     - **Placeholders come from the record's id, not a stored slug** (Deepak's ask, 2026-11-14: one
+       identity per person).
+       - `[PERSON_7F3A91C2]`: 8 hex digits, the norm (Deepak, 2026-11-14), hashed from the user, contact,
+         client or firm id, never the name. The same in every engagement, firm chat and request, with no
+         column and no backfill.
+       - Clashes: at 8 digits, 0.003% for a 500-person firm. On one, the earlier id keeps its code and the
+         later takes more digits, decided by the ids alone.
+       - A first name two people share gets `[NAME_n]` for the request, numbered, never hashed from the
+         name.
+       - A name written another way gets `_V2`, so quotes still match the notes exactly.
+       - A client's legal suffix stays visible ("[CLIENT_…], Inc.").
+     - **Enforced by the compiler:** `getGuardedAnthropic(scope, { vault })` and `completeText({ vault })`
+       require a vault. `lib/ai/masking-coverage.test.ts` fails on any call that passes a literal null.
+     - **Wired:** all 15 call sites, plus an end-to-end test on reply drafts.
+     - **Firm switch:** Settings › Brio › "Replace names, emails and links before Brio reads", on by
+       default, also on /tour.
+     - **Left:**
+       - the privacy and trust copy, once it's live
+       - name recognition for names we don't know (Layer 3)
+       - ZDR (Deepak's step)
    - **Firm switch.** Settings › Brio › "Replace names, emails and links before Brio reads", on by default.
    - **Honest copy.** "Brio replaces the names, emails, links and ID numbers it recognizes before it reads."
      Never "anonymized": names we don't know get through, context can still identify someone, and under

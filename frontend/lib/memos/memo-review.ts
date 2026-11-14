@@ -9,6 +9,7 @@ import { runMemoRaidCheck } from '@/lib/raid/raid-check'
 import { logger } from '@/lib/logger'
 import { readMemoText, writeMemoReview } from './memo-store'
 import { memoReviewOf } from './memo-shared'
+import { vaultForEngagement } from '@/lib/ai/known-entities'
 
 /**
  * A memo reviewed in one place (.claude/plans/brio-features-round-2.md, §13). When a memo is added, Brio
@@ -131,6 +132,7 @@ export async function reviewMemoOnAdd(params: {
             deliverables: await loadNotesDeliverables(params.engagementId),
             today: resolveToday(undefined, now),
             scope: { firmId: params.firmId, userId: null, feature: 'notesProposals' },
+            vault: await vaultForEngagement(params.engagementId, params.firmId),
         })
         const read = {
             firmId: params.firmId,

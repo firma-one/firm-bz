@@ -27,6 +27,8 @@ const h = vi.hoisted(() => {
     }
 })
 
+// Masking has its own tests (lib/ai/pseudonymize, masked-client, known-entities): no vault here.
+vi.mock('@/lib/ai/known-entities', () => ({ vaultForEngagement: async () => null, vaultForFirms: async () => null }))
 vi.mock('@/lib/prisma', () => ({
     prisma: {
         engagement: { findUnique: async () => h.engagement },
@@ -323,7 +325,7 @@ describe('runMemoRaidCheck', () => {
         const out = await runMemoRaidCheck({ engagementId: 'p1', firmId: 'f1', memo, now: NOW })
         expect(out).toMatchObject({ ok: true, suggested: 1 })
         expect(savedRows().map((r) => [r.type, r.status, r.sourceKind, r.sourceRef])).toEqual([['DECISION', 'SUGGESTED', 'MEMO', MEMO]])
-        expect(h.guard).toHaveBeenCalledWith({ firmId: 'f1', userId: null, feature: 'memoRaid' })
+        expect(h.guard).toHaveBeenCalledWith({ firmId: 'f1', userId: null, feature: 'memoRaid' }, { vault: null })
         const request = h.create.mock.calls[0][0] as { messages: Array<{ content: string }> }
         expect(request.messages[0].content).toContain('We can scope that separately.')
         expect(request.messages[0].content).not.toContain('Between us')
@@ -374,7 +376,7 @@ describe('the daily check', () => {
     it('checks one with new messages, charged to the firm with no user, and writes its last check', async () => {
         h.create.mockResolvedValue(toolAnswer([ANSWER[0]]))
         expect(await runScheduledRaidCheck({ id: 'p1', firmId: 'f1' }, NOW)).toEqual({ engagementId: 'p1', status: 'checked', suggested: 1 })
-        expect(h.guard).toHaveBeenCalledWith({ firmId: 'f1', userId: null, feature: 'raidCheck' })
+        expect(h.guard).toHaveBeenCalledWith({ firmId: 'f1', userId: null, feature: 'raidCheck' }, { vault: null })
         expect(h.executeRaw).toHaveBeenCalledWith(expect.any(String), NOW.toISOString(), expect.stringMatching(/^[0-9a-f]{32}$/), 'p1')
     })
 

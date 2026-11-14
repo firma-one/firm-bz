@@ -18,6 +18,7 @@ import {
 import { readMemoText, writeMemoReview } from '@/lib/memos/memo-store'
 import { auditMemoRead, notesEngagementRef } from '@/lib/memos/memo-review'
 import { alreadyAppliedIds, alreadyAppliedOn, memoReviewOf, type MemoAppliedAction } from '@/lib/memos/memo-shared'
+import { vaultForEngagement } from '@/lib/ai/known-entities'
 
 export const dynamic = 'force-dynamic'
 
@@ -122,6 +123,7 @@ export async function POST(
             deliverables,
             today,
             scope: { firmId: ctx.firmId, userId: user.id, feature: 'notesProposals' },
+            vault: await vaultForEngagement(projectId, ctx.firmId),
         })
         // A memo's words went to Brio: the audit trail says so, and who asked (§14).
         const auditRead = (actionItems: number | null) => {

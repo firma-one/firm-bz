@@ -10,6 +10,7 @@ import { logger } from '@/lib/logger'
 import { RAID_TYPES, type RaidType } from './raid-shared'
 import { extraSourcesOf, lastCheckedAtOf } from './raid-store'
 import { fingerprintConversation, loadConversationStamps } from './raid-fingerprint'
+import { vaultForEngagement } from '@/lib/ai/known-entities'
 
 /**
  * The RAID log's Brio check (.claude/plans/brio-features-round-2.md, §9): once a day for an engagement
@@ -479,7 +480,7 @@ async function suggestFrom(params: {
     memos: RaidCheckMemo[]
     omittedMessages: number
 }): Promise<{ ok: true; suggested: number; dropped: number } | { ok: false; reason: 'unconfigured' | 'declined' | 'no_answer' }> {
-    const client = await getGuardedAnthropic(params.scope)
+    const client = await getGuardedAnthropic(params.scope, { vault: await vaultForEngagement(params.engagementId, params.firmId) })
     if (!client) return { ok: false, reason: 'unconfigured' }
 
     const log = await loadOpenLog(params.engagementId)

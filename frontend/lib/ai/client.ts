@@ -1,6 +1,8 @@
 import 'server-only'
 import Anthropic from '@anthropic-ai/sdk'
 import { logger } from '@/lib/logger'
+import { maskingClient } from './masked-client'
+import type { Vault } from './pseudonymize'
 
 // Haiku is the default for every call in this codebase so far: the work is short-form
 // summarization and grounded Q&A over a pre-computed payload, not deep reasoning.
@@ -73,9 +75,12 @@ export async function completeText(params: {
      * else, and metering must never be able to fail the completion — hence the catch below.
      */
     onUsage?: (usage: { inputTokens: number; outputTokens: number }) => void | Promise<void>
+    /** What the model may read, as for getGuardedAnthropic (§14 item 5): required, null only when the firm turned it off. */
+    vault: Vault | null
 }): Promise<string | null> {
-    const client = getAnthropic()
-    if (!client) return null
+    const raw = getAnthropic()
+    if (!raw) return null
+    const client = params.vault ? maskingClient(raw, params.vault) : raw
 
     try {
         const message = await client.messages.create({

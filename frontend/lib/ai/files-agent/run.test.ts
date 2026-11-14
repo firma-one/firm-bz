@@ -35,7 +35,7 @@ beforeEach(() => {
 describe('runFilesReview', () => {
     it('a failed model turn is reported, and the findings still come back', async () => {
         create.mockRejectedValue(new Error('529 overloaded_error'))
-        const result = await runFilesReview({ nodes: NODES, rootId: 'R', scope })
+        const result = await runFilesReview({ nodes: NODES, rootId: 'R', scope, vault: null })
         expect(result).not.toBeNull()
         expect(result!.modelFailed).toBe(true)
         expect(result!.findings.length).toBeGreaterThan(0)
@@ -46,14 +46,14 @@ describe('runFilesReview', () => {
 
     it('a turn that answers is not marked failed', async () => {
         create.mockResolvedValue({ content: [], stop_reason: 'end_turn', usage: { input_tokens: 10, output_tokens: 5 } })
-        const result = await runFilesReview({ nodes: NODES, rootId: 'R', scope })
+        const result = await runFilesReview({ nodes: NODES, rootId: 'R', scope, vault: null })
         expect(result!.modelFailed).toBe(false)
         expect(meter).toHaveBeenCalledTimes(1)
     })
 
     it('a declined turn is reported as failed', async () => {
         create.mockResolvedValue({ content: [], stop_reason: 'refusal', usage: { input_tokens: 10, output_tokens: 0 } })
-        const result = await runFilesReview({ nodes: NODES, rootId: 'R', scope })
+        const result = await runFilesReview({ nodes: NODES, rootId: 'R', scope, vault: null })
         expect(result!.modelFailed).toBe(true)
     })
 
@@ -70,7 +70,7 @@ describe('runFilesReview', () => {
             })
             .mockResolvedValueOnce({ content: [], stop_reason: 'end_turn', usage: { input_tokens: 10, output_tokens: 5 } })
 
-        const result = await runFilesReview({ nodes: NODES, rootId: 'R', scope })
+        const result = await runFilesReview({ nodes: NODES, rootId: 'R', scope, vault: null })
 
         expect(create).toHaveBeenCalledTimes(2)
         const second = create.mock.calls[1][0]

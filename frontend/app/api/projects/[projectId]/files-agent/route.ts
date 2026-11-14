@@ -17,6 +17,7 @@ import { readScaffoldFingerprint, readEngagementKind, writeEngagementKind } from
 import type { FileNode } from '@/lib/ai/files-agent/analyze'
 import { withoutMemoTree } from '@/lib/memos/memo-shared'
 import { logger } from '@/lib/logger'
+import { vaultForEngagement } from '@/lib/ai/known-entities'
 
 export const dynamic = 'force-dynamic'
 
@@ -205,6 +206,7 @@ export async function POST(
             rootId: engagement?.connectorRootFolderId ?? null,
             engagementKind,
             scope: { firmId: ctx.orgId, userId: user.id, feature: 'filesAgent' as const },
+            vault: await vaultForEngagement(projectId, ctx.orgId),
         })
 
         if (!result) {

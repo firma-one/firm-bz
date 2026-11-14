@@ -15,6 +15,7 @@ import {
     type ExternalRole,
 } from '@/lib/ai/reviewer-context'
 import { reviewerBrioEnabled, REVIEWER_DAILY_ANSWERS, reviewerAnswersToday } from '@/lib/ai/reviewer-brio'
+import { vaultForEngagement } from '@/lib/ai/known-entities'
 
 /**
  * POST /api/projects/[projectId]/ai-chat/reviewer   { question, history }
@@ -68,7 +69,7 @@ export async function POST(
         if (!view) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
 
         const scope = { firmId: ctx.firmId, userId: user.id, feature: 'reviewerChat' as const }
-        const client = await getGuardedAnthropic(scope)
+        const client = await getGuardedAnthropic(scope, { vault: await vaultForEngagement(projectId, ctx.firmId) })
         if (!client) return NextResponse.json({ error: 'AI is not configured' }, { status: 503 })
 
         const stream = await client.messages.create({
