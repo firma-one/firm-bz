@@ -73,8 +73,8 @@ can't run"). The 50-folder cap is now at `:95`; the OneDrive adapter is unchange
 
 ## Open — the leftover work
 
-Ranked. Item 4 was fixed on 2026-11-09 (see below), apart from the Lead's preview. Items 1 and 2
-are now the ones that make the shipped state incomplete.
+Ranked. Item 4 was fixed on 2026-11-09, and its "view as" preview on 2026-11-14 (see below). Items
+1 and 2 are now the ones that make the shipped state incomplete.
 
 ### 1. Firm-wide Doc Search has no content matching at all
 
@@ -207,8 +207,8 @@ re-index.
 
 ### 4. Fixed: engagement search showed documents not shared with the searcher
 
-**Status (2026-11-14): fixed by `d11ecfda`, PR #148, live since 2026-11-09, except the Lead's
-"view as" preview, which is still open.**
+**Status (2026-11-14): fixed by `d11ecfda`, PR #148, live since 2026-11-09. The "view as" preview
+was fixed on 2026-11-14, on dev.**
 
 What was wrong (confirmed by reading the code on 2026-10-26): a Contributor · Limited Access or a
 Reviewer could search an engagement's Files tab and get the names and metadata of documents
@@ -232,12 +232,16 @@ It filters the merged list in code with the existing helpers instead. That is eq
 single-engagement route; item 1 should still use the single query, because it spans many
 engagements and roles at once.
 
-**Still open: the Lead's preview.** When a Lead uses "view as" to preview a Reviewer or a
+**Fixed 2026-11-14: the "view as" preview.** When the engagement is previewed as a Reviewer or a
 Contributor · Limited Access, the Files search sends `viewAs`
-(`components/projects/engagement-search-context.tsx:129–130`). The route never reads it, so the
-preview lists everything the Lead can see. Real Reviewers and contributors are filtered
-correctly; only the preview misrepresents what they get. Fix: honor `viewAs` only for a caller
-allowed to preview (the Lead), by running the same visibility filter for that role, with a test.
+(`components/projects/engagement-search-context.tsx:140`). The route ignored it, so the preview
+listed everything the person previewing could see.
+- It wasn't a leak: the preview misrepresented what those roles get, nothing more.
+- Only a firm admin can preview, not every Lead: the engagement page honors view-as only for
+  `canAccessRbacAdmin`.
+- The route now reads `viewAs` under the same rule and filters as that role. From anyone else it's
+  ignored, so it can only narrow a search.
+- `route.test.ts` pins three cases: the preview's results, failing closed, and `viewAs` ignored.
 
 ### 5. Display snippets
 

@@ -536,10 +536,31 @@ opens Discussions › Memos with the memo, not Files (`waitsOnMemo`, `memoSugges
      - **The vault never lasts beyond its call.** It lives in memory for that one call; it is never
        logged, never stored and never in a Sentry breadcrumb.
      - **Streaming surfaces (chat, briefs), later.** Hold back output from an open `[` until its `]`.
+   - **Scope: every Brio call, not only memos (Deepak, 2026-11-14).** All 15 features in `lib/ai/features.ts`:
+     - **Free text:** `notesProposals`, `memoRaid`, `raidCheck`, `replyDraft`, and the question typed into
+       `chat`, `firmChat`, `reviewerChat` and `searchInterpret`.
+     - **Names and labels:** `brief`, `dayBrief`, `dayBriefRewrite`, `summary`, `statusUpdate`, `nudgeDraft`,
+       `filesAgent`.
+   - **One choke point.** Every call already goes through `getGuardedAnthropic`; it takes the vault:
+     - It masks every string the call sends: `system`, message text and tool results.
+     - It unmasks the answer: text blocks, tool-use input (deep), and streamed deltas. A stream holds back
+       from an unclosed `[` until its `]`, at most 24 characters.
+     - So a call site changes one argument. Grounding checks (a quote must be in the notes) compare the
+       unmasked answer with the original text, as today.
+   - **Stable tokens.** The vault is built in a fixed order from `lib/ai/known-entities.ts`, so the same
+     person is `[PERSON_2]` on every request.
+     - Chat history re-masks the same way.
+     - The prompt cache keeps hitting.
+     - Engagement scope covers the firm, the client and its contacts, and the members. Firm scope (firm
+       chat, briefs) covers every client, contact and member of the firm.
+   - **Guard test.** Like the completed-engagement one: every `getGuardedAnthropic` call passes a vault, or
+     `vault: null` with a written reason. A new feature can't skip it silently.
    - **Order of work.**
-     1. Memo review and the memo RAID pass: free text, highest risk.
-     2. The thread RAID check.
-     3. Reply and nudge drafts, and chat. These need the real names back in text people send.
+     1. The core: vault, mask, unmask, stream unmask; tests.
+     2. Wire the free-text features: memos, RAID, reply drafts.
+     3. Wire the chats, which stream.
+     4. Wire the rest.
+     5. Firm switch, then the privacy and trust copy, only once it's live.
    - **Firm switch.** Settings › Brio › "Replace names, emails and links before Brio reads", on by default.
    - **Honest copy.** "Brio replaces the names, emails, links and ID numbers it recognizes before it reads."
      Never "anonymized": names we don't know get through, context can still identify someone, and under
