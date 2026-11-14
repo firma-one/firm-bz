@@ -620,6 +620,21 @@ opens Discussions › Memos with the memo, not Files (`waitsOnMemo`, `memoSugges
        Overview's "more" line. /privacy and /terms use the website's `RaidTerm`. Each R, A, I and D letter
        shows its full word on hover. Left without: error and toast messages, emails, the audit trail's
        text and the System Admin AI efficacy page.
+     - **Priority on Risks and Issues** (mock https://claude.ai/artifact/GXfE5U1XXvZojUWGGaExkL; Deepak
+       chose the gray signal bars over the Health score's colored words, which share red with the I letter):
+       - High, Medium or Low, as three gray bars and the word (`components/projects/raid/raid-priority.tsx`).
+         Assumptions and Decisions have none and show a dash.
+       - Migration `20261114170000_raid_priority`: `priority` (enum) and `prioritySetBy`. No backfill: an
+         older Risk or Issue reads as Medium, and the next sync grades every live automatic entry.
+       - Where it comes from: automatic entries take the Health score's grade where Health scores the same
+         thing (an overdue deliverable High; Behind pace and Planning gaps by their points, 15+ High, 8+
+         Medium). Otherwise Blocked is High, and long in review or a waiting thread is Medium. Brio proposes
+         one with each Risk or Issue it suggests (rule 9 of its prompt), changeable on the card before
+         accepting. One added by hand starts at Medium.
+       - A person's choice (`prioritySetBy`) is final: the sync never changes it.
+       - One order everywhere (`compareRaid`): High, Medium, Low; within each, issues before risks; then
+         newest. It applies to the RAID page, both Overviews and the Firm Overview, whose count line adds
+         "N High".
        - Shown only for engagements whose RAID log the person may open, decided as the RAID tab decides
          it (`mayReadRaid` in `lib/raid/firm-raid.ts`). With none, `GET /api/firms/[firmId]/raid`
          answers 403 and the section isn't drawn.

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useId, useRef, useState, type ComponentProps } from 'react'
 import Link from 'next/link'
-import { AlertCircle, AlertTriangle, Check, CircleDot, Clock3, Link2, ListChecks, Loader2, MoreHorizontal, Plus, Shapes, Sparkles, Type as TypeIcon, UserRound } from 'lucide-react'
+import { AlertCircle, AlertTriangle, Check, CircleDot, Clock3, Link2, ListChecks, Loader2, MoreHorizontal, Plus, Shapes, SignalHigh, Sparkles, Type as TypeIcon, UserRound } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { LoadingAnnouncement, ShimmerBar, ShimmerBlock } from '@/components/ui/shimmer'
 import {
@@ -33,6 +33,7 @@ import { fetchWithTimeout } from '@/lib/ai/fetch-timeout'
 import { failureFrom, failureReason } from '@/lib/files/action-failure'
 import type { TagColor } from '@/lib/ui/status-colors'
 import { STAGE_PILL_CLASSES } from '@/lib/ui/status'
+import { RaidPriorityMark, RaidPriorityPicker } from './raid-priority'
 import {
     RAID_CHANGED_EVENT,
     RAID_NOTES_MAX,
@@ -45,6 +46,7 @@ import {
     RAID_TYPE_PLURAL,
     attachPhrase,
     filterRaidItems,
+    hasPriority,
     isAutoSource,
     isLive,
     lastCheckedPhrase,
@@ -61,6 +63,7 @@ import {
     type RaidItemView,
     type RaidLogPayload,
     type RaidMember,
+    type RaidPriority,
     type RaidSourceView,
     type RaidStateFilter,
     type RaidTone,
@@ -222,11 +225,14 @@ export interface RaidNewItem {
     type: RaidType
     title: string
     notes: string | null
+    /** Risks and Issues: Medium unless the person chose otherwise. */
+    priority?: RaidPriority
 }
 
 function AddItemForm({ onAdd, onCancel }: { onAdd: (input: RaidNewItem) => Promise<string | null>; onCancel: () => void }) {
     const titleId = useId()
     const [type, setType] = useState<RaidType>('RISK')
+    const [priority, setPriority] = useState<RaidPriority>('MEDIUM')
     const [title, setTitle] = useState('')
     const [notes, setNotes] = useState('')
     const [busy, setBusy] = useState(false)
@@ -237,7 +243,12 @@ function AddItemForm({ onAdd, onCancel }: { onAdd: (input: RaidNewItem) => Promi
         if (!title.trim()) { setError('Give the entry a title.'); return }
         setBusy(true)
         setError(null)
-        const failed = await onAdd({ type, title: title.trim(), notes: type === 'DECISION' ? null : notes.trim() || null })
+        const failed = await onAdd({
+            type,
+            title: title.trim(),
+            notes: type === 'DECISION' ? null : notes.trim() || null,
+            ...(hasPriority(type) ? { priority } : {}),
+        })
         setBusy(false)
         if (failed) setError(failed)
     }
@@ -266,6 +277,12 @@ function AddItemForm({ onAdd, onCancel }: { onAdd: (input: RaidNewItem) => Promi
                 <label htmlFor={titleId} className="text-caption text-fg-muted">Title</label>
                 <Input id={titleId} value={title} maxLength={RAID_TITLE_MAX} onChange={(e) => setTitle(e.target.value)} placeholder="Short, in your words" autoFocus />
             </div>
+            {hasPriority(type) && (
+                <div className="flex items-center gap-2">
+                    <span className="text-caption text-fg-muted">Priority</span>
+                    <RaidPriorityPicker value={priority} onChange={setPriority} label="Priority" className="mx-0" />
+                </div>
+            )}
             {type !== 'DECISION' && (
                 <div className="flex flex-col gap-1">
                     <label htmlFor={`${titleId}-notes`} className="text-caption text-fg-muted">Mitigation · next step <span className="text-fg-subtle">(optional)</span></label>
@@ -351,10 +368,11 @@ function CheckStatus({ state, lastCheckedAt, checking, now }: {
 /** What changes an entry: each answers with the words to show when it didn't work, or null. */
 export interface RaidHandlers {
     onCheckNow: () => Promise<{ message: string | null; error: string | null }>
-    onAccept: (item: RaidItemView) => Promise<string | null>
+    /** `priority`: the one chosen on the card, when it differs from Brio's. */
+    onAccept: (item: RaidItemView, priority?: RaidPriority) => Promise<string | null>
     onDismiss: (item: RaidItemView) => Promise<string | null>
     onAdd: (input: RaidNewItem) => Promise<string | null>
-    onEdit: (item: RaidItemView, patch: { title?: string | null; notes?: string | null; ownerUserId?: string | null }) => Promise<string | null>
+    onEdit: (item: RaidItemView, patch: { title?: string | null; notes?: string | null; ownerUserId?: string | null; priority?: RaidPriority }) => Promise<string | null>
     onClose: (item: RaidItemView) => Promise<string | null>
     onReopen: (item: RaidItemView) => Promise<string | null>
 }
@@ -375,7 +393,7 @@ const TYPE_FILTERS: RaidTypeFilter[] = ['ALL', ...RAID_TYPES]
 
 /**
  * The log's shape while it loads: the toolbar, Brio's suggestions strip, the filters and the table, so
- * nothing jumps when it arrives. The table rows match the loaded row: type, item, source, owner, status.
+ * nothing jumps when it arrives. The table rows match the loaded row: type, priority, item, source, owner, status.
  */
 function RaidLogSkeleton() {
     const titleWidths = ['w-3/5', 'w-1/2', 'w-2/3', 'w-2/5', 'w-1/2']
@@ -410,6 +428,7 @@ function RaidLogSkeleton() {
                 {titleWidths.map((w, i) => (
                     <div key={i} className="flex h-[34px] items-center gap-4 border-b border-line px-2.5">
                         <ShimmerBlock className="h-[22px] w-[22px]" />
+                        <ShimmerBar className="w-16" />
                         <div className="flex-1"><ShimmerBar className={w} /></div>
                         <ShimmerBar className="h-5 w-20 rounded-control" />
                         <ShimmerBar className="w-16" />
@@ -430,6 +449,8 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
     const [checkNote, setCheckNote] = useState<{ text: string; error: boolean } | null>(null)
     const [actionError, setActionError] = useState<string | null>(null)
     const [busyIds, setBusyIds] = useState<ReadonlySet<string>>(new Set())
+    // A suggestion's priority as changed on its card, before it's accepted.
+    const [chosenPriority, setChosenPriority] = useState<Record<string, RaidPriority>>({})
 
     const readOnly = readOnlyProp || !!log?.readOnly
 
@@ -553,6 +574,23 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
                                             {s.internalSource && <Tag color="gray">Internal source</Tag>}
                                             {s.attachedTo && <span className="text-small text-fg-muted">· {attachPhrase(s.attachedTo)}</span>}
                                         </div>
+                                        {s.priority && !s.attachedTo && (
+                                            <div className="mt-0.5 flex items-center gap-1.5 text-caption text-fg-muted">
+                                                <span>Priority</span>
+                                                {readOnly ? (
+                                                    <RaidPriorityMark priority={s.priority} />
+                                                ) : (
+                                                    <RaidPriorityPicker
+                                                        value={chosenPriority[s.id] ?? s.priority}
+                                                        onChange={(p) => setChosenPriority((c) => ({ ...c, [s.id]: p }))}
+                                                        label={`Priority of ${s.title}`}
+                                                        disabled={busyIds.has(s.id)}
+                                                        className="mx-0 h-6"
+                                                    />
+                                                )}
+                                                <span className="text-fg-subtle">· {ASSISTANT.name}&apos;s suggestion</span>
+                                            </div>
+                                        )}
                                         {source?.quote ? (
                                             <blockquote className="mt-1 border-l-2 border-line-strong pl-2 text-small text-fg-muted">“{source.quote}”</blockquote>
                                         ) : source?.kind === 'MEMO' && sourceHref(engagementBase, source) ? (
@@ -566,7 +604,7 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
                                             <Button type="button" variant="ghost" size="sm" disabled={busyIds.has(s.id)} onClick={() => void run(s, () => handlers.onDismiss(s))} aria-label={`Dismiss ${s.title}`}>
                                                 Dismiss
                                             </Button>
-                                            <Button type="button" variant="outline" size="sm" disabled={busyIds.has(s.id)} onClick={() => void run(s, () => handlers.onAccept(s))} aria-label={`Accept ${s.title}`}>
+                                            <Button type="button" variant="outline" size="sm" disabled={busyIds.has(s.id)} onClick={() => void run(s, () => handlers.onAccept(s, chosenPriority[s.id] !== s.priority ? chosenPriority[s.id] : undefined))} aria-label={`Accept ${s.title}`}>
                                                 Accept
                                             </Button>
                                         </div>
@@ -642,6 +680,7 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
                     <NotionTable>
                         <NotionTableHeader>
                             <NotionTableHead icon={<Shapes />} className="w-[72px]">Type</NotionTableHead>
+                            <NotionTableHead icon={<SignalHigh />} className="w-[112px]">Priority</NotionTableHead>
                             <NotionTableHead icon={<TypeIcon />}>Item</NotionTableHead>
                             <NotionTableHead icon={<Link2 />}>Source</NotionTableHead>
                             <NotionTableHead icon={<UserRound />}>Owner</NotionTableHead>
@@ -658,6 +697,18 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
                                 return (
                                     <NotionTableRow key={item.id} data-testid={`raid-row-${item.id}`}>
                                         <NotionTableCell><RaidTypeBadge type={item.type} /></NotionTableCell>
+                                        <NotionTableCell className="whitespace-nowrap">
+                                            {item.priority && !readOnly && isLive(item) ? (
+                                                <RaidPriorityPicker
+                                                    value={item.priority}
+                                                    onChange={(priority) => void run(item, () => handlers.onEdit(item, { priority }))}
+                                                    label={`Priority of ${item.title}`}
+                                                    disabled={busyIds.has(item.id)}
+                                                />
+                                            ) : (
+                                                <RaidPriorityMark priority={item.priority} />
+                                            )}
+                                        </NotionTableCell>
                                         <NotionTableCell className="min-w-[16rem] max-w-[28rem]">
                                             {readOnly || auto ? (
                                                 <span className="block truncate font-medium text-fg" title={item.title}>{item.title}</span>
@@ -840,7 +891,7 @@ export function RaidTab({ projectId, engagementBase, readOnly = false }: {
                 return { message: null, error: brioFailureReason(e, BRIO_RAID_FAILED) }
             }
         },
-        onAccept: (item) => patch(item, { action: 'accept' }),
+        onAccept: (item, priority) => patch(item, { action: 'accept', ...(priority ? { priority } : {}) }),
         onDismiss: (item) => patch(item, { action: 'dismiss' }),
         onAdd: (input) => change(`/api/projects/${projectId}/raid`, { method: 'POST', body: JSON.stringify(input) }),
         onEdit: (item, p) => patch(item, { action: 'edit', ...p }),

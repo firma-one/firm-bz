@@ -303,7 +303,7 @@ describe('Memos', () => {
 
     it('a memo added earlier shows its action items and RAID suggestions waiting, without a click (§13)', async () => {
         const stored = memoReviewOf({ proposals: [FOUND.proposals[0]] as never, skipped: [], dropped: 0 }, TEXT, 'auto')
-        waiting = { ...NOTHING_WAITING, review: stored, raid: [{ id: 'raid-1', type: 'RISK', title: 'The K-1s may arrive late' }] }
+        waiting = { ...NOTHING_WAITING, review: stored, raid: [{ id: 'raid-1', type: 'RISK', title: 'The K-1s may arrive late', priority: 'MEDIUM' }] }
         listing.memos = [{ ...MEMO, toReview: 2, reviewedAt: stored.at }, OLDER]
         await openMemos()
         expect(within(screen.getByTestId(`memo-row-${MEMO.id}`)).getByText('2 to review')).toBeTruthy()
@@ -316,6 +316,8 @@ describe('Memos', () => {
 
         const raid = within(actions).getByRole('region', { name: 'RAID suggestions' })
         expect(within(raid).getByText('The K-1s may arrive late')).toBeTruthy()
+        // Brio's priority, to keep or change before accepting; kept as it is, nothing more is sent.
+        expect(within(raid).getByRole('combobox', { name: 'Priority of The K-1s may arrive late' }).textContent).toContain('Medium')
         fireEvent.click(within(raid).getByRole('button', { name: 'Accept' }))
         await waitFor(() => expect(calls.find((c) => c.url === '/api/projects/p1/raid/raid-1' && c.method === 'PATCH')?.body).toEqual({ action: 'accept' }))
         await waitFor(() => expect(within(actions).queryByRole('region', { name: 'RAID suggestions' })).toBeNull())

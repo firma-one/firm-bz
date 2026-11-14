@@ -116,6 +116,7 @@ export function RaidOverviewView({ log, engagementBase, loadError, onRetry }: {
                             <RaidRow
                                 key={item.id}
                                 type={item.type}
+                                priority={item.priority}
                                 title={item.title}
                                 context={whereRaised(item)}
                                 owner={firstNameOf(item.ownerName)}
@@ -127,6 +128,7 @@ export function RaidOverviewView({ log, engagementBase, loadError, onRetry }: {
                         {overview.latestDecision && (
                             <RaidRow
                                 type="DECISION"
+                                priority={null}
                                 title={overview.latestDecision.title}
                                 context={['latest decision', whereRaised(overview.latestDecision)].filter(Boolean).join(' · ')}
                                 owner={firstNameOf(overview.latestDecision.ownerName)}

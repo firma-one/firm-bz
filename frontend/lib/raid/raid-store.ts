@@ -13,12 +13,16 @@ import {
     RAID_TITLE_MAX,
     RAID_TYPES,
     autoLineFor,
+    hasPriority,
     isAutoSource,
     liveStatusFor,
     overviewSectionOf,
     parseSignalKey,
+    parsePriority,
+    priorityOf,
     shortDay,
     type RaidItemView,
+    type RaidPriority,
     type RaidMember,
     type RaidSourceKind,
     type RaidSourceView,
@@ -100,6 +104,8 @@ const ITEM_SELECT = {
     notes: true,
     ownerUserId: true,
     status: true,
+    priority: true,
+    prioritySetBy: true,
     sourceKind: true,
     sourceRef: true,
     signalKey: true,
@@ -244,6 +250,8 @@ export async function loadRaidLog(engagementId: string): Promise<{ items: RaidIt
             internalSource: r.internalSource,
             autoLine: isAutoSource(r.sourceKind as RaidSourceKind) ? autoLineFor(r.signalKey) : null,
             overdue: parseSignalKey(r.signalKey)?.kind === 'overdue',
+            priority: priorityOf({ type: r.type as RaidType, priority: r.priority as RaidPriority | null }),
+            prioritySetByPerson: !!r.prioritySetBy,
             attachedTo: target && target.status !== 'SUGGESTED' ? { id: target.id, type: target.type as RaidType, title: target.title } : null,
             raisedAt: r.raisedAt.toISOString(),
             closedAt: r.closedAt ? r.closedAt.toISOString() : null,
@@ -300,6 +308,18 @@ async function checkedOwner(engagementId: string, raw: unknown): Promise<string 
     return raw
 }
 
+/**
+ * A priority from a request: one of High, Medium and Low, for a Risk or an Issue only. Undefined when the
+ * request didn't send one.
+ */
+function checkedPriority(type: RaidType, raw: unknown): RaidPriority | undefined {
+    if (raw === undefined) return undefined
+    if (!hasPriority(type)) throw userFacing('Only Risks and Issues have a priority.', 'invalid')
+    const priority = parsePriority(raw)
+    if (!priority) throw userFacing('Choose High, Medium or Low.', 'invalid')
+    return priority
+}
+
 function checkedType(raw: unknown): RaidType {
     if (typeof raw === 'string' && (RAID_TYPES as readonly string[]).includes(raw)) return raw as RaidType
     throw userFacing('Choose Risk, Assumption, Issue or Decision.', 'invalid')
@@ -321,11 +341,14 @@ export async function addRaidItem(params: {
     title: unknown
     notes?: unknown
     ownerUserId?: unknown
+    priority?: unknown
 }): Promise<{ id: string }> {
     const type = checkedType(params.type)
     const title = cleanTitle(params.title)
     const notes = cleanNotes(params.notes)
     const ownerUserId = params.ownerUserId === undefined ? null : await checkedOwner(params.engagementId, params.ownerUserId)
+    // A Risk or an Issue a person adds is theirs to grade: Medium unless they chose otherwise.
+    const priority = hasPriority(type) ? checkedPriority(type, params.priority) ?? 'MEDIUM' : null
     const row = await prisma.engagementRaidItem.create({
         data: {
             firmId: params.firmId,
@@ -335,6 +358,8 @@ export async function addRaidItem(params: {
             notes,
             ownerUserId,
             status: liveStatusFor(type),
+            priority,
+            prioritySetBy: priority ? params.actor.userId : null,
             sourceKind: 'MANUAL',
             internalSource: false,
             raisedAt: new Date(),
@@ -347,13 +372,15 @@ export async function addRaidItem(params: {
 }
 
 /**
- * Accepts Brio's suggestion. On its own it joins the log as Open (Recorded for a decision). One that
- * adds to an entry merges into that entry's sources instead, and the suggestion row goes. If that entry
- * has since gone, the suggestion joins the log on its own.
+ * Accepts Brio's suggestion. On its own it joins the log as Open (Recorded for a decision), with Brio's
+ * priority or the one the person chose on the card. One that adds to an entry merges into that entry's
+ * sources instead, and the suggestion row goes. If that entry has since gone, the suggestion joins the
+ * log on its own.
  */
-export async function acceptRaidSuggestion(engagementId: string, actor: RaidActor, itemId: unknown): Promise<{ id: string; mergedInto: string | null }> {
+export async function acceptRaidSuggestion(engagementId: string, actor: RaidActor, itemId: unknown, options: { priority?: unknown } = {}): Promise<{ id: string; mergedInto: string | null }> {
     const item = await findItem(engagementId, itemId)
     if (item.status !== 'SUGGESTED') throw userFacing('This suggestion was already accepted or dismissed. Refresh the log.', 'conflict')
+    const chosen = checkedPriority(item.type as RaidType, options.priority)
 
     const target = item.attachedToId
         ? await prisma.engagementRaidItem.findFirst({ where: { id: item.attachedToId, engagementId, status: { in: ['OPEN', 'RECORDED', 'CLOSED'] } } })
@@ -383,7 +410,13 @@ export async function acceptRaidSuggestion(engagementId: string, actor: RaidActo
 
     await prisma.engagementRaidItem.update({
         where: { id: item.id },
-        data: { status: liveStatusFor(item.type as RaidType), attachedToId: null, updatedBy: actor.userId },
+        data: {
+            status: liveStatusFor(item.type as RaidType),
+            attachedToId: null,
+            updatedBy: actor.userId,
+            // Brio's grade stays Brio's; one the person picked on the card is theirs.
+            ...(chosen && chosen !== item.priority ? { priority: chosen, prioritySetBy: actor.userId } : {}),
+        },
     })
     return { id: item.id, mergedInto: null }
 }
@@ -396,10 +429,11 @@ export async function dismissRaidSuggestion(engagementId: string, actor: RaidAct
 }
 
 /**
- * A person's edit to an entry in the log: its owner, its mitigation or next step, and the title of an
- * entry a person or Brio wrote. The sync's entries take their titles from the engagement's data.
+ * A person's edit to an entry in the log: its owner, its mitigation or next step, its priority (a Risk or
+ * an Issue), and the title of an entry a person or Brio wrote. The sync's entries take their titles from
+ * the engagement's data, and their priority from its grade until a person sets one here.
  */
-export async function editRaidItem(engagementId: string, actor: RaidActor, itemId: unknown, patch: { title?: unknown; notes?: unknown; ownerUserId?: unknown }): Promise<void> {
+export async function editRaidItem(engagementId: string, actor: RaidActor, itemId: unknown, patch: { title?: unknown; notes?: unknown; ownerUserId?: unknown; priority?: unknown }): Promise<void> {
     const item = await findItem(engagementId, itemId)
     if (item.status === 'SUGGESTED' || item.status === 'DISMISSED') throw userFacing('Accept the suggestion first, then edit it.', 'conflict')
 
@@ -412,6 +446,11 @@ export async function editRaidItem(engagementId: string, actor: RaidActor, itemI
     }
     if (patch.notes !== undefined) data.notes = cleanNotes(patch.notes)
     if (patch.ownerUserId !== undefined) data.ownerUserId = await checkedOwner(engagementId, patch.ownerUserId)
+    const priority = checkedPriority(item.type as RaidType, patch.priority)
+    if (priority) {
+        data.priority = priority
+        data.prioritySetBy = actor.userId
+    }
     await prisma.engagementRaidItem.update({ where: { id: item.id }, data })
 }
 

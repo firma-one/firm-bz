@@ -207,7 +207,7 @@ export function cannedMemos(engagement: DemoEngagement, now: Date): DemoMemo[] {
         ? {
             ...m,
             review: memoReviewOf(m.found(now), demoMemoText(m), 'auto', new Date(m.createdAt)),
-            raid: [{ id: 'tour-raid-weekly-1', type: 'RISK', title: 'The signed change order may hold up the launch' }],
+            raid: [{ id: 'tour-raid-weekly-1', type: 'RISK', title: 'The signed change order may hold up the launch', priority: 'MEDIUM' }],
         }
         : m))
 }

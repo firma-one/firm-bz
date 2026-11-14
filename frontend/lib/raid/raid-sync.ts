@@ -120,7 +120,7 @@ export async function syncRaidSignals(engagementId: string, firmId: string, opti
             prisma.docCommentThread.findMany({ where: { engagementId, resolvedAt: { not: null } }, select: { projectDocumentId: true } }),
             prisma.engagementRaidItem.findMany({
                 where: { engagementId, signalKey: { not: null } },
-                select: { id: true, signalKey: true, status: true, title: true, closedBy: true },
+                select: { id: true, signalKey: true, status: true, title: true, closedBy: true, priority: true, prioritySetBy: true },
             }),
         ])
 
@@ -133,6 +133,7 @@ export async function syncRaidSignals(engagementId: string, firmId: string, opti
             planningGaps: planningGapCount(insights.planningHygiene),
             blocked: board.blocked,
             approvers: board.approvers,
+            healthPoints: healthPointsOf(insights.healthScore?.penalties ?? []),
         })
         const existing: ExistingAutoItem[] = existingRows.map((r) => ({ ...r, signalKey: r.signalKey! }))
         const plan = planRaidSync(existing, signals, {
@@ -149,6 +150,15 @@ export async function syncRaidSignals(engagementId: string, firmId: string, opti
     }
 }
 
+/**
+ * The Health score's deductions for Behind pace and Planning gaps, by their labels
+ * (lib/insights/engagement-insights.ts), so their RAID entries take the same grade.
+ */
+export function healthPointsOf(penalties: readonly { label: string; points: number }[]): { pace?: number; planning?: number } {
+    const pointsFor = (prefix: string) => penalties.find((p) => p.label.startsWith(prefix))?.points
+    return { pace: pointsFor('Behind pace'), planning: pointsFor('Planning gaps') }
+}
+
 const rowFor = (engagementId: string, firmId: string, s: RaidSignal) => ({
     firmId,
     engagementId,
@@ -160,9 +170,10 @@ const rowFor = (engagementId: string, firmId: string, s: RaidSignal) => ({
     signalKey: s.key,
     internalSource: false,
     raisedAt: s.raisedAt,
+    priority: s.priority ?? null,
 })
 
-/** Writes a plan. Titles, statuses and close reasons only: owners and notes are a person's. */
+/** Writes a plan. Titles, statuses, close reasons and the grade's priority: owners, notes and a chosen priority are a person's. */
 export async function applyRaidSyncPlan(engagementId: string, firmId: string, plan: ReturnType<typeof planRaidSync>, now: Date): Promise<void> {
     if (plan.create.length > 0) {
         // skipDuplicates: two syncs racing on the same engagement make one entry per signal.
@@ -180,7 +191,18 @@ export async function applyRaidSyncPlan(engagementId: string, firmId: string, pl
     for (const r of plan.reopen) {
         await prisma.engagementRaidItem.update({
             where: { id: r.id },
-            data: { status: r.signal.status, title: r.signal.title, raisedAt: r.signal.raisedAt, closedAt: null, closedReason: null, closedBy: null },
+            data: {
+                status: r.signal.status,
+                title: r.signal.title,
+                raisedAt: r.signal.raisedAt,
+                closedAt: null,
+                closedReason: null,
+                closedBy: null,
+                ...(!r.keepPriority && r.signal.priority ? { priority: r.signal.priority } : {}),
+            },
         })
+    }
+    for (const r of plan.reprioritize) {
+        await prisma.engagementRaidItem.update({ where: { id: r.id }, data: { priority: r.priority } })
     }
 }

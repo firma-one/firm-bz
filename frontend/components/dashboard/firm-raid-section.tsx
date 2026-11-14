@@ -8,6 +8,7 @@ import { withRaidInfo } from '@/components/projects/raid/raid-info'
 import { LoadFailed } from '@/components/ui/load-failed'
 import { LoadingAnnouncement, ShimmerBar, ShimmerBlock } from '@/components/ui/shimmer'
 import { RaidCountLine, RaidRow, RaidSectionHeader } from '@/components/projects/raid/raid-list'
+import { PriorityBars } from '@/components/projects/raid/raid-priority'
 import { failureFrom, failureReason } from '@/lib/files/action-failure'
 import { shortDay, type FirmRaidOverview } from '@/lib/raid/raid-shared'
 
@@ -30,8 +31,9 @@ function Where({ clientName, engagementName }: { clientName: string; engagementN
 
 /**
  * The Firm Overview's open risks and issues (mock A, approved 2026-11-14): its own section under the Action
- * Center, in the same look as the engagement Overview's RAID section (raid-list.tsx). Issues first, then
- * risks, newest first, each with its engagement; a row opens that engagement's RAID tab. The first five
+ * Center, in the same look as the engagement Overview's RAID section (raid-list.tsx). High first, then
+ * Medium and Low; within each, issues before risks, newest first (compareRaid). Each row shows its
+ * priority and its engagement, and opens that engagement's RAID tab. The first five
  * show; "Show all" opens the rest in place, like the Action Center's passed checks (Deepak, 2026-11-14).
  *
  * `FirmRaidView` is the section alone, so /tour draws it over sample entries.
@@ -54,7 +56,17 @@ export function FirmRaidView({ data, error, onRetry }: { data: FirmRaidOverview 
                             { type: 'ISSUE', count: data.counts.openIssues, one: 'open issue', many: 'open issues' },
                             { type: 'RISK', count: data.counts.openRisks, one: 'open risk', many: 'open risks' },
                         ]}
-                        suffix={<span>across {engagements} {engagements === 1 ? 'engagement' : 'engagements'}</span>}
+                        suffix={(
+                            <>
+                                {data.counts.high > 0 && (
+                                    <span className="inline-flex items-center gap-1 tabular-nums">
+                                        <PriorityBars priority="HIGH" />
+                                        {data.counts.high} High
+                                    </span>
+                                )}
+                                <span>across {engagements} {engagements === 1 ? 'engagement' : 'engagements'}</span>
+                            </>
+                        )}
                     />
                 ) : undefined}
             />
@@ -79,6 +91,7 @@ export function FirmRaidView({ data, error, onRetry }: { data: FirmRaidOverview 
                             <RaidRow
                                 key={r.id}
                                 type={r.type}
+                                priority={r.priority}
                                 title={r.title}
                                 place={<Where clientName={r.engagement.clientName} engagementName={r.engagement.name} />}
                                 owner={r.ownerFirstName}

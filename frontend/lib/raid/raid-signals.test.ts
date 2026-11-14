@@ -120,10 +120,46 @@ describe('closeReasonFor', () => {
     })
 })
 
+describe('priorities', () => {
+    it("gives each Risk and Issue a priority: Health's grade where Health scores it, and the approved defaults", () => {
+        const signals = raidSignals(inputs({
+            deliverables: [deliverable({ id: 'd9', docId: 'QSR-9', name: 'Market Report', dueDate: daysAgo(5), isOverdue: true, stage: 'in_review', stageSince: daysAgo(14) })],
+            unansweredThreads: [{ documentId: 't1', documentName: 'Guide', lastMessageAt: daysAgo(5) }],
+            pace: { deliveredPct: 0, timePct: 37, hasDeadline: true },
+            planningGaps: 15,
+            healthPoints: { pace: 16, planning: 9 },
+        }))
+        const priorityOf = (key: string) => signals.find((x) => x.key === key)?.priority
+        expect(priorityOf('overdue:d9')).toBe('HIGH')
+        expect(priorityOf('waiting:t1')).toBe('MEDIUM')
+        // 16 and 9 points: High and Medium, as the Health score's own list grades them.
+        expect(priorityOf('pace')).toBe('HIGH')
+        expect(priorityOf('planning')).toBe('MEDIUM')
+    })
+
+    it('without the Health deductions, Behind pace is Medium and planning gaps Low', () => {
+        const signals = raidSignals(inputs({ deliverables: [deliverable({ id: 'd1', name: 'Deck' })], pace: { deliveredPct: 0, timePct: 40, hasDeadline: true }, planningGaps: 2 }))
+        expect(signals.find((x) => x.key === 'pace')?.priority).toBe('MEDIUM')
+        expect(signals.find((x) => x.key === 'planning')?.priority).toBe('LOW')
+    })
+
+    it('follows a changed grade, unless a person chose the priority', () => {
+        const ctx = { now: NOW, deliverables: [], resolvedThreads: new Set<string>() }
+        const signals = raidSignals(inputs({ planningGaps: 15, healthPoints: { planning: 9 } }))
+        const base = { id: 'e1', signalKey: 'planning', status: 'OPEN' as const, title: '15 planning gaps · missing due dates or assignees', closedBy: null }
+        expect(planRaidSync([{ ...base, priority: 'LOW', prioritySetBy: null }], signals, ctx).reprioritize).toEqual([{ id: 'e1', priority: 'MEDIUM' }])
+        expect(planRaidSync([{ ...base, priority: 'LOW', prioritySetBy: 'u-lead' }], signals, ctx).reprioritize).toEqual([])
+        // Reopened by the sync: the grade again, unless a person had chosen one.
+        const closed = { ...base, status: 'CLOSED' as const, priority: 'HIGH' as const }
+        expect(planRaidSync([{ ...closed, prioritySetBy: null }], signals, ctx).reopen[0].keepPriority).toBe(false)
+        expect(planRaidSync([{ ...closed, prioritySetBy: 'u-lead' }], signals, ctx).reopen[0].keepPriority).toBe(true)
+    })
+})
+
 describe('planRaidSync', () => {
     const ctx = { now: NOW, deliverables: [], resolvedThreads: new Set<string>() }
     const existing = (p: Partial<ExistingAutoItem> & Pick<ExistingAutoItem, 'id' | 'signalKey'>): ExistingAutoItem =>
-        ({ status: 'OPEN', title: 'Old words', closedBy: null, ...p })
+        ({ status: 'OPEN', title: 'Old words', closedBy: null, priority: null, prioritySetBy: null, ...p })
 
     it('opens an entry for a new signal, and none for one that only keeps an entry open', () => {
         const signals = raidSignals(inputs({

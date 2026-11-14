@@ -2,9 +2,10 @@
 
 import type { ReactNode } from 'react'
 import { CalendarDays, ChevronRight, ShieldAlert, UserRound } from 'lucide-react'
-import type { RaidType } from '@/lib/raid/raid-shared'
+import type { RaidPriority, RaidType } from '@/lib/raid/raid-shared'
 import { cn } from '@/lib/utils'
 import { RaidLink, RaidTypeBadge } from './raid-tab'
+import { RaidPriorityMark } from './raid-priority'
 
 /**
  * The RAID log's short form, one look wherever it's shown (Deepak, 2026-11-14): the Firm Overview's open
@@ -64,8 +65,30 @@ export function RaidSectionHeader({ id, title, after, actions }: { id: string; t
  * Where the list is narrow, the place goes on a second line under the words, and the owner and day sit
  * together at the right.
  */
-export function RaidRow({ type, title, context, place, owner, day, href, testId }: {
+/**
+ * The row's columns: letter, [priority], words, [place], owner, day, chevron. Spelled out, since Tailwind
+ * only builds class names it finds whole. Narrow, the place drops under the words (its own line) and the
+ * owner and day share one cell.
+ */
+const ROW_GRID = {
+    plain: {
+        narrow: 'grid-cols-[22px_minmax(0,1fr)_auto_14px]',
+        wide: '@4xl:grid-cols-[22px_minmax(0,1fr)_6.5rem_4.5rem_14px]',
+        widePlace: '@4xl:grid-cols-[22px_minmax(0,1fr)_24rem_6.5rem_4.5rem_14px]',
+        placeAt: 'col-start-2',
+    },
+    priority: {
+        narrow: 'grid-cols-[22px_5rem_minmax(0,1fr)_auto_14px]',
+        wide: '@4xl:grid-cols-[22px_5rem_minmax(0,1fr)_6.5rem_4.5rem_14px]',
+        widePlace: '@4xl:grid-cols-[22px_5rem_minmax(0,1fr)_22rem_6.5rem_4.5rem_14px]',
+        placeAt: 'col-start-3',
+    },
+} as const
+
+export function RaidRow({ type, priority, title, context, place, owner, day, href, testId }: {
     type: RaidType
+    /** Shown in a column of its own when given: the bars and the word, a dash for none. */
+    priority?: RaidPriority | null
     title: string
     /** After the words: its source on an engagement's Overview, "latest decision". */
     context?: ReactNode
@@ -79,6 +102,7 @@ export function RaidRow({ type, title, context, place, owner, day, href, testId 
     testId?: string
 }) {
     const hasPlace = place != null
+    const grid = ROW_GRID[priority === undefined ? 'plain' : 'priority']
     const icon = 'h-3.5 w-3.5 shrink-0 text-fg-subtle'
     return (
         <li className="@container">
@@ -86,19 +110,19 @@ export function RaidRow({ type, title, context, place, owner, day, href, testId 
                 href={href}
                 data-testid={testId}
                 className={cn(
-                    'group grid grid-cols-[22px_minmax(0,1fr)_auto_14px] items-center gap-x-3 gap-y-0.5 rounded-control px-2 py-2 text-small transition-colors hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action/30',
-                    hasPlace
-                        ? '@4xl:grid-cols-[22px_minmax(0,1fr)_24rem_6.5rem_4.5rem_14px]'
-                        : '@4xl:grid-cols-[22px_minmax(0,1fr)_6.5rem_4.5rem_14px]',
+                    'group grid items-center gap-x-3 gap-y-0.5 rounded-control px-2 py-2 text-small transition-colors hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action/30',
+                    grid.narrow,
+                    hasPlace ? grid.widePlace : grid.wide,
                 )}
             >
                 <RaidTypeBadge type={type} />
+                {priority !== undefined && <RaidPriorityMark priority={priority} />}
                 <span className="min-w-0 truncate">
                     <span className="text-fg">{title}</span>
                     {context && <span className="text-fg-muted"> · {context}</span>}
                 </span>
                 {hasPlace && (
-                    <span className="col-start-2 row-start-2 min-w-0 truncate text-caption text-fg-muted @4xl:col-start-auto @4xl:row-start-auto @4xl:text-small">
+                    <span className={cn('row-start-2 min-w-0 truncate text-caption text-fg-muted @4xl:col-start-auto @4xl:row-start-auto @4xl:text-small', grid.placeAt)}>
                         {place}
                     </span>
                 )}

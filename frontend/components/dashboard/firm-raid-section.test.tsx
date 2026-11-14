@@ -16,11 +16,12 @@ afterEach(() => {
 })
 
 const DATA: FirmRaidOverview = {
-    counts: { openIssues: 3, openRisks: 1, engagements: 2 },
+    counts: { openIssues: 3, openRisks: 1, high: 1, engagements: 2 },
     rows: [
         {
             id: 'i1',
             type: 'ISSUE',
+            priority: 'HIGH',
             title: 'The client hasn’t approved the creative brief',
             ownerFirstName: 'Sam',
             raisedAt: '2026-11-08T12:00:00Z',
@@ -29,6 +30,7 @@ const DATA: FirmRaidOverview = {
         {
             id: 'r1',
             type: 'RISK',
+            priority: 'LOW',
             title: 'The signed change order may hold up the launch',
             ownerFirstName: null,
             raisedAt: '2026-11-12T12:00:00Z',
@@ -45,10 +47,14 @@ describe('FirmRaidView', { timeout: 20_000 }, () => {
         expect(screen.getByText('3 open issues')).toBeTruthy()
         expect(screen.getByText('1 open risk')).toBeTruthy()
         expect(screen.getByText('across 2 engagements')).toBeTruthy()
+        expect(screen.getByText('1 High')).toBeTruthy()
 
         const issue = screen.getByTestId('firm-raid-row-i1')
         expect(issue.getAttribute('href')).toBe('/g/beacon/acme/q4/raid')
         expect(within(issue).getByText('Issue')).toBeTruthy()
+        // Its priority, as gray bars and the word.
+        expect(within(issue).getByText('High')).toBeTruthy()
+        expect(within(screen.getByTestId('firm-raid-row-r1')).getByText('Low')).toBeTruthy()
         expect(within(issue).getByRole('img', { name: 'Client' })).toBeTruthy()
         expect(within(issue).getByText('Acme Robotics')).toBeTruthy()
         expect(within(issue).getByRole('img', { name: 'Engagement' })).toBeTruthy()
@@ -60,7 +66,7 @@ describe('FirmRaidView', { timeout: 20_000 }, () => {
     })
 
     it('says so when nothing is open', () => {
-        render(<FirmRaidView data={{ counts: { openIssues: 0, openRisks: 0, engagements: 0 }, rows: [], more: 0 }} />)
+        render(<FirmRaidView data={{ counts: { openIssues: 0, openRisks: 0, high: 0, engagements: 0 }, rows: [], more: 0 }} />)
         expect(screen.getByText('No open risks or issues in your engagements.')).toBeTruthy()
         expect(screen.queryByText(/across/)).toBeNull()
     })

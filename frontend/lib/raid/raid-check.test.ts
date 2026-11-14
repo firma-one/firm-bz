@@ -187,6 +187,30 @@ describe('validateRaidSuggestions', () => {
     })
 })
 
+describe("Brio's priority", () => {
+    it('keeps the priority it gives a Risk or an Issue, and Medium when it gives none it may give', () => {
+        const out = validateRaidSuggestions({
+            suggestions: [
+                s({ priority: 'HIGH' }),
+                s({ type: 'RISK', priority: 'URGENT', sourceRef: 'M2', quote: 'They may push back on scope.' }),
+                s({ type: 'RISK', priority: null, sourceKind: 'MEMO', sourceRef: 'N1', quote: 'Partnership K-1s should arrive by Nov 20.' }),
+            ],
+        }, ctx)
+        expect(out.suggestions.map((x) => x.priority)).toEqual(['HIGH', 'MEDIUM', 'MEDIUM'])
+    })
+
+    it('never gives an Assumption or a Decision one, whatever the model says', () => {
+        const out = validateRaidSuggestions({ suggestions: [s({ type: 'ASSUMPTION', priority: 'HIGH' })] }, ctx)
+        expect(out.suggestions[0].priority).toBeNull()
+    })
+
+    it('asks for one in the tool, and says how to judge it', () => {
+        const item = RAID_TOOL.input_schema.properties.suggestions.items
+        expect(item.required).toContain('priority')
+        expect(item.properties.priority.anyOf[0]).toEqual({ type: 'string', enum: ['HIGH', 'MEDIUM', 'LOW'] })
+    })
+})
+
 describe('buildRaidContext', () => {
     it('lists the log, then each message with its id, document, author, role, date and whether it is an internal note, then the memos', () => {
         const text = buildRaidContext({ engagementName: 'Q2 GTM', today: NOW, log: LOG, messages: MESSAGES, memos: MEMOS })

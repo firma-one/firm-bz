@@ -48,6 +48,62 @@ export function liveStatusFor(type: RaidType): 'OPEN' | 'RECORDED' {
     return type === 'DECISION' ? 'RECORDED' : 'OPEN'
 }
 
+// ── Priority ──────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * How much a Risk or an Issue matters (Deepak, 2026-11-14), shown as gray signal bars. Assumptions and
+ * Decisions have none. Sorted on wherever the log is listed: the RAID tab and both Overviews.
+ */
+export type RaidPriority = 'HIGH' | 'MEDIUM' | 'LOW'
+export const RAID_PRIORITIES: readonly RaidPriority[] = ['HIGH', 'MEDIUM', 'LOW']
+export const RAID_PRIORITY_LABEL: Record<RaidPriority, string> = { HIGH: 'High', MEDIUM: 'Medium', LOW: 'Low' }
+/** Filled bars of three. */
+export const RAID_PRIORITY_BARS: Record<RaidPriority, 1 | 2 | 3> = { HIGH: 3, MEDIUM: 2, LOW: 1 }
+
+/** Only Risks and Issues carry a priority. */
+export function hasPriority(type: RaidType): boolean {
+    return type === 'RISK' || type === 'ISSUE'
+}
+
+/** An entry's priority as shown: its own, Medium for a Risk or an Issue saved before priorities, none otherwise. */
+export function priorityOf(item: { type: RaidType; priority?: RaidPriority | null }): RaidPriority | null {
+    if (!hasPriority(item.type)) return null
+    return item.priority ?? 'MEDIUM'
+}
+
+/** A value from a request or the model: one of the three, or null. */
+export function parsePriority(raw: unknown): RaidPriority | null {
+    return typeof raw === 'string' && (RAID_PRIORITIES as readonly string[]).includes(raw) ? raw as RaidPriority : null
+}
+
+/**
+ * The Health score's own grade for a deduction (components/projects/insight-rings.tsx): 15 points or more
+ * is High, 8 or more Medium, less Low. Status and health entries take the grade of the deduction they
+ * stand for, so the log and the score never disagree.
+ */
+export function priorityForPoints(points: number): RaidPriority {
+    return points >= 15 ? 'HIGH' : points >= 8 ? 'MEDIUM' : 'LOW'
+}
+
+const PRIORITY_RANK: Record<RaidPriority, number> = { HIGH: 0, MEDIUM: 1, LOW: 2 }
+/** Issues before risks before assumptions before decisions: what a reader acts on first. */
+const TYPE_RANK: Record<RaidType, number> = { ISSUE: 0, RISK: 1, ASSUMPTION: 2, DECISION: 3 }
+
+/**
+ * The one order the log is read in, everywhere: High, Medium, Low (none last); within each, issues before
+ * risks before assumptions before decisions; then newest first.
+ */
+export function compareRaid(
+    a: { type: RaidType; priority?: RaidPriority | null; raisedAt: string },
+    b: { type: RaidType; priority?: RaidPriority | null; raisedAt: string },
+): number {
+    const pa = priorityOf(a)
+    const pb = priorityOf(b)
+    return (pa ? PRIORITY_RANK[pa] : 3) - (pb ? PRIORITY_RANK[pb] : 3)
+        || TYPE_RANK[a.type] - TYPE_RANK[b.type]
+        || b.raisedAt.localeCompare(a.raisedAt)
+}
+
 // ── Limits ────────────────────────────────────────────────────────────────────────────────────
 
 export const RAID_TITLE_MAX = 200
@@ -137,6 +193,10 @@ export interface RaidItemView {
     autoLine: string | null
     /** An Issue about a deliverable past its due date: shown in the danger tone. */
     overdue: boolean
+    /** Risks and Issues: High, Medium or Low (priorityOf). Null for Assumptions and Decisions. */
+    priority: RaidPriority | null
+    /** A person chose the priority: the sync leaves it as they set it. */
+    prioritySetByPerson: boolean
     /** A suggestion that adds to an entry already in the log. */
     attachedTo: { id: string; type: RaidType; title: string } | null
     /** ISO. */
@@ -208,14 +268,14 @@ function inState(item: Pick<RaidItemView, 'status'>, state: RaidStateFilter): bo
 }
 
 /** The table's rows for a type and Open or Closed, newest first. */
-export function filterRaidItems<T extends Pick<RaidItemView, 'status' | 'type' | 'raisedAt'>>(
+export function filterRaidItems<T extends Pick<RaidItemView, 'status' | 'type' | 'raisedAt'> & { priority?: RaidPriority | null }>(
     items: readonly T[],
     type: RaidTypeFilter,
     state: RaidStateFilter,
 ): T[] {
     return items
         .filter((i) => inState(i, state) && (type === 'ALL' || i.type === type))
-        .sort((a, b) => b.raisedAt.localeCompare(a.raisedAt))
+        .sort(compareRaid)
 }
 
 /** The counts beside each type filter, for Open or Closed. */
@@ -228,9 +288,6 @@ export function raidCountsByType(items: readonly Pick<RaidItemView, 'status' | '
     }
     return counts
 }
-
-/** Issues before risks before assumptions: what a reader acts on first. */
-const OVERVIEW_ORDER: Record<RaidType, number> = { ISSUE: 0, RISK: 1, ASSUMPTION: 2, DECISION: 3 }
 
 export interface RaidOverview {
     counts: { openRisks: number; assumptions: number; openIssues: number; decisions: number }
@@ -255,7 +312,7 @@ export function raidOverviewOf(log: Pick<RaidLogPayload, 'items' | 'suggestions'
         .sort((a, b) => b.raisedAt.localeCompare(a.raisedAt))[0] ?? null
     const raised = live
         .filter((i) => i.status === 'OPEN' && i.type !== 'DECISION')
-        .sort((a, b) => (OVERVIEW_ORDER[a.type] - OVERVIEW_ORDER[b.type]) || b.raisedAt.localeCompare(a.raisedAt))
+        .sort(compareRaid)
     const open = raised.slice(0, Math.max(0, maxRows - (latestDecision ? 1 : 0)))
     return {
         counts: {
@@ -377,6 +434,7 @@ export interface RaidChangedDetail {
 export interface FirmRaidRow {
     id: string
     type: 'RISK' | 'ISSUE'
+    priority: RaidPriority
     title: string
     /** The owner's first name, or null when no one owns it. */
     ownerFirstName: string | null
@@ -390,7 +448,14 @@ export interface FirmRaidRow {
  * may see the RAID log of, from every source, issues first, newest first.
  */
 export interface FirmRaidOverview {
-    counts: { openIssues: number; openRisks: number; /** Engagements with at least one open. */ engagements: number }
+    counts: {
+        openIssues: number
+        openRisks: number
+        /** Of those, how many are High. */
+        high: number
+        /** Engagements with at least one open. */
+        engagements: number
+    }
     rows: FirmRaidRow[]
     /** Open but not sent, past FIRM_RAID_MAX_ROWS: "and 2 more, in their engagements' RAID logs". */
     more: number

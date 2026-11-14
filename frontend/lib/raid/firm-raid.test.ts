@@ -128,11 +128,26 @@ describe('firmRaidOverview', () => {
         expect(raidFindMany).toHaveBeenCalledWith(expect.objectContaining({
             where: { engagementId: { in: ['e1', 'e2', 'e3'] }, status: 'OPEN', type: { in: ['RISK', 'ISSUE'] } },
         }))
-        expect(out.counts).toEqual({ openIssues: 3, openRisks: 2, engagements: 3 })
+        expect(out.counts).toEqual({ openIssues: 3, openRisks: 2, high: 0, engagements: 3 })
         // An overdue deliverable (status) and behind pace (health) are listed: the firm's Action Center doesn't show them.
         expect(out.rows.map((r) => r.id)).toEqual(['i-health', 'i-new', 'i-old'])
         expect(out.more).toBe(2)
         expect(out.rows[2].engagement).toEqual({ name: 'Retainer', clientName: 'Acme', href: expect.stringContaining('/raid') })
+    })
+
+    it('puts a High risk above a Medium issue, and counts the High ones', async () => {
+        raidFindMany.mockResolvedValue([
+            { ...entry('medium-issue', 'ISSUE', 'MEMO', 12), priority: 'MEDIUM' },
+            { ...entry('high-risk', 'RISK', 'HEALTH', 3), priority: 'HIGH' },
+            { ...entry('old-issue', 'ISSUE', 'THREAD', 1), priority: null },
+        ])
+        engagementFindMany.mockResolvedValue([
+            { id: 'e1', name: 'Q2 Launch', slug: 'q2', client: { name: 'Horizon', slug: 'horizon', firm: { slug: 'beacon', group: { slug: 'g' } } } },
+        ])
+        const out = await firmRaidOverview(['e1'])
+        // One saved before priorities reads as Medium, and sits with the Medium ones by date.
+        expect(out.rows.map((r) => [r.id, r.priority])).toEqual([['high-risk', 'HIGH'], ['medium-issue', 'MEDIUM'], ['old-issue', 'MEDIUM']])
+        expect(out.counts.high).toBe(1)
     })
 
     it("names the owner by first name, and no one when it has none", async () => {
@@ -145,7 +160,7 @@ describe('firmRaidOverview', () => {
     })
 
     it('reads nothing without engagements', async () => {
-        expect(await firmRaidOverview([])).toEqual({ counts: { openIssues: 0, openRisks: 0, engagements: 0 }, rows: [], more: 0 })
+        expect(await firmRaidOverview([])).toEqual({ counts: { openIssues: 0, openRisks: 0, high: 0, engagements: 0 }, rows: [], more: 0 })
         expect(raidFindMany).not.toHaveBeenCalled()
     })
 })

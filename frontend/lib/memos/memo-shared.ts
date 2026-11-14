@@ -600,6 +600,8 @@ export interface MemoRaidSuggestion {
     id: string
     type: 'RISK' | 'ASSUMPTION' | 'ISSUE' | 'DECISION'
     title: string
+    /** Risks and Issues: Brio's priority, to keep or change before accepting. Null otherwise. */
+    priority: 'HIGH' | 'MEDIUM' | 'LOW' | null
 }
 
 /** What GET …/memos/[documentId]/review answers: what waits on the memo, quotes still anchors. */

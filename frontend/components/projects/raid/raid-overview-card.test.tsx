@@ -30,16 +30,20 @@ describe('RaidOverviewView', { timeout: 20_000 }, () => {
         expect(screen.getByRole('link', { name: /Open RAID log/ }).getAttribute('href')).toBe('/d/e/q2/raid')
     })
 
-    it('lists every open entry, status and health ones too, issues first then newest, and the latest decision people recorded', () => {
+    it('lists every open entry, High first, issues before risks, then newest, and the latest decision people recorded', () => {
         render(<RaidOverviewView log={demoRaidLog(NOW)} engagementBase="" />)
         const rows = screen.getAllByTestId(/^raid-card-row-/).map((r) => r.getAttribute('data-testid'))
         expect(rows).toEqual([
             'raid-card-row-raid-overdue',
-            'raid-card-row-raid-waiting',
             'raid-card-row-raid-pace',
+            'raid-card-row-raid-waiting',
             'raid-card-row-raid-planning',
             'raid-card-row-raid-scope',
         ])
+        // Each with its priority; the decision has none.
+        expect(within(screen.getByTestId('raid-card-row-raid-pace')).getByText('High')).toBeTruthy()
+        expect(within(screen.getByTestId('raid-card-row-raid-planning')).getByText('Low')).toBeTruthy()
+        expect(within(screen.getByTestId('raid-card-row-raid-scope')).getByLabelText('No priority')).toBeTruthy()
         // Five are open and four fit: "Show all" opens the RAID tab rather than expanding here.
         expect(screen.getByRole('link', { name: 'Show all 5 in the RAID log' }).getAttribute('href')).toBe('?tab=raid')
         // The Board's approval is a decision too, but the Board already shows it.

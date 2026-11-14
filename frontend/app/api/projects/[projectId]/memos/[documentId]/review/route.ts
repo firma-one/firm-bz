@@ -4,6 +4,7 @@ import { memoFailureResponse, memoRouteAccess } from '@/lib/memos/memo-access'
 import { MEMO_NOT_FOUND, dismissMemoReview, findMemo } from '@/lib/memos/memo-store'
 import { notesEngagementRef } from '@/lib/memos/memo-review'
 import { appliedStoredIds, appliedStoredOn, type MemoRaidSuggestion, type MemoReviewPayload } from '@/lib/memos/memo-shared'
+import { priorityOf, type RaidType } from '@/lib/raid/raid-shared'
 import { prisma } from '@/lib/prisma'
 
 export const dynamic = 'force-dynamic'
@@ -36,7 +37,7 @@ export async function GET(
             prisma.engagementRaidItem.findMany({
                 where: { engagementId: projectId, status: 'SUGGESTED', sourceKind: 'MEMO', sourceRef: found.id },
                 orderBy: { raisedAt: 'asc' },
-                select: { id: true, type: true, title: true },
+                select: { id: true, type: true, title: true, priority: true },
             }),
         ])
         const data: MemoReviewPayload = {
@@ -46,7 +47,12 @@ export async function GET(
             // What an edit keeps (§14.3): the card's names for what was applied, never the memo's lines.
             applied: found.memo.applied.map((a) => ({ label: a.label, at: a.at })),
             engagement,
-            raid: raidRows.map((r): MemoRaidSuggestion => ({ id: r.id, type: r.type as MemoRaidSuggestion['type'], title: r.title })),
+            raid: raidRows.map((r): MemoRaidSuggestion => ({
+                id: r.id,
+                type: r.type as MemoRaidSuggestion['type'],
+                title: r.title,
+                priority: priorityOf({ type: r.type as RaidType, priority: r.priority }),
+            })),
         }
         return NextResponse.json({ data }, { headers: { 'Cache-Control': 'private, no-store' } })
     } catch (error) {

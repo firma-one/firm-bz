@@ -48,7 +48,8 @@ describe('RaidTabView', { timeout: 20_000 }, () => {
         const h = handlers()
         render(<RaidTabView log={demoRaidLog(NOW)} engagementBase="" readOnly={false} now={NOW} {...h} />)
         await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Accept Dana sends the brokerage 1099-B by Nov 29' })) })
-        expect(h.onAccept).toHaveBeenCalledWith(expect.objectContaining({ id: 'raid-suggest-1099' }))
+        // An Assumption has no priority to change: accepted as Brio wrote it.
+        expect(h.onAccept).toHaveBeenCalledWith(expect.objectContaining({ id: 'raid-suggest-1099' }), undefined)
         await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Dismiss Pricing in section 4.2 may be out of date' })) })
         expect(h.onDismiss).toHaveBeenCalledWith(expect.objectContaining({ id: 'raid-suggest-pricing' }))
     })
@@ -143,6 +144,30 @@ describe('RaidTabView', { timeout: 20_000 }, () => {
         expect(screen.queryByText('Add a mitigation')).toBeNull()
     })
 
+    it('shows each Risk and Issue with its priority, High first, and a dash for the others', () => {
+        render(<RaidTabView log={demoRaidLog(NOW)} engagementBase="" readOnly={false} now={NOW} {...handlers()} />)
+        const rows = screen.getAllByTestId(/^raid-row-/).map((r) => r.getAttribute('data-testid'))
+        expect(rows.slice(0, 2)).toEqual(['raid-row-raid-overdue', 'raid-row-raid-pace'])
+        // Editable on a live entry: a picker named for it.
+        expect(within(screen.getByTestId('raid-row-raid-overdue')).getByRole('combobox', { name: /^Priority of / }).textContent).toContain('High')
+        expect(within(screen.getByTestId('raid-row-raid-k1')).getByLabelText('No priority')).toBeTruthy()
+    })
+
+    it("offers Brio's priority on a Risk or an Issue it suggests, to keep or change before accepting", () => {
+        render(<RaidTabView log={demoRaidLog(NOW)} engagementBase="" readOnly={false} now={NOW} {...handlers()} />)
+        // The pricing issue adds to an entry already in the log, so it has none of its own to set.
+        expect(within(screen.getByTestId('raid-suggestion-raid-suggest-pricing')).queryByRole('combobox')).toBeNull()
+        expect(within(screen.getByTestId('raid-suggestion-raid-suggest-1099')).queryByRole('combobox')).toBeNull()
+    })
+
+    it('asks a priority only for a Risk or an Issue being added', () => {
+        render(<RaidTabView log={demoRaidLog(NOW)} engagementBase="" readOnly={false} now={NOW} {...handlers()} />)
+        fireEvent.click(screen.getByRole('button', { name: 'Add an item' }))
+        expect(screen.getByRole('combobox', { name: 'Priority' }).textContent).toContain('Medium')
+        fireEvent.click(screen.getByRole('radio', { name: 'Decision' }))
+        expect(screen.queryByRole('combobox', { name: 'Priority' })).toBeNull()
+    })
+
     it('adds an entry through its handler', async () => {
         const h = handlers()
         render(<RaidTabView log={demoRaidLog(NOW)} engagementBase="" readOnly={false} now={NOW} {...h} />)
@@ -150,7 +175,8 @@ describe('RaidTabView', { timeout: 20_000 }, () => {
         fireEvent.click(screen.getByRole('radio', { name: 'Issue' }))
         fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Brand guidelines missing' } })
         await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Add to the log' })) })
-        expect(h.onAdd).toHaveBeenCalledWith({ type: 'ISSUE', title: 'Brand guidelines missing', notes: null })
+        // A Risk or an Issue a person adds starts at Medium.
+        expect(h.onAdd).toHaveBeenCalledWith({ type: 'ISSUE', title: 'Brand guidelines missing', notes: null, priority: 'MEDIUM' })
     })
 })
 

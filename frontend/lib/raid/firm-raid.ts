@@ -4,7 +4,7 @@ import { loadPeople } from '@/lib/files/file-creator'
 import { engagementPath } from '@/lib/navigation/firm-paths'
 import { findClientInPermissions, findFirmInPermissions, findProjectInPermissions } from '@/lib/permission-helpers'
 import type { UserPermissions } from '@/lib/user-settings-plus'
-import { firstNameOf, type FirmRaidOverview, type FirmRaidRow } from './raid-shared'
+import { compareRaid, firstNameOf, priorityOf, type FirmRaidOverview, type FirmRaidRow, type RaidPriority, type RaidType } from './raid-shared'
 
 /**
  * The Firm Overview's open risks and issues (.claude/plans/brio-features-round-2.md, §14): across the
@@ -48,9 +48,6 @@ export async function firmRaidEngagementIds(firmId: string, permissions: UserPer
  */
 export const FIRM_RAID_MAX_ROWS = 100
 
-/** Issues before risks, then newest first: what a reader acts on first. */
-const ORDER: Record<'ISSUE' | 'RISK', number> = { ISSUE: 0, RISK: 1 }
-
 /**
  * The open Risks and Issues across `engagementIds`, from every source, as mock A lists them: raised in
  * threads and memos, and status and health ones (an overdue deliverable, an engagement behind pace) too.
@@ -58,13 +55,19 @@ const ORDER: Record<'ISSUE' | 'RISK', number> = { ISSUE: 0, RISK: 1 }
  * doesn't, so here they're the point (Deepak, 2026-11-14).
  */
 export async function firmRaidOverview(engagementIds: string[], maxRows = FIRM_RAID_MAX_ROWS): Promise<FirmRaidOverview> {
-    if (engagementIds.length === 0) return { counts: { openIssues: 0, openRisks: 0, engagements: 0 }, rows: [], more: 0 }
+    if (engagementIds.length === 0) return { counts: { openIssues: 0, openRisks: 0, high: 0, engagements: 0 }, rows: [], more: 0 }
     const items = await prisma.engagementRaidItem.findMany({
         where: { engagementId: { in: engagementIds }, status: 'OPEN', type: { in: ['RISK', 'ISSUE'] } },
-        select: { id: true, type: true, title: true, ownerUserId: true, raisedAt: true, engagementId: true },
+        select: { id: true, type: true, title: true, ownerUserId: true, raisedAt: true, engagementId: true, priority: true },
     })
-    const raised = [...items]
-        .sort((a, b) => (ORDER[a.type as 'ISSUE' | 'RISK'] - ORDER[b.type as 'ISSUE' | 'RISK']) || b.raisedAt.getTime() - a.raisedAt.getTime())
+    // The log's one order (compareRaid): High first, issues before risks, then newest.
+    const graded = items.map((i) => ({
+        ...i,
+        type: i.type as RaidType,
+        priority: priorityOf({ type: i.type as RaidType, priority: i.priority as RaidPriority | null }) ?? 'MEDIUM',
+        at: i.raisedAt.toISOString(),
+    }))
+    const raised = graded.sort((a, b) => compareRaid({ ...a, raisedAt: a.at }, { ...b, raisedAt: b.at }))
     const shown = raised.slice(0, maxRows)
 
     const [engagements, people] = await Promise.all([
@@ -88,6 +91,7 @@ export async function firmRaidOverview(engagementIds: string[], maxRows = FIRM_R
         return [{
             id: i.id,
             type: i.type as FirmRaidRow['type'],
+            priority: i.priority,
             title: i.title,
             ownerFirstName: i.ownerUserId ? firstNameOf(people.get(i.ownerUserId)?.name) : null,
             raisedAt: i.raisedAt.toISOString(),
@@ -103,6 +107,7 @@ export async function firmRaidOverview(engagementIds: string[], maxRows = FIRM_R
         counts: {
             openIssues: items.filter((i) => i.type === 'ISSUE').length,
             openRisks: items.filter((i) => i.type === 'RISK').length,
+            high: graded.filter((i) => i.priority === 'HIGH').length,
             engagements: new Set(items.map((i) => i.engagementId)).size,
         },
         rows,

@@ -16,9 +16,10 @@ export const dynamic = 'force-dynamic'
  * PATCH /api/projects/[projectId]/raid/[itemId]
  *
  * A person's change to one entry of the RAID log. Body: { action, ... }:
- * - "accept": a suggestion joins the log (Open, Recorded for a decision), or merges into the entry it adds to.
+ * - "accept": { priority? } a suggestion joins the log (Open, Recorded for a decision), or merges into the entry it adds to.
  * - "dismiss": a suggestion is turned down.
- * - "edit": { title?, notes?, ownerUserId? }. Titles only for entries a person or Brio wrote.
+ * - "edit": { title?, notes?, ownerUserId?, priority? }. Titles only for entries a person or Brio wrote; a priority
+ *   (HIGH, MEDIUM, LOW) only on a Risk or an Issue, and the sync keeps it from then on.
  * - "close" / "reopen".
  *
  * A Lead or a Contributor · Full Access (lib/raid/raid-access.ts). A completed engagement is read only.
@@ -39,7 +40,7 @@ export async function PATCH(
         const actor = raidActor(access.user)
         switch (body.action) {
             case 'accept':
-                return NextResponse.json({ data: await acceptRaidSuggestion(projectId, actor, itemId) })
+                return NextResponse.json({ data: await acceptRaidSuggestion(projectId, actor, itemId, 'priority' in body ? { priority: body.priority } : {}) })
             case 'dismiss':
                 await dismissRaidSuggestion(projectId, actor, itemId)
                 return NextResponse.json({ data: { id: itemId } })
@@ -48,6 +49,7 @@ export async function PATCH(
                     ...('title' in body ? { title: body.title } : {}),
                     ...('notes' in body ? { notes: body.notes } : {}),
                     ...('ownerUserId' in body ? { ownerUserId: body.ownerUserId } : {}),
+                    ...('priority' in body ? { priority: body.priority } : {}),
                 })
                 return NextResponse.json({ data: { id: itemId } })
             case 'close':
