@@ -6,6 +6,7 @@ import { AI_EFFORT, AI_MODEL, completeText } from './client'
 import { getGuardedAnthropic, meterAiCall } from './guarded-client'
 import { assertWithinAiCreditCap } from './credit-cap'
 import { assertWithinPersonLimits } from './person-limit'
+import { vaultForFirms } from '@/lib/ai/known-entities'
 
 export interface FirmBrief {
     content: string
@@ -256,7 +257,10 @@ export async function generateFirmBrief(
     }
     // The person's own limits too, as getGuardedAnthropic would (lib/ai/person-limit.ts).
     await assertWithinPersonLimits({ userId: meta?.userId, feature: 'brief' })
+    // What the model may read (§14 item 5); without a firm there's no one to know by name.
+    const vault = meta?.firmId ? await vaultForFirms([meta.firmId]) : null
     return completeText({
+        vault,
         system: SYSTEM,
         userMessage: briefRequest(data),
         maxTokens: BRIEF_MAX_TOKENS,
@@ -286,7 +290,7 @@ export async function streamFirmBrief(
     signal?: AbortSignal,
 ): Promise<string | null> {
     const scope = { firmId: meta.firmId, userId: meta.userId ?? null, feature: 'brief' as const }
-    const client = await getGuardedAnthropic(scope)
+    const client = await getGuardedAnthropic(scope, { vault: await vaultForFirms([meta.firmId]) })
     if (!client) return null
 
     const stream = await client.messages.create({

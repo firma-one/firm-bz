@@ -993,6 +993,21 @@ model DocCommentRead {
   @@schema("platform")
 }
 
+/// A comment's reminder ticked off by the person it reminded (their Inbox's Done), and when. The
+/// reminder itself is removed from their list, so this is what remains of it: Waiting on Reviewers
+/// reads it to know a nudge was acknowledged (.claude/plans/brio-features-round-2.md, §3.7).
+model DocCommentReminderDone {
+  messageId    String   @db.Uuid
+  userId       String   @db.Uuid
+  engagementId String   @db.Uuid
+  doneAt       DateTime @default(now()) @db.Timestamptz(6)
+
+  @@id([messageId, userId])
+  @@index([engagementId])
+  @@map("doc_comment_reminder_done")
+  @@schema("platform")
+}
+
 /// What a RAID log entry is (.claude/plans/brio-features-round-2.md, section 9).
 enum RaidItemType {
   RISK
@@ -1006,6 +1021,15 @@ enum RaidItemType {
 /// SUGGESTED: Brio's, waiting for a person to accept or dismiss it. OPEN and CLOSED: a risk, an
 /// assumption or an issue in the log. RECORDED: a decision in the log. DISMISSED: a suggestion a
 /// person turned down, kept so the same source isn't suggested again.
+/// How much a Risk or an Issue matters (.claude/plans/brio-features-round-2.md, §14).
+enum RaidPriority {
+  HIGH
+  MEDIUM
+  LOW
+
+  @@schema("platform")
+}
+
 enum RaidItemStatus {
   SUGGESTED
   OPEN
@@ -1054,6 +1078,12 @@ model EngagementRaidItem {
   notes          String?
   ownerUserId    String?        @db.Uuid
   status         RaidItemStatus
+  /// Risks and Issues only: how much it matters, shown as gray signal bars and sorted on. Set from the
+  /// Health score's own grade of the signal (STATUS, HEALTH), proposed by Brio (THREAD, MEMO), or chosen by
+  /// a person. Null for Assumptions and Decisions, and on older entries, which read as Medium.
+  priority       RaidPriority?
+  /// Who chose the priority. Set once a person does: the sync never changes it after that.
+  prioritySetBy  String?        @db.Uuid
 
   sourceKind     RaidSourceKind
   /// The signal key (STATUS, HEALTH, BOARD), the comment message id (THREAD) or the memo's

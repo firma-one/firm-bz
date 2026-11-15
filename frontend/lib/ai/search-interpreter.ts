@@ -1,6 +1,6 @@
 import 'server-only'
 import { AI_EFFORT, AI_MODEL } from './client'
-import { getGuardedAnthropic, type AiScope } from './guarded-client'
+import { getGuardedAnthropic, type AiMasking, type AiScope } from './guarded-client'
 import { logger } from '@/lib/logger'
 import { resolvePeriod } from '@/lib/search/period'
 
@@ -174,8 +174,10 @@ export async function interpretSearchQuery(
     text: string,
     candidates: InterpretCandidates,
     scope: AiScope,
+    /** What the model may read (§14 item 5): the firm's vault, from lib/ai/known-entities.ts. */
+    masking: AiMasking,
 ): Promise<(InterpretResult & { usage: { inputTokens: number; outputTokens: number } }) | null> {
-    const client = await getGuardedAnthropic(scope)
+    const client = await getGuardedAnthropic(scope, masking)
     if (!client) return null
 
     try {

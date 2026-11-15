@@ -24,6 +24,7 @@ import { DocumentActionMenu } from '@/components/ui/document-action-menu'
 import { DocumentPreviewPanelContent } from '@/components/files/document-edit-sheet'
 import { DocumentPreviewPane } from '@/components/files/document-preview-pane'
 import { assignablePeople, isAssetDetailsPaneContent } from '@/components/files/asset-details-pane'
+import { isDeliverableDetailPaneContent } from '@/components/projects/shares/deliverable-detail-panel'
 import { StatusIcon } from '@/components/ui/status-icon'
 import type { PersonOption } from '@/components/ui/property-cells'
 import { fileStage } from '@/lib/files/file-stage'
@@ -470,7 +471,8 @@ export function EngagementFileList({ projectId, initialFolderData, connectorRoot
         const isCommentsPane =
             Boolean(rightPane.content) &&
             (rightPane.title === 'Comment' || rightPane.title === 'Comments')
-        const isInfoPane = isAssetDetailsPaneContent(rightPane.content)
+        // A document's Details, or a deliverable folder's (the Board's pane).
+        const isInfoPane = isAssetDetailsPaneContent(rightPane.content) || isDeliverableDetailPaneContent(rightPane.content)
 
         if (!isCommentsPane) setActiveCommentDocId(null)
         if (!isInfoPane) setActiveInfoDocId(null)

@@ -78,7 +78,7 @@ import { DELIVERABLE_ACTORS, demoDocumentStages, demoFilesIn, type DeliverableSt
 import { ACTIVITY_STAGES, type ActivityStatus } from '@/lib/sharing-settings'
 import { deriveDeliverableStage } from '@/lib/deliverable-derivation'
 import { BlockedTag } from '@/components/files/blocked-tag'
-import { PrivateMark } from '@/components/files/private-mark'
+import { InternalFolderIcon, InternalOnlyFolderIcon, PrivateMark } from '@/components/files/private-mark'
 import { FileTableHeaderCells } from '@/components/projects/file-table-header-cells'
 import { MissingDueWarning } from '@/components/files/missing-due-warning'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
@@ -89,6 +89,8 @@ import type { BlockedFlag } from '@/lib/files/blocked'
 import { ENGAGEMENT_ROOT_LABEL } from '@/lib/files/engagement-root'
 import { foldBreadcrumbTrail } from '@/lib/files/breadcrumb-trail'
 import { useRightPane } from '@/lib/right-pane-context'
+import { DemoDeliverablePane } from '@/components/demo/demo-deliverable-pane'
+import { prettyName } from '@/lib/demo/demo-summary'
 import { DemoAssetDetailsPane } from '@/components/demo/demo-asset-details-pane'
 
 export const MIME_BY_TYPE: Record<string, string> = {
@@ -435,7 +437,7 @@ function EntryRow({
                 <span className="flex h-4 w-4 flex-shrink-0 items-center justify-center">
                     {/* As in the app: deliverable folders and the folders inside one wear folder-plus; documents keep their type icons */}
                     {isFolder ? (
-                        deliverableStatus ? <DeliverableIcon hint /> : inside ? <DeliverableIcon hint inside /> : <Folder className="h-4 w-4 fill-surface-muted text-fg-muted" />
+                        deliverableStatus ? <DeliverableIcon hint /> : isPrivate ? <InternalOnlyFolderIcon /> : inside ? <DeliverableIcon hint inside /> : <InternalFolderIcon />
                     ) : (
                         <DocumentIcon mimeType={MIME_BY_TYPE[entry.file.type] ?? 'application/octet-stream'} className="h-4 w-4" />
                     )}
@@ -450,7 +452,7 @@ function EntryRow({
                 )}
                 {/* As in the app: the firm's Blocked tag, after the name */}
                 {blocked && <BlockedTag blocked={blocked} />}
-                {isPrivate && <PrivateMark onMakePublic={onMakePublic} />}
+                {isPrivate && !isFolder && <PrivateMark onMakePublic={onMakePublic} />}
                 {/* The deliverable marker steps aside once the Status column has room to say it. */}
                 {deliverableStatus && (
                     <Hint label={approved ? 'Deliverable — approved' : 'Deliverable'}>
@@ -468,7 +470,8 @@ function EntryRow({
                         !selected && !pinTools && 'max-w-0 overflow-hidden opacity-0 focus-within:max-w-none focus-within:opacity-100 group-hover:max-w-none group-hover:opacity-100 has-[[data-state=open]]:max-w-none has-[[data-state=open]]:opacity-100 [@media(hover:none)]:max-w-none [@media(hover:none)]:opacity-100',
                     )}
                 >
-                    {!isFolder && <QuickAction icon={<Info />} label="Details" onClick={onOpenDetails} />}
+                    {/* A deliverable folder's Details is the Board's pane for it, as in the app; other folders have none. */}
+                    {(!isFolder || !!deliverableStatus) && <QuickAction icon={<Info />} label="Details" onClick={onOpenDetails} />}
                     <QuickAction icon={<Edit3 />} label="Rename" />
                     {!isFolder && <QuickAction icon={<ScanEye />} label="Preview" />}
                     {!isFolder && <QuickAction icon={<ExternalLink />} label="Open in Google Drive" />}
@@ -826,17 +829,55 @@ export function DemoFileList({
         // Only the file, its stage and its due date re-set the pane; a Blocked change comes from the pane itself.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [detailsFor, detailsStage, detailsDue, detailsAssignee])
+    // A deliverable folder's Details: the tour Board's pane for it (demo-engagement-board.tsx), as the
+    // app's Files row opens the Board's own. Set again when its stage or due date changes here.
+    const [deliverableFor, setDeliverableFor] = useState<DemoFolder | null>(null)
+    const deliverableForStage = deliverableFor ? deliverableStage(deliverableFor) ?? 'to_do' : null
+    const deliverableForDue = deliverableFor ? dueOf(deliverableFor.id) : null
+    useEffect(() => {
+        if (!deliverableFor || !deliverableForStage) return
+        const pane = paneRef.current
+        pane.setTitle(deliverableFor.docId)
+        pane.setHeaderSubtitle(prettyName(deliverableFor.name))
+        pane.setHeaderIcon(<DeliverableIcon />)
+        pane.setIconTooltip('Deliverable')
+        pane.setHeaderActions(null)
+        pane.setPaneSize('medium')
+        pane.setContent(
+            <DemoDeliverablePane
+                key={deliverableFor.id}
+                deliverable={{
+                    folder: deliverableFor,
+                    status: deliverableForStage,
+                    fileCount: demoFilesIn(deliverableFor).length,
+                    actor: '',
+                    dueDate: deliverableForDue,
+                }}
+                embedded
+            />,
+        )
+    }, [deliverableFor, deliverableForStage, deliverableForDue])
     // Closed from the pane's own ×.
     useEffect(() => {
-        if (!rightPane.content) setDetailsFor(null)
+        if (!rightPane.content) {
+            setDetailsFor(null)
+            setDeliverableFor(null)
+        }
     }, [rightPane.content])
     // Leaving Files takes its pane with it.
     const detailsOpen = useRef(false)
-    detailsOpen.current = !!detailsFor
+    detailsOpen.current = !!detailsFor || !!deliverableFor
     useEffect(() => () => {
         if (detailsOpen.current) paneRef.current.clearPane()
     }, [])
-    const openDetails = (file: DemoFile) => setDetailsFor({ file, deliverable: insideDeliverable ? path[0] : null })
+    const openDetails = (file: DemoFile) => {
+        setDeliverableFor(null)
+        setDetailsFor({ file, deliverable: insideDeliverable ? path[0] : null })
+    }
+    const openDeliverableDetails = (folder: DemoFolder) => {
+        setDetailsFor(null)
+        setDeliverableFor(folder)
+    }
 
     // The guided tour opens a top-level folder (?folder=) and a file's Details (&details=) by URL
     // (.claude/plans/tour-chapters.md). Only a change to them moves the list: browsing by hand leaves
@@ -1050,7 +1091,9 @@ export function DemoFileList({
                                 assigneeEditable={entry.kind === 'file' ? !deliverableApproved : !!deliverableStatusByFolderId?.[id] && deliverableStage(entry.folder) !== 'approved'}
                                 onSetAssignee={(next) => setAssigneeOverrides((prev) => ({ ...prev, [id]: next }))}
                                 blocked={entry.kind === 'file' && insideDeliverable ? blockedOf(id) ?? undefined : undefined}
-                                onOpenDetails={entry.kind === 'file' ? () => openDetails(entry.file) : undefined}
+                                onOpenDetails={entry.kind === 'file'
+                                    ? () => openDetails(entry.file)
+                                    : deliverableStage(entry.folder) ? () => openDeliverableDetails(entry.folder) : undefined}
                                 isPrivate={entry.kind === 'file' && !!entry.file.private && !madePublic.has(id)}
                                 onMakePublic={() => { if (entry.kind === 'file') makePublic(entry.file) }}
                                 dueDate={id in dueOverrides ? dueOverrides[id] : entry.kind === 'folder' ? deliverableDueByFolderId?.[id] : null}

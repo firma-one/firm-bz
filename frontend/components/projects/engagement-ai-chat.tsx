@@ -8,7 +8,7 @@ import { Brio } from '@/components/ui/brio'
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
 import { fetchWithTimeout, AI_TIMEOUT_MS, AiTimeoutError, AiAbortedError } from '@/lib/ai/fetch-timeout'
 import { BRIO_ANSWER_CUT_OFF, BRIO_ANSWER_FAILED, BRIO_UNREACHABLE_RETRY } from '@/lib/ai/brio-failure'
-import { StreamingText } from '@/components/ui/streaming-text'
+import { BrioTypedText, ThinkingDots, useTypedText } from '@/components/brio/brio-typing'
 import { ChatMarkdown } from '@/components/ui/chat-markdown'
 import {
     listConversations, saveConversation, getConversation, deleteConversation,
@@ -18,7 +18,6 @@ import {
 import { ElapsedTime } from '@/components/ui/elapsed-time'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { ShimmerBar } from '@/components/ui/shimmer'
 import { ChatTaskList, type ChatAction } from '@/components/projects/chat-action-row'
 // The same list the API narrows against, so the scope chip can never offer a scope the
 // server would silently reject.
@@ -556,6 +555,14 @@ export function EngagementAiChat(props: ChatSubjectProps & {
     const [streaming, setStreaming] = useState(false)
     useEffect(() => { onBusyChange?.(streaming) }, [streaming, onBusyChange])
 
+    // The newest answer is typed out as Brio writes it; the turn is still being answered until its
+    // last word is on screen, so its finished rendering and actions wait for that.
+    const lastMessage = messages[messages.length - 1]
+    const lastAnswer = lastMessage?.role === 'assistant' ? parseChatReply(lastMessage.content).answer : ''
+    // Stopped or cut off, what arrived shows at once under its note rather than typing on.
+    const typed = useTypedText(lastAnswer, streaming, { finishNow: !!lastMessage?.stopped || !!lastMessage?.cutOff })
+    const answering = streaming || typed.typing
+
 
     // Persisted on every settled change. Not while streaming: a half-written answer would be
     // stored truncated and restored with no sign it was cut off.
@@ -766,12 +773,12 @@ export function EngagementAiChat(props: ChatSubjectProps & {
         // Auto-follow only while the reader is already at the bottom. Yanking the view back while
         // someone is scrolled up re-reading an earlier answer is worse than not following at all.
         const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < AUTOSCROLL_SLACK_PX
-        if (!nearBottom && streaming) return
+        if (!nearBottom && answering) return
 
         const toBottom = (behavior: ScrollBehavior) =>
             el.scrollTo({ top: el.scrollHeight, behavior })
 
-        if (streaming) {
+        if (answering) {
             // Instant while tokens arrive: a smooth scroll is still animating when the next chunk
             // lands, so each one restarts it and the view never catches up.
             toBottom('auto')
@@ -780,7 +787,7 @@ export function EngagementAiChat(props: ChatSubjectProps & {
 
         const frame = requestAnimationFrame(() => toBottom('smooth'))
         return () => cancelAnimationFrame(frame)
-    }, [messages, streaming, aboveThread])
+    }, [messages, answering, typed.shown, aboveThread])
 
     /**
      * Where a question goes. An engagement's route takes the live scope; the firm's route reads the
@@ -1550,8 +1557,8 @@ export function EngagementAiChat(props: ChatSubjectProps & {
                     // links, and how many engagements it drew on. The answer text is the same parse.
                     const firmReply = isFirm && m.role === 'assistant' ? parseFirmChatReply(m.content) : null
                     const drewOn = firmReply?.sources?.drewOn ?? 0
-                    // Settled: not the answer still arriving.
-                    const settled = !(streaming && i === messages.length - 1)
+                    // Settled: not the answer still arriving or still being typed out.
+                    const settled = !(answering && i === messages.length - 1)
                     const based = firmReply
                         ? (drewOn > 0 ? [`${drewOn} engagement${drewOn === 1 ? '' : 's'}`] : [])
                         : parsed?.sources
@@ -1581,8 +1588,17 @@ export function EngagementAiChat(props: ChatSubjectProps & {
                                     : 'w-full break-words px-0.5 py-1 text-ui leading-relaxed text-fg'
                             }
                         >
-                            {m.content ? (
-                                m.role === 'assistant' && settled ? (
+                            {m.role === 'assistant' && !settled && typed.shown ? (
+                                /* Brio writing: whole words with a caret (components/brio/brio-typing.tsx).
+                                   `pre-line` only on raw text, where a newline is a line break. NOT
+                                   on the rendered answer: the Markdown renderer leaves a newline
+                                   text node between every block, and pre-line drew each one as an
+                                   empty line, padding paragraphs and list items apart. */
+                                <span className="whitespace-pre-line">
+                                    <BrioTypedText shown={typed.shown} />
+                                </span>
+                            ) : m.content && (m.role === 'user' || settled) ? (
+                                m.role === 'assistant' ? (
                                     firmReply ? (
                                         // Engagement links instead of document chips, opening in place.
                                         <FirmChatAnswer answer={firmReply.answer} links={firmReply.sources?.engagements} hrefFor={firmHref} />
@@ -1590,27 +1606,15 @@ export function EngagementAiChat(props: ChatSubjectProps & {
                                         <ChatMarkdown content={parsed!.answer} sources={parsed!.sources?.items} />
                                     )
                                 ) : (
-                                    /* `pre-line` only on raw text — the answer still streaming, and
-                                       the user's own words — where a newline is a line break. NOT on
-                                       the rendered answer: the Markdown renderer leaves a newline text
-                                       node between every block, and pre-line drew each one as an
-                                       empty line, padding paragraphs and list items apart. */
-                                    <span className={m.role === 'assistant' ? 'whitespace-pre-line' : undefined}>
-                                        <StreamingText
-                                            text={m.role === 'assistant' ? parsed!.answer : m.content}
-                                            animate={m.role === 'assistant' && !settled}
-                                        />
-                                    </span>
+                                    m.content
                                 )
                             ) : (
-                                /* Thinking (item 10): the shimmer lines the firm brief loads with,
-                                   shaped like the answer that is coming, with the elapsed time kept
-                                   so a slow answer reads as working rather than stuck. */
-                                <div className="flex w-full flex-col gap-1.5 py-1" role="status">
-                                    <ShimmerBar className="w-full" />
-                                    <ShimmerBar className="w-[88%]" />
-                                    <ShimmerBar className="w-[62%]" />
-                                    <span className="mt-1 inline-flex items-center gap-1 text-caption text-fg-subtle">
+                                /* Thinking (item 10): Brio's dots until its first word, with the
+                                   elapsed time kept so a slow answer reads as working rather than
+                                   stuck. */
+                                <div className="flex w-full items-center gap-2 py-1" role="status">
+                                    <ThinkingDots />
+                                    <span className="inline-flex items-center gap-1 text-caption text-fg-subtle">
                                         <Brio /> is thinking
                                         <ElapsedTime className="text-caption text-fg-subtle" />
                                     </span>
@@ -1651,7 +1655,7 @@ export function EngagementAiChat(props: ChatSubjectProps & {
                                 they came from, then the page's tasks under their own heading. Each
                                 question disappears once asked, so the list never repeats what is
                                 answered above. */}
-                            {i === lastAssistantIndex && settled && !streaming && (suggestions.length > 0 || !!actions?.length) && (
+                            {i === lastAssistantIndex && settled && !answering && (suggestions.length > 0 || !!actions?.length) && (
                                 <div className="mt-2 flex flex-col gap-3">
                                     {suggestions.length > 0 && (
                                         <div className="flex flex-col gap-px">

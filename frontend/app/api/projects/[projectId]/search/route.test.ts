@@ -7,6 +7,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const { st } = vi.hoisted(() => ({
     st: {
         role: 'eng_admin' as string | null,
+        /** Holds a firm admin's persona: may preview the engagement as another role ("view as"). */
+        firmAdmin: false,
         lockFilterFails: false,
         locked: [] as string[],
         visible: null as Set<string> | null,
@@ -25,6 +27,7 @@ vi.mock('@/lib/engagement-access', () => ({
     visibleDocumentIdsFor: async () => st.visible,
 }))
 vi.mock('@/lib/engagement-sharing-ids', () => ({ privateExternalIds: async () => st.hidden }))
+vi.mock('@/lib/permission-helpers', () => ({ canAccessRbacAdmin: async () => st.firmAdmin }))
 vi.mock('@/lib/connectors/resolve-client-connector', () => ({ resolveEngagementConnectorId: async () => 'conn' }))
 vi.mock('@/lib/connectors/registry', () => ({
     getPermissionAdapter: async () => ({
@@ -67,14 +70,15 @@ vi.mock('@/lib/prisma', () => ({
 
 import { GET } from './route'
 
-const search = async (q = 'budget') => {
-    const res = await GET({ url: `http://x/api/projects/p/search?q=${encodeURIComponent(q)}` } as any, { params: Promise.resolve({ projectId: 'p' }) })
+const search = async (q = 'budget', more = '') => {
+    const res = await GET({ url: `http://x/api/projects/p/search?q=${encodeURIComponent(q)}${more}` } as any, { params: Promise.resolve({ projectId: 'p' }) })
     const ordered = ((await res.json()).files ?? []).map((f: { id: string }) => f.id) as string[]
     return { status: res.status, ordered, ids: [...ordered].sort() }
 }
 
 beforeEach(() => {
     st.role = 'eng_admin'
+    st.firmAdmin = false
     st.lockFilterFails = false
     st.locked = []
     st.visible = null
@@ -105,6 +109,32 @@ describe('engagement search', () => {
         st.visible = new Set(['shared', 'indexed'])
         st.hidden = new Set(['indexed'])
         expect((await search()).ids).toEqual(['shared'])
+    })
+})
+
+// "View as": a firm admin previews the engagement as a Limited Access contributor or a Reviewer, and the
+// Files search sends `viewAs`. The preview must show what that role really gets, never more.
+describe('engagement search, previewed as another role', () => {
+    it('a firm admin previewing as a Reviewer sees only what a Reviewer would', async () => {
+        st.firmAdmin = true
+        st.visible = new Set(['shared', 'indexed'])
+        st.hidden = new Set(['indexed'])
+        expect((await search('budget', '&viewAs=eng_viewer')).ids).toEqual(['shared'])
+    })
+
+    it('fails closed as the role does when the lock filter can\'t run', async () => {
+        st.firmAdmin = true
+        st.visible = new Set(['drive-only', 'indexed', 'shared'])
+        st.lockFilterFails = true
+        expect((await search('budget', '&viewAs=eng_ext_collaborator')).ids).toEqual(['indexed'])
+    })
+
+    it('from anyone who may not preview, viewAs is ignored: it never narrows a Lead\'s search or widens a client\'s', async () => {
+        st.visible = new Set(['shared'])
+        expect((await search('budget', '&viewAs=eng_viewer')).ids).toEqual(['drive-only', 'indexed', 'shared'])
+        st.role = 'eng_viewer'
+        st.firmAdmin = true
+        expect((await search('budget', '&viewAs=eng_admin')).ids).toEqual(['shared'])
     })
 })
 

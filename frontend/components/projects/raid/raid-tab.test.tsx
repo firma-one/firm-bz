@@ -31,15 +31,10 @@ afterEach(() => {
 
 // Rendering the table's selects and menus is slow on a busy machine.
 describe('RaidTabView', { timeout: 20_000 }, () => {
-    it("shows Brio's suggestions with their source: a thread's quote, a memo's link and never its words, what an attachment adds to", () => {
+    it("shows Brio's suggestions from threads with their source: a thread's quote, what an attachment adds to", () => {
         render(<RaidTabView log={demoRaidLog(NOW)} engagementBase="/d/e/q2" readOnly={false} now={NOW} {...handlers()} />)
-        expect(screen.getByText('suggests 3')).toBeTruthy()
+        expect(screen.getByText('suggests 2')).toBeTruthy()
         expect(screen.getByText('Nothing enters the log until someone accepts it')).toBeTruthy()
-
-        const memo = screen.getByTestId('raid-suggestion-raid-suggest-depreciation')
-        expect(within(memo).getByText('Internal source')).toBeTruthy()
-        expect(within(memo).queryByRole('blockquote')).toBeNull()
-        expect(memo.querySelector('blockquote')).toBeNull()
 
         const thread = screen.getByTestId('raid-suggestion-raid-suggest-1099')
         expect(thread.querySelector('blockquote')?.textContent).toBe("“I'll chase the 1099-B and send it before the end of the month.”")
@@ -53,9 +48,19 @@ describe('RaidTabView', { timeout: 20_000 }, () => {
         const h = handlers()
         render(<RaidTabView log={demoRaidLog(NOW)} engagementBase="" readOnly={false} now={NOW} {...h} />)
         await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Accept Dana sends the brokerage 1099-B by Nov 29' })) })
-        expect(h.onAccept).toHaveBeenCalledWith(expect.objectContaining({ id: 'raid-suggest-1099' }))
-        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Dismiss Rental depreciation is scoped separately' })) })
-        expect(h.onDismiss).toHaveBeenCalledWith(expect.objectContaining({ id: 'raid-suggest-depreciation' }))
+        // An Assumption has no priority to change: accepted as Brio wrote it.
+        expect(h.onAccept).toHaveBeenCalledWith(expect.objectContaining({ id: 'raid-suggest-1099' }), undefined)
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Dismiss Pricing in section 4.2 may be out of date' })) })
+        expect(h.onDismiss).toHaveBeenCalledWith(expect.objectContaining({ id: 'raid-suggest-pricing' }))
+    })
+
+    it("a memo's suggestions wait on the memo (§13): no Accept here, only the way to it", () => {
+        render(<RaidTabView log={demoRaidLog(NOW)} engagementBase="/d/e/q2" readOnly={false} now={NOW} {...handlers()} />)
+        expect(screen.queryByTestId('raid-suggestion-tour-raid-weekly-1')).toBeNull()
+        expect(screen.queryByRole('button', { name: /The signed change order/ })).toBeNull()
+        const waiting = screen.getByRole('list', { name: 'Suggestions waiting on memos' })
+        expect(waiting.textContent).toMatch(/^1 suggestion waits on the memo “Weekly check-in · \w{3} \d+”, with its action items\./)
+        expect(within(waiting).getByRole('link', { name: 'Review in Memos' }).getAttribute('href')).toBe('/d/e/q2/comments?view=memos&memo=tour-memo-weekly')
     })
 
     it('filters by type with counts, and by Open or Closed', () => {
@@ -107,9 +112,9 @@ describe('RaidTabView', { timeout: 20_000 }, () => {
     it('says when Brio last checked in the tooltip', () => {
         const at = new Date(2026, 10, 12, 8, 2).toISOString()
         const later = new Date(2026, 10, 12, 15, 0)
-        expect(checkStatusTip('current', at, later)).toBe('Brio has read every thread message and memo. Last checked today 08:02.')
-        expect(checkStatusTip('changed', at, later)).toBe('Threads or memos changed since Brio last checked, today 08:02. Brio reads them once a day, or now with the sparkle, at most 1 credit.')
-        expect(checkStatusTip('changed', null, later)).toMatch(/^Brio hasn't read this engagement's threads and memos yet\./)
+        expect(checkStatusTip('current', at, later)).toBe('Brio has read every thread message. Last checked today 08:02.')
+        expect(checkStatusTip('changed', at, later)).toBe('Threads changed since Brio last checked, today 08:02. Brio reads them once a day, or now with the sparkle, at most 1 credit.')
+        expect(checkStatusTip('changed', null, later)).toMatch(/^Brio hasn't read this engagement's threads yet\./)
     })
 
     it('checks with the sparkle, and says what it found', async () => {
@@ -139,6 +144,30 @@ describe('RaidTabView', { timeout: 20_000 }, () => {
         expect(screen.queryByText('Add a mitigation')).toBeNull()
     })
 
+    it('shows each Risk and Issue with its priority, High first, and a dash for the others', () => {
+        render(<RaidTabView log={demoRaidLog(NOW)} engagementBase="" readOnly={false} now={NOW} {...handlers()} />)
+        const rows = screen.getAllByTestId(/^raid-row-/).map((r) => r.getAttribute('data-testid'))
+        expect(rows.slice(0, 2)).toEqual(['raid-row-raid-overdue', 'raid-row-raid-pace'])
+        // Editable on a live entry: a picker named for it.
+        expect(within(screen.getByTestId('raid-row-raid-overdue')).getByRole('combobox', { name: /^Priority of / }).textContent).toContain('High')
+        expect(within(screen.getByTestId('raid-row-raid-k1')).getByLabelText('No priority')).toBeTruthy()
+    })
+
+    it("offers Brio's priority on a Risk or an Issue it suggests, to keep or change before accepting", () => {
+        render(<RaidTabView log={demoRaidLog(NOW)} engagementBase="" readOnly={false} now={NOW} {...handlers()} />)
+        // The pricing issue adds to an entry already in the log, so it has none of its own to set.
+        expect(within(screen.getByTestId('raid-suggestion-raid-suggest-pricing')).queryByRole('combobox')).toBeNull()
+        expect(within(screen.getByTestId('raid-suggestion-raid-suggest-1099')).queryByRole('combobox')).toBeNull()
+    })
+
+    it('asks a priority only for a Risk or an Issue being added', () => {
+        render(<RaidTabView log={demoRaidLog(NOW)} engagementBase="" readOnly={false} now={NOW} {...handlers()} />)
+        fireEvent.click(screen.getByRole('button', { name: 'Add an item' }))
+        expect(screen.getByRole('combobox', { name: 'Priority' }).textContent).toContain('Medium')
+        fireEvent.click(screen.getByRole('radio', { name: 'Decision' }))
+        expect(screen.queryByRole('combobox', { name: 'Priority' })).toBeNull()
+    })
+
     it('adds an entry through its handler', async () => {
         const h = handlers()
         render(<RaidTabView log={demoRaidLog(NOW)} engagementBase="" readOnly={false} now={NOW} {...h} />)
@@ -146,7 +175,8 @@ describe('RaidTabView', { timeout: 20_000 }, () => {
         fireEvent.click(screen.getByRole('radio', { name: 'Issue' }))
         fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Brand guidelines missing' } })
         await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Add to the log' })) })
-        expect(h.onAdd).toHaveBeenCalledWith({ type: 'ISSUE', title: 'Brand guidelines missing', notes: null })
+        // A Risk or an Issue a person adds starts at Medium.
+        expect(h.onAdd).toHaveBeenCalledWith({ type: 'ISSUE', title: 'Brand guidelines missing', notes: null, priority: 'MEDIUM' })
     })
 })
 

@@ -7,8 +7,30 @@ import { Button } from '@/components/ui/button'
 import { ASSISTANT_POLICY } from '@/lib/ai/assistant'
 import { failureReason } from '@/lib/files/action-failure'
 import type { ActionResult } from '@/lib/actions/action-result'
+import { cn } from '@/lib/utils'
+import { splitMentions } from '@/lib/comments/mentions'
 import { useBrioDraft } from './use-brio-draft'
 import { BrioDraftLabel } from './brio-draft-label'
+
+/** The draft box's frame and text, shared by the text box, the chips under it and what Brio types over it, so each lands exactly on the others. */
+const DRAFT_FRAME = 'rounded-control border border-line-strong'
+const DRAFT_TEXT = 'px-3 py-2.5 text-ui leading-[22px] text-fg'
+
+/**
+ * The text with each "@Name" of `names` marked as the comment box marks a mention: a green chip.
+ * `visible` draws the words too (Brio typing); otherwise they are transparent, for the layer under
+ * the text box, where only the chips show through.
+ */
+function MentionMarks({ text, names, visible = false }: { text: string; names: string[]; visible?: boolean }) {
+    if (names.length === 0) return <>{text}</>
+    return (
+        <>
+            {splitMentions(text, names).map((t, i) => t.type === 'mention'
+                ? <mark key={i} className={cn('-mx-0.5 rounded-[4px] bg-action/15 px-0.5 [box-decoration-break:clone]', visible ? 'text-fg' : 'text-transparent')}>{t.value}</mark>
+                : <span key={i}>{t.value}</span>)}
+        </>
+    )
+}
 
 /** Square-bracketed spots a draft leaves for the sender, like "[Add next steps]". */
 export const DRAFT_PLACEHOLDER = /\[[^\]\n]{1,80}\]/g
@@ -46,6 +68,7 @@ export function DraftComposer({
     onSend,
     onSent,
     staticDraft,
+    mentionNames = [],
 }: {
     open: boolean
     onOpenChange: (open: boolean) => void
@@ -65,37 +88,48 @@ export function DraftComposer({
     onSend: (text: string, recipientIds: string[]) => Promise<ActionResult<unknown>>
     onSent?: () => void
     /**
-     * The /tour's canned draft: shown as written, with no request and no credit. Rewrite shows it
-     * again. The real app never passes it.
+     * The /tour's canned draft: typed out like a real one, with no request and no credit. Rewrite
+     * types it again. The real app never passes it.
      */
     staticDraft?: string
+    /** Member names the draft tags ("@Dana Whitfield"), drawn as the comment box draws a mention. */
+    mentionNames?: string[]
 }) {
     const textareaId = useId()
     const draft = useBrioDraft()
     const [chosen, setChosen] = useState<string[]>([])
     const [sending, setSending] = useState(false)
     const [sendError, setSendError] = useState<string | null>(null)
-    const startedRef = useRef(false)
 
-    // Everyone is chosen when the sheet opens; a draft is started once per opening.
+    // Brio writes the draft; on the /tour, the canned one types out the same way.
+    const write = () => void (staticDraft !== undefined ? draft.play(staticDraft) : draft.start(draftUrl, draftBody))
+
+    // Everyone is chosen when the sheet opens, and a draft is started for that opening. The start
+    // waits a tick and the cleanup cancels it, so a mount React runs twice (Strict Mode, which
+    // unmounts in between and so stops the request) still ends with one draft: the second one.
     useEffect(() => {
-        if (!open) {
-            startedRef.current = false
-            return
-        }
+        if (!open) return
         setChosen(recipients.map((r) => r.userId))
         setSendError(null)
-        if (!startedRef.current) {
-            startedRef.current = true
-            if (staticDraft !== undefined) draft.setText(staticDraft)
-            else void draft.start(draftUrl, draftBody)
+        const timer = setTimeout(write, 0)
+        return () => {
+            clearTimeout(timer)
+            draft.stop()
         }
-        // draft.start is stable; recipients are read on open only, on purpose.
+        // write reads the latest props; recipients are read on open only, on purpose.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open, draftUrl])
 
     const placeholders = useMemo(() => countPlaceholders(draft.text), [draft.text])
     const streaming = draft.status === 'streaming'
+
+    // A long draft keeps its newest line in view while it is written.
+    const typingRef = useRef<HTMLDivElement>(null)
+    const backdropRef = useRef<HTMLDivElement>(null)
+    useEffect(() => {
+        const box = typingRef.current
+        if (streaming && box) box.scrollTop = box.scrollHeight
+    }, [draft.text, streaming])
     const canSend = !streaming && !sending && draft.text.trim().length > 0 && placeholders === 0 && chosen.length > 0
 
     const send = async () => {
@@ -173,21 +207,41 @@ export function DraftComposer({
 
                     <div className="flex flex-col gap-1.5">
                         <BrioDraftLabel htmlFor={textareaId} />
-                        <textarea
-                            id={textareaId}
-                            value={draft.text}
-                            onChange={(e) => draft.setText(e.target.value)}
-                            readOnly={streaming}
-                            rows={10}
-                            placeholder={streaming ? '' : 'Write the message'}
-                            className="min-h-[220px] w-full resize-y rounded-control border border-line-strong bg-surface px-3 py-2.5 text-ui leading-[22px] text-fg outline-none focus-visible:ring-2 focus-visible:ring-action/30"
-                        />
-                        <div className="flex min-h-[18px] items-center gap-2 text-small" aria-live="polite">
-                            {streaming && (
-                                <span className="inline-flex items-center gap-1.5 text-fg-muted">
-                                    <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> Writing
-                                </span>
+                        <div className="relative rounded-control bg-surface">
+                            {/* Mention chips behind the text, as the comment box draws them (document-doc-
+                                comments-pane.tsx): this layer mirrors the box's text, transparent, and only
+                                the mentions' backgrounds show through it. */}
+                            {mentionNames.length > 0 && !streaming && (
+                                <div ref={backdropRef} aria-hidden className={cn(DRAFT_TEXT, 'pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap break-words border border-transparent text-transparent')}>
+                                    <MentionMarks text={draft.text} names={mentionNames} />
+                                    {/* A trailing new line needs a character to take up its line, as in the box. */}
+                                    {draft.text.endsWith('\n') && '\u200b'}
+                                </div>
                             )}
+                            <textarea
+                                id={textareaId}
+                                value={draft.text}
+                                onChange={(e) => draft.setText(e.target.value)}
+                                onScroll={(e) => { if (backdropRef.current) backdropRef.current.scrollTop = e.currentTarget.scrollTop }}
+                                readOnly={streaming}
+                                rows={10}
+                                placeholder={streaming ? '' : 'Write the message'}
+                                className={cn(DRAFT_FRAME, DRAFT_TEXT, 'relative min-h-[220px] w-full resize-y bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-action/30', streaming && 'invisible')}
+                            />
+                            {/* While Brio writes: the words so far with a caret after the last, or three
+                                dots before the first, laid over the box the draft lands in. */}
+                            {streaming && (
+                                <div ref={typingRef} aria-hidden className={cn(DRAFT_FRAME, DRAFT_TEXT, 'absolute inset-0 overflow-y-auto whitespace-pre-wrap break-words bg-surface')}>
+                                    {draft.text ? (
+                                        <><MentionMarks text={draft.text} names={mentionNames} visible /><span className="fm-type-caret" /></>
+                                    ) : (
+                                        <span className="fm-think-dots"><span /><span /><span /></span>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                        <div className="flex min-h-[18px] items-center gap-2 text-small" aria-live="polite">
+                            {streaming && <span className="sr-only">Brio is writing the draft</span>}
                             {!streaming && placeholders > 0 && (
                                 <span className="text-fg-muted">
                                     {placeholders === 1 ? '1 spot to fill' : `${placeholders} spots to fill`} in [brackets] before sending
@@ -211,7 +265,7 @@ export function DraftComposer({
                         <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => (staticDraft !== undefined ? draft.setText(staticDraft) : void draft.start(draftUrl, draftBody))}
+                            onClick={write}
                             disabled={sending}
                         >
                             Rewrite

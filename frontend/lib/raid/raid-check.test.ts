@@ -27,6 +27,8 @@ const h = vi.hoisted(() => {
     }
 })
 
+// Masking has its own tests (lib/ai/pseudonymize, masked-client, known-entities): no vault here.
+vi.mock('@/lib/ai/known-entities', () => ({ vaultForEngagement: async () => null, vaultForFirms: async () => null }))
 vi.mock('@/lib/prisma', () => ({
     prisma: {
         engagement: { findUnique: async () => h.engagement },
@@ -72,6 +74,7 @@ vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), error: vi.fn(), warn: 
 import {
     buildRaidContext,
     raidCheckCandidates,
+    runMemoRaidCheck,
     runRaidCheck,
     runScheduledRaidCheck,
     validateRaidSuggestions,
@@ -184,6 +187,30 @@ describe('validateRaidSuggestions', () => {
     })
 })
 
+describe("Brio's priority", () => {
+    it('keeps the priority it gives a Risk or an Issue, and Medium when it gives none it may give', () => {
+        const out = validateRaidSuggestions({
+            suggestions: [
+                s({ priority: 'HIGH' }),
+                s({ type: 'RISK', priority: 'URGENT', sourceRef: 'M2', quote: 'They may push back on scope.' }),
+                s({ type: 'RISK', priority: null, sourceKind: 'MEMO', sourceRef: 'N1', quote: 'Partnership K-1s should arrive by Nov 20.' }),
+            ],
+        }, ctx)
+        expect(out.suggestions.map((x) => x.priority)).toEqual(['HIGH', 'MEDIUM', 'MEDIUM'])
+    })
+
+    it('never gives an Assumption or a Decision one, whatever the model says', () => {
+        const out = validateRaidSuggestions({ suggestions: [s({ type: 'ASSUMPTION', priority: 'HIGH' })] }, ctx)
+        expect(out.suggestions[0].priority).toBeNull()
+    })
+
+    it('asks for one in the tool, and says how to judge it', () => {
+        const item = RAID_TOOL.input_schema.properties.suggestions.items
+        expect(item.required).toContain('priority')
+        expect(item.properties.priority.anyOf[0]).toEqual({ type: 'string', enum: ['HIGH', 'MEDIUM', 'LOW'] })
+    })
+})
+
 describe('buildRaidContext', () => {
     it('lists the log, then each message with its id, document, author, role, date and whether it is an internal note, then the memos', () => {
         const text = buildRaidContext({ engagementName: 'Q2 GTM', today: NOW, log: LOG, messages: MESSAGES, memos: MEMOS })
@@ -221,15 +248,14 @@ const ANSWER = [
 const savedRows = () => (h.createMany.mock.calls[0] as unknown as [{ data: Array<Record<string, unknown>> }])[0].data
 
 describe('runRaidCheck', () => {
-    it('saves grounded suggestions as SUGGESTED rows and notes the check', async () => {
+    it('saves grounded suggestions as SUGGESTED rows and notes the check: threads only, a memo source is not its to name', async () => {
         h.create.mockResolvedValue(toolAnswer(ANSWER))
         const out = await runRaidCheck({ engagementId: 'p1', firmId: 'f1', userId: 'u-alex', now: NOW })
-        expect(out).toMatchObject({ ok: true, status: 'checked', suggested: 3, dropped: 1 })
+        expect(out).toMatchObject({ ok: true, status: 'checked', suggested: 2, dropped: 2 })
 
         const rows = savedRows()
         expect(rows.map((r) => [r.type, r.status, r.sourceKind, r.sourceRef])).toEqual([
             ['ASSUMPTION', 'SUGGESTED', 'THREAD', M1],
-            ['DECISION', 'SUGGESTED', 'MEMO', MEMO],
             ['RISK', 'SUGGESTED', 'THREAD', M2],
         ])
         expect(h.meter).toHaveBeenCalledWith(expect.objectContaining({ feature: 'raidCheck', firmId: 'f1', userId: 'u-alex' }), { inputTokens: 3000, outputTokens: 400 })
@@ -248,34 +274,20 @@ describe('runRaidCheck', () => {
         expect(fingerprintWritten()).toBe(covered)
     })
 
-    it("never stores a memo's words: a memo suggestion keeps no quote and nothing of the memo's text", async () => {
-        h.create.mockResolvedValue(toolAnswer(ANSWER))
-        await runRaidCheck({ engagementId: 'p1', firmId: 'f1', userId: 'u-alex', now: NOW })
-        const memoRow = savedRows().find((r) => r.sourceKind === 'MEMO')!
-        expect(memoRow.quote).toBeNull()
-        const stored = JSON.stringify(memoRow)
-        expect(stored).not.toContain('We can scope that separately')
-        for (const line of MEMO_TEXT.split('\n').map((l) => l.replace(/^[#\- ]+/, '').trim()).filter((l) => l.length > 10)) {
-            expect(stored).not.toContain(line)
-        }
-        // A thread's comment is already stored, so its quote is kept.
-        expect(savedRows().find((r) => r.sourceRef === M1)!.quote).toBe("I'll chase the 1099-B and send it before the end of the month.")
-    })
-
     it('flags internal sources on the saved rows', async () => {
         h.create.mockResolvedValue(toolAnswer(ANSWER))
         await runRaidCheck({ engagementId: 'p1', firmId: 'f1', userId: null, now: NOW })
-        expect(savedRows().map((r) => [r.sourceRef, r.internalSource])).toEqual([[M1, false], [MEMO, true], [M2, true]])
+        expect(savedRows().map((r) => [r.sourceRef, r.internalSource])).toEqual([[M1, false], [M2, true]])
     })
 
-    it('shows Brio internal notes and the memo text, read server-side for this call only', async () => {
+    it('shows Brio internal notes, and never reads a memo: memos are read when added (§13)', async () => {
         h.create.mockResolvedValue(toolAnswer([]))
         await runRaidCheck({ engagementId: 'p1', firmId: 'f1', userId: 'u-alex', now: NOW })
         const request = h.create.mock.calls[0][0] as { messages: Array<{ content: string }>; max_tokens: number; temperature?: unknown }
         expect(request.messages[0].content).toContain('Between us: they may push back on scope')
-        expect(request.messages[0].content).toContain('We can scope that separately.')
+        expect(request.messages[0].content).not.toContain('We can scope that separately.')
         expect(request).not.toHaveProperty('temperature')
-        expect(h.readMemo).toHaveBeenCalledWith('p1', MEMO)
+        expect(h.readMemo).not.toHaveBeenCalled()
         expect(h.createMany).not.toHaveBeenCalled()
     })
 
@@ -290,12 +302,12 @@ describe('runRaidCheck', () => {
         expect(h.executeRaw).toHaveBeenCalledWith(expect.any(String), NOW.toISOString(), '', 'p1')
     })
 
-    it('leaves out a memo that was not changed since the last check', async () => {
+    it('a new memo alone is nothing new for the check: it was read when it was added', async () => {
         h.messages = []
-        h.memos = [{ id: MEMO, title: 'Old call', date: '2026-10-01', createdAt: '2026-10-01T10:00:00.000Z' }]
         const out = await runRaidCheck({ engagementId: 'p1', firmId: 'f1', userId: null, now: NOW })
         expect(out.ok && out.status).toBe('nothing_new')
         expect(h.readMemo).not.toHaveBeenCalled()
+        expect(h.create).not.toHaveBeenCalled()
     })
 
     it('refuses a completed engagement without reading anything', async () => {
@@ -320,19 +332,47 @@ describe('runRaidCheck', () => {
         expect(h.readMemo).not.toHaveBeenCalled()
     })
 
-    it('says which memos it could not read, and checks the rest', async () => {
-        h.memoText = new Map()
-        h.create.mockResolvedValue(toolAnswer([ANSWER[0]]))
-        const out = await runRaidCheck({ engagementId: 'p1', firmId: 'f1', userId: 'u-alex', now: NOW })
-        expect(out).toMatchObject({ ok: true, status: 'checked', suggested: 1, unreadMemos: ['Call with Dana'] })
-    })
-
     it('does not suggest again what an earlier check already saved', async () => {
         h.raidRows = [{ id: 'old', type: 'ASSUMPTION', title: 'Older words', sourceKind: 'THREAD', sourceRef: M1, quote: "I'll chase the 1099-B and send it before the end of the month.", extraSources: [] }]
         h.create.mockResolvedValue(toolAnswer([ANSWER[0]]))
         const out = await runRaidCheck({ engagementId: 'p1', firmId: 'f1', userId: 'u-alex', now: NOW })
         expect(out).toMatchObject({ suggested: 0, dropped: 1 })
         expect(h.createMany).not.toHaveBeenCalled()
+    })
+})
+
+describe('runMemoRaidCheck', () => {
+    const memo = { id: MEMO, title: 'Call with Dana', date: '2026-11-12', text: MEMO_TEXT }
+
+    it('reads the one memo, charged as memoRaid to the firm with no user, and leaves the log\'s last check alone', async () => {
+        h.create.mockResolvedValue(toolAnswer(ANSWER))
+        const out = await runMemoRaidCheck({ engagementId: 'p1', firmId: 'f1', memo, now: NOW })
+        expect(out).toMatchObject({ ok: true, suggested: 1 })
+        expect(savedRows().map((r) => [r.type, r.status, r.sourceKind, r.sourceRef])).toEqual([['DECISION', 'SUGGESTED', 'MEMO', MEMO]])
+        expect(h.guard).toHaveBeenCalledWith({ firmId: 'f1', userId: null, feature: 'memoRaid' }, { vault: null })
+        const request = h.create.mock.calls[0][0] as { messages: Array<{ content: string }> }
+        expect(request.messages[0].content).toContain('We can scope that separately.')
+        expect(request.messages[0].content).not.toContain('Between us')
+        expect(h.executeRaw).not.toHaveBeenCalled()
+    })
+
+    it("never stores a memo's words: its suggestion keeps no quote and nothing of the memo's text", async () => {
+        h.create.mockResolvedValue(toolAnswer(ANSWER))
+        await runMemoRaidCheck({ engagementId: 'p1', firmId: 'f1', memo, now: NOW })
+        const memoRow = savedRows()[0]
+        expect(memoRow.quote).toBeNull()
+        expect(memoRow.internalSource).toBe(true)
+        const stored = JSON.stringify(memoRow)
+        for (const line of MEMO_TEXT.split('\n').map((l) => l.replace(/^[#\- ]+/, '').trim()).filter((l) => l.length > 10)) {
+            expect(stored).not.toContain(line)
+        }
+    })
+
+    it('reads nothing for a completed engagement or an empty memo', async () => {
+        expect(await runMemoRaidCheck({ engagementId: 'p1', firmId: 'f1', memo: { ...memo, text: '  ' }, now: NOW })).toEqual({ ok: false, reason: 'empty' })
+        h.engagement = { ...h.engagement!, status: 'COMPLETED' }
+        expect(await runMemoRaidCheck({ engagementId: 'p1', firmId: 'f1', memo, now: NOW })).toEqual({ ok: false, reason: 'completed' })
+        expect(h.guard).not.toHaveBeenCalled()
     })
 })
 
@@ -345,7 +385,8 @@ describe('the daily check', () => {
         expect(sql).toContain("status <> 'COMPLETED'")
         expect(sql).toContain("'{raid,lastCheckedAt}'")
         expect(sql).toContain('doc_comment_messages')
-        expect(sql).toContain("(d.settings -> 'memo') IS NOT NULL")
+        // A memo is read when it's added (§13), so a new one alone doesn't call for a check.
+        expect(sql).not.toContain("'memo'")
     })
 
     it('skips an engagement with nothing new without a model call, and writes its last check', async () => {
@@ -359,7 +400,7 @@ describe('the daily check', () => {
     it('checks one with new messages, charged to the firm with no user, and writes its last check', async () => {
         h.create.mockResolvedValue(toolAnswer([ANSWER[0]]))
         expect(await runScheduledRaidCheck({ id: 'p1', firmId: 'f1' }, NOW)).toEqual({ engagementId: 'p1', status: 'checked', suggested: 1 })
-        expect(h.guard).toHaveBeenCalledWith({ firmId: 'f1', userId: null, feature: 'raidCheck' })
+        expect(h.guard).toHaveBeenCalledWith({ firmId: 'f1', userId: null, feature: 'raidCheck' }, { vault: null })
         expect(h.executeRaw).toHaveBeenCalledWith(expect.any(String), NOW.toISOString(), expect.stringMatching(/^[0-9a-f]{32}$/), 'p1')
     })
 

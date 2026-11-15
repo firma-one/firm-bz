@@ -4,7 +4,7 @@ import { render, screen, fireEvent, waitFor, within, act, cleanup } from '@testi
 
 /**
  * Discussions › Threads | Memos | RAID (.claude/plans/brio-features-round-2.md §8): who gets the switch,
- * the sub-tab and memo kept in the URL, the memo pane, and Find actions in it. fetch is stubbed:
+ * the sub-tab and memo kept in the URL, the memo pane, and Identify action items in it. fetch is stubbed:
  * nothing reaches the server, Brio, Google Drive or OneDrive.
  */
 
@@ -31,7 +31,7 @@ import { EngagementCommentsTab } from './engagement-comments-tab'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { hasInternalDiscussions, parseDiscussionsSubTab, discussionsHref, DiscussionsBarPortal } from './discussions-switch'
 import { PERSONA_CAPABILITY_MAP } from '@/lib/permissions/persona-map'
-import type { MemoListItem } from '@/lib/memos/memo-shared'
+import { memoReviewOf, type MemoListItem, type MemoReviewPayload } from '@/lib/memos/memo-shared'
 
 const MEMO: MemoListItem = {
     id: '11111111-1111-4111-8111-111111111111',
@@ -43,6 +43,10 @@ const MEMO: MemoListItem = {
     source: 'transcript',
     durationMinutes: 38,
     appliedCount: 1,
+    toReview: 0,
+    reviewedAt: null,
+    edited: null,
+    changedSinceRead: false,
     createdAt: '2026-11-12T17:00:00.000Z',
 }
 const OLDER: MemoListItem = {
@@ -66,6 +70,8 @@ type Call = { url: string; method: string; body: unknown }
 let calls: Call[] = []
 let listing: { memos: MemoListItem[]; readOnly: boolean; storage: string | null }
 let content: { status: number; body: unknown }
+const NOTHING_WAITING: MemoReviewPayload = { review: null, alreadyApplied: [], appliedOn: {}, applied: [], engagement: { id: 'p1', name: '2025 Individual Return', firmId: 'f1', ctaUrl: null }, raid: [] }
+let waiting: MemoReviewPayload = NOTHING_WAITING
 
 function stubFetch() {
     calls = []
@@ -78,6 +84,9 @@ function stubFetch() {
         if (url === `/api/projects/p1/memos/${OLDER.id}/content`) return json({ data: { text: OLDER_TEXT, webUrl: null } })
         if (url === '/api/projects/p1/ai-notes-proposals') return json({ data: FOUND })
         if (url.endsWith('/applied')) return json({ data: { appliedCount: 2 } })
+        if (url.endsWith('/review') && method === 'GET') return json({ data: waiting })
+        if (url.endsWith('/review') && method === 'DELETE') return json({ data: { dismissed: true } })
+        if (url.startsWith('/api/projects/p1/raid/') && method === 'PATCH') return json({ data: {} })
         if (url.includes('/members')) return json({ members: [] })
         if (url.includes('filter=mentions')) return json({ mentions: [] })
         if (url.includes('/doc-comments')) return json({ documents: [{ projectDocumentId: 'd1', documentName: 'Market report', docId: 'QSR-9', kind: 'deliverable', count: 2, latest: null }] })
@@ -95,6 +104,7 @@ beforeEach(() => {
     window.history.replaceState(null, '', `${BASE}/comments`)
     listing = { memos: [MEMO, OLDER], readOnly: false, storage: 'OneDrive' }
     content = { status: 200, body: { data: { text: TEXT, webUrl: 'https://contoso-my.sharepoint.com/memo.md' } } }
+    waiting = NOTHING_WAITING
     stubFetch()
     h.addToast.mockReset()
     h.clearPane.mockReset()
@@ -210,7 +220,7 @@ describe('Memos', () => {
         expect(screen.getByRole('button', { name: /Add internal memo/ })).toBeTruthy()
         const first = screen.getByTestId(`memo-row-${MEMO.id}`)
         expect(within(first).getByText('Alex · transcript, 38 min')).toBeTruthy()
-        expect(within(first).getByText('1 action applied')).toBeTruthy()
+        expect(within(first).getByText('1 action item applied')).toBeTruthy()
         expect(within(screen.getByTestId(`memo-row-${OLDER.id}`)).getByText('Marcus · notes')).toBeTruthy()
         expect(screen.getByText('Each memo is a Markdown file in “Internal Memos” in your OneDrive.')).toBeTruthy()
 
@@ -276,17 +286,94 @@ describe('Memos', () => {
         await openMemos()
         const pane = screen.getByRole('region', { name: 'Memo' })
         await within(pane).findByRole('heading', { name: 'Call with Dana' })
-        fireEvent.click(within(pane).getByRole('button', { name: 'Find actions in Call with Dana' }))
-        expect(await within(pane).findByText('Applied earlier from this memo')).toBeTruthy()
-        expect(within(pane).getByText('Applied actions note this memo, so running it again shows them as done.')).toBeTruthy()
+        // The action items have their own column beside the memo.
+        const actions = screen.getByRole('region', { name: 'Action items' })
+        fireEvent.click(within(actions).getByRole('button', { name: 'Identify action items in Call with Dana' }))
+        expect(await within(actions).findByText('Applied earlier from this memo')).toBeTruthy()
+        expect(within(actions).getByText('Applied action items note this memo, so identifying them again shows them as done.')).toBeTruthy()
         expect(calls.find((c) => c.url.endsWith('/ai-notes-proposals'))?.body).toEqual(expect.objectContaining({ memoDocumentId: MEMO.id }))
 
-        fireEvent.click(within(pane).getByRole('button', { name: 'Apply 1 selected' }))
-        await waitFor(() => expect(within(screen.getByTestId(`memo-row-${MEMO.id}`)).getByText('2 actions applied')).toBeTruthy())
+        fireEvent.click(within(actions).getByRole('button', { name: 'Apply 1 selected' }))
+        await waitFor(() => expect(within(screen.getByTestId(`memo-row-${MEMO.id}`)).getByText('2 action items applied')).toBeTruthy())
         expect(h.createManualReminder).toHaveBeenCalledWith(expect.objectContaining({
             action: 'Chase the 1099-B', note: 'From the memo “Call with Dana”: “I still need the brokerage 1099-B”',
         }))
         expect(calls.some((c) => c.url === `/api/projects/p1/memos/${MEMO.id}/applied` && c.method === 'POST')).toBe(true)
+    })
+
+    it('a memo added earlier shows its action items and RAID suggestions waiting, without a click (§13)', async () => {
+        const stored = memoReviewOf({ proposals: [FOUND.proposals[0]] as never, skipped: [], dropped: 0 }, TEXT, 'auto')
+        waiting = { ...NOTHING_WAITING, review: stored, raid: [{ id: 'raid-1', type: 'RISK', title: 'The K-1s may arrive late', priority: 'MEDIUM' }] }
+        listing.memos = [{ ...MEMO, toReview: 2, reviewedAt: stored.at }, OLDER]
+        await openMemos()
+        expect(within(screen.getByTestId(`memo-row-${MEMO.id}`)).getByText('2 to review')).toBeTruthy()
+
+        const actions = screen.getByRole('region', { name: 'Action items' })
+        expect(await within(actions).findByText(/identified 1 action item/)).toBeTruthy()
+        // Its quote, filled in from the memo the pane read: only its place was stored.
+        expect(within(actions).getByText('“We will send the K-1s by end of next week.”')).toBeTruthy()
+        expect(calls.some((c) => c.url.endsWith('/ai-notes-proposals'))).toBe(false)
+
+        const raid = within(actions).getByRole('region', { name: 'RAID suggestions' })
+        expect(within(raid).getByText('The K-1s may arrive late')).toBeTruthy()
+        // Brio's priority, to keep or change before accepting; kept as it is, nothing more is sent.
+        expect(within(raid).getByRole('combobox', { name: 'Priority of The K-1s may arrive late' }).textContent).toContain('Medium')
+        fireEvent.click(within(raid).getByRole('button', { name: 'Accept' }))
+        await waitFor(() => expect(calls.find((c) => c.url === '/api/projects/p1/raid/raid-1' && c.method === 'PATCH')?.body).toEqual({ action: 'accept' }))
+        await waitFor(() => expect(within(actions).queryByRole('region', { name: 'RAID suggestions' })).toBeNull())
+
+        fireEvent.click(within(actions).getByRole('button', { name: 'Dismiss all' }))
+        await waitFor(() => expect(calls.some((c) => c.url === `/api/projects/p1/memos/${MEMO.id}/review` && c.method === 'DELETE')).toBe(true))
+    })
+
+    it('Edit opens the memo filled in, saves through the memo route, and the pane reads it afresh (§14.3)', async () => {
+        const edited: MemoListItem = {
+            ...MEMO, title: 'Call with Dana, pricing', fileName: '2026-11-12-Call-with-Dana,-pricing.md',
+            edited: { at: '2026-11-14T09:00:00.000Z', byName: 'Sam Rivera' },
+        }
+        const editedText = TEXT.replace('# Call with Dana', '# Call with Dana, pricing')
+        const base: typeof fetch = fetch
+        vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+            if (url === `/api/projects/p1/memos/${MEMO.id}` && init?.method === 'PATCH') {
+                calls.push({ url, method: 'PATCH', body: JSON.parse(String(init.body)) })
+                content = { status: 200, body: { data: { text: editedText, webUrl: null } } }
+                return new Response(JSON.stringify({ data: { memo: edited, fileName: edited.fileName, notesChanged: false, identifying: false } }), { status: 200 })
+            }
+            return base(url, init)
+        }))
+        await openMemos()
+        const pane = screen.getByRole('region', { name: 'Memo' })
+        await within(pane).findByRole('heading', { name: 'Call with Dana' })
+        fireEvent.click(within(pane).getByRole('button', { name: 'Edit' }))
+        expect(await screen.findByText('A Markdown file in “Internal Memos” in your OneDrive. Saving changes the file there too.')).toBeTruthy()
+        // The notes as the file has them, under its heading.
+        expect((screen.getByLabelText('Notes') as HTMLTextAreaElement).value).toBe('Dana Whitfield: We will send the K-1s by end of next week.\n\nAlex: Great.')
+        fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Call with Dana, pricing' } })
+        fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+        await waitFor(() => expect(calls.find((c) => c.method === 'PATCH')?.body).toEqual(expect.objectContaining({ title: 'Call with Dana, pricing', body: null, identify: false })))
+        await waitFor(() => expect(h.addToast).toHaveBeenCalledWith(expect.objectContaining({ title: 'Memo saved', message: 'Renamed to 2026-11-12-Call-with-Dana,-pricing.md in Internal Memos.' })))
+        const after = screen.getByRole('region', { name: 'Memo' })
+        expect(await within(after).findByRole('heading', { name: 'Call with Dana, pricing' })).toBeTruthy()
+        expect(within(after).getByText(/Edited Nov 14 by Sam Rivera/)).toBeTruthy()
+        expect(within(screen.getByTestId(`memo-row-${MEMO.id}`)).getByText(/· edited$/)).toBeTruthy()
+    })
+
+    it('a memo whose notes changed since Brio read them says so, with the sparkle', async () => {
+        listing.memos = [{ ...MEMO, changedSinceRead: true, edited: { at: '2026-11-14T09:00:00.000Z', byName: 'Sam Rivera' } }, OLDER]
+        await openMemos()
+        const actions = screen.getByRole('region', { name: 'Action items' })
+        expect((await within(actions).findByTestId('memo-changed-since-read')).textContent).toMatch(/^Changed since Brio(AI)? read it\. The sparkle reads it again\.$/)
+    })
+
+    it('a memo changed in storage since Brio read it says so too, and a moved line is never shown wrong', async () => {
+        const stored = memoReviewOf({ proposals: [FOUND.proposals[0]] as never, skipped: [], dropped: 0 }, TEXT, 'auto')
+        waiting = { ...NOTHING_WAITING, review: stored }
+        listing.memos = [{ ...MEMO, toReview: 1, reviewedAt: stored.at }, OLDER]
+        content = { status: 200, body: { data: { text: TEXT.replace('We will send the K-1s by end of next week.', 'K-1s are already in.'), webUrl: null } } }
+        await openMemos()
+        const actions = screen.getByRole('region', { name: 'Action items' })
+        expect(await within(actions).findByTestId('memo-changed-since-read')).toBeTruthy()
+        expect(within(actions).getByText('“The memo has changed since, so this line isn’t shown.”')).toBeTruthy()
     })
 
     it('a completed engagement reads its memos, and adds and applies nothing', async () => {
@@ -296,7 +383,8 @@ describe('Memos', () => {
         expect(await within(pane).findByRole('heading', { name: 'Call with Dana' })).toBeTruthy()
         expect(screen.queryByRole('button', { name: /Add internal memo/ })).toBeNull()
         expect(screen.getByText('Read only · completed')).toBeTruthy()
-        expect(within(pane).queryByRole('button', { name: /Find actions/ })).toBeNull()
+        expect(screen.queryByRole('button', { name: /Identify action items/ })).toBeNull()
+        expect(screen.queryByRole('region', { name: 'Action items' })).toBeNull()
     })
 
     it('a memo added is saved, then opened', async () => {

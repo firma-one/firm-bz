@@ -1,7 +1,7 @@
 import { BLOCKED_REASON_LABEL, type BlockedReason } from '@/lib/files/blocked'
 import { nudgeCandidates } from '@/lib/ai/nudge-draft'
 import type { DeliverableProgress, EngagementPace } from '@/lib/insights/engagement-insights'
-import { SIGNAL, parseSignalKey, shortDay, type RaidStatus, type RaidType } from './raid-shared'
+import { SIGNAL, parseSignalKey, priorityForPoints, shortDay, type RaidPriority, type RaidStatus, type RaidType } from './raid-shared'
 
 /**
  * The free half of the RAID log (.claude/plans/brio-features-round-2.md, §9): what the engagement's
@@ -18,8 +18,13 @@ import { SIGNAL, parseSignalKey, shortDay, type RaidStatus, type RaidType } from
  * | Planning gaps (the Action Center's count)         | Risk (HEALTH)          | every gap planned                    |
  * | An approved deliverable                           | Decision (BOARD), Recorded | the approval is reopened         |
  *
- * A person's edits (owner, notes) are never touched by a sync. An entry a person closed stays closed
- * while its signal lasts; one the sync closed opens again if the signal comes back.
+ * A person's edits (owner, notes, a priority they chose) are never touched by a sync. An entry a person
+ * closed stays closed while its signal lasts; one the sync closed opens again if the signal comes back.
+ *
+ * Each Risk and Issue gets a priority (Deepak, 2026-11-14). Where the Health score deducts for the same
+ * thing, its own grade (priorityForPoints): Behind pace and Planning gaps, by their points; an overdue
+ * deliverable is 15 points, High. The rest, as approved in the mock: Blocked High, long in review and a
+ * thread waiting on the firm Medium. The sync follows the grade until a person sets one.
  */
 
 /** How long a client thread waits on the firm before it is an Issue. */
@@ -38,6 +43,8 @@ export interface RaidSignal {
     status: 'OPEN' | 'RECORDED'
     title: string
     raisedAt: Date
+    /** Risks and Issues: how much it matters. None on a decision. */
+    priority?: RaidPriority
     /**
      * Keeps an open entry open but never opens one: a thread still awaiting the firm whose wait
      * restarted with a newer client message is the same Issue, not a new one, and not yet 3 days old.
@@ -69,6 +76,8 @@ export interface RaidSignalInputs {
     blocked: readonly BlockedDocumentSignal[]
     /** Who approved each approved deliverable, by first name, where it is known. */
     approvers: ReadonlyMap<string, string | null>
+    /** The Health score's deductions, in points, for Behind pace and Planning gaps: their grade is the priority. */
+    healthPoints?: { pace?: number; planning?: number }
 }
 
 const days = (ms: number) => Math.max(0, Math.floor(ms / DAY_MS))
@@ -109,6 +118,8 @@ export function raidSignals(input: RaidSignalInputs): RaidSignal[] {
             status: 'OPEN',
             title: `${named(d.docId, d.name)} overdue${late > 0 ? ` by ${plural(late, 'day')}` : ''}`,
             raisedAt: dayAfter(d.dueDate, now),
+            // 15 points on the Health score, High (lib/insights/health-penalties.ts).
+            priority: 'HIGH',
         })
     }
 
@@ -123,6 +134,7 @@ export function raidSignals(input: RaidSignalInputs): RaidSignal[] {
             status: 'OPEN',
             title: `${named(c.docId, c.name)} in review for ${plural(c.daysWaiting, 'day')}`,
             raisedAt: dateOr(d?.stageSince, now),
+            priority: 'MEDIUM',
         })
     }
 
@@ -136,6 +148,7 @@ export function raidSignals(input: RaidSignalInputs): RaidSignal[] {
             status: 'OPEN',
             title: `${named(b.ref, b.fileName)} blocked · ${BLOCKED_REASON_LABEL[b.reason]}${note}`,
             raisedAt: dateOr(b.at, now),
+            priority: 'HIGH',
         })
     }
 
@@ -150,6 +163,7 @@ export function raidSignals(input: RaidSignalInputs): RaidSignal[] {
             status: 'OPEN',
             title: `Reply on ${named(ref, t.documentName)} has waited ${plural(waited, 'day')}`,
             raisedAt: dateOr(t.lastMessageAt, now),
+            priority: 'MEDIUM',
             ...(waited < WAITING_THREAD_DAYS ? { keepOnly: true } : {}),
         })
     }
@@ -164,6 +178,7 @@ export function raidSignals(input: RaidSignalInputs): RaidSignal[] {
             status: 'OPEN',
             title: `Behind pace · ${p.deliveredPct}% delivered against ${p.timePct}% of time used`,
             raisedAt: now,
+            priority: input.healthPoints?.pace !== undefined ? priorityForPoints(input.healthPoints.pace) : 'MEDIUM',
         })
     }
 
@@ -176,6 +191,7 @@ export function raidSignals(input: RaidSignalInputs): RaidSignal[] {
             status: 'OPEN',
             title: `${plural(input.planningGaps, 'planning gap')} · missing due dates or assignees`,
             raisedAt: now,
+            priority: input.healthPoints?.planning !== undefined ? priorityForPoints(input.healthPoints.planning) : 'LOW',
         })
     }
 
@@ -243,6 +259,9 @@ export interface ExistingAutoItem {
     title: string
     /** Set when a person closed it: the sync leaves it closed. */
     closedBy: string | null
+    priority: RaidPriority | null
+    /** Set when a person chose the priority: the sync leaves it. */
+    prioritySetBy: string | null
 }
 
 export interface RaidSyncPlan {
@@ -250,18 +269,20 @@ export interface RaidSyncPlan {
     /** New words for an entry that's still live. Titles only: never the owner or the notes. */
     retitle: Array<{ id: string; title: string }>
     close: Array<{ id: string; reason: string }>
-    /** Closed by an earlier sync, and the signal is back. */
-    reopen: Array<{ id: string; signal: RaidSignal }>
+    /** Closed by an earlier sync, and the signal is back. Its priority follows the signal unless a person set it. */
+    reopen: Array<{ id: string; signal: RaidSignal; keepPriority: boolean }>
+    /** A live entry whose grade changed (Planning gaps grew), and no person has set its priority. */
+    reprioritize: Array<{ id: string; priority: RaidPriority }>
 }
 
 /**
  * What a sync changes. Upserts by signal key: a signal with no entry opens one, a live entry follows
  * its signal's words, a live entry whose signal is gone closes with the reason, and one the sync closed
  * opens again when its signal returns. A person's close is final while the signal lasts, and nothing
- * here ever writes an owner or notes.
+ * here ever writes an owner or notes, or a priority a person chose.
  */
 export function planRaidSync(existing: readonly ExistingAutoItem[], signals: readonly RaidSignal[], ctx: RaidCloseContext): RaidSyncPlan {
-    const plan: RaidSyncPlan = { create: [], retitle: [], close: [], reopen: [] }
+    const plan: RaidSyncPlan = { create: [], retitle: [], close: [], reopen: [], reprioritize: [] }
     const byKey = new Map(existing.map((e) => [e.signalKey, e]))
     const present = new Set<string>()
 
@@ -275,8 +296,9 @@ export function planRaidSync(existing: readonly ExistingAutoItem[], signals: rea
         }
         if (e.status === 'OPEN' || e.status === 'RECORDED') {
             if (e.title !== s.title) plan.retitle.push({ id: e.id, title: s.title })
+            if (s.priority && !e.prioritySetBy && e.priority !== s.priority) plan.reprioritize.push({ id: e.id, priority: s.priority })
         } else if (e.status === 'CLOSED' && !e.closedBy && !s.keepOnly) {
-            plan.reopen.push({ id: e.id, signal: s })
+            plan.reopen.push({ id: e.id, signal: s, keepPriority: !!e.prioritySetBy })
         }
     }
 

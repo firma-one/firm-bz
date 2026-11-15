@@ -220,7 +220,7 @@ export const PRICING_COMPARISON: PricingComparisonCategory[] = [
             {
                 feature: "Credits included",
                 featureIcon: 'ai',
-                tooltip: "One credit is one AI action: an engagement summary, a firm brief, a chat answer, a drafted status update, reply or nudge, the actions found in a memo's call notes, or a daily RAID check (Risks, Assumptions, Issues and Decisions) of new messages and memos. Each person's morning rundown of what needs them is free; asking Brio to rewrite it costs one credit. Every plan includes every Brio feature; the allowance is what differs. Credits reset each billing period and do not roll over.",
+                tooltip: "One credit is one AI action: an engagement summary, a firm brief, a chat answer, a drafted status update, reply or nudge, the action items identified in a memo's call notes, or a daily RAID check (Risks, Assumptions, Issues and Decisions) of new messages. A memo's action items and RAID suggestions are identified when it's added, for one credit. Each person's morning rundown of what needs them is free; asking Brio to rewrite it costs one credit. Every plan includes every Brio feature; the allowance is what differs. Credits reset each billing period and do not roll over.",
                 values: {
                     Sandbox: "25 / month",
                     Standard: "500 / month",
@@ -307,7 +307,7 @@ export const PRICING_COMPARISON: PricingComparisonCategory[] = [
             {
                 feature: "Firm / Engagement summaries & AI assistant",
                 featureIcon: 'ai',
-                tooltip: "Brio drafts the engagement summary, client updates, replies and nudges from your delivery data, keeps the RAID log (Risks, Assumptions, Issues and Decisions), turns call notes into actions and answers questions about any engagement or the whole firm. You review, edit and approve before a client sees anything. Included on every plan; usage draws on your AI credits.",
+                tooltip: "Brio drafts the engagement summary, client updates, replies and nudges from your delivery data, keeps the RAID log (Risks, Assumptions, Issues and Decisions), turns call notes into action items and answers questions about any engagement or the whole firm. You review, edit and approve before a client sees anything. Included on every plan; usage draws on your AI credits.",
                 values: { Sandbox: true, Standard: true, Pro: true, Business: true, Enterprise: true },
             },
             {

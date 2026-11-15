@@ -10,6 +10,7 @@ import { Brio } from '@/components/ui/brio'
 import { BrioByline } from '@/components/ui/brio-byline'
 import { ShimmerBar } from '@/components/ui/shimmer'
 import { BrioReading, BrioSections, StreamingBrioSections } from '@/components/ui/brio-sections'
+import { useTypedText } from '@/components/brio/brio-typing'
 import { fetchWithTimeout, AI_TIMEOUT_MS, AiTimeoutError } from '@/lib/ai/fetch-timeout'
 import { BRIO_BRIEF_FAILED, BRIO_UNREACHABLE_RETRY } from '@/lib/ai/brio-failure'
 
@@ -212,7 +213,10 @@ export function FirmBriefCard({ brief, loading = false, refreshing = false, stre
             setTimeout(() => setCopied(false), 1500)
         }).catch(() => {})
     }
-    const busy = loading || refreshing || !brief
+    // A rewrite is typed out as Brio writes it (components/brio/brio-typing.tsx); a failed one gives
+    // way to the brief at once.
+    const typed = useTypedText(streamText, refreshing, { finishNow: !!refreshError })
+    const busy = loading || refreshing || typed.typing || !brief
     // Said once at the start and once at the end, not word by word.
     const [announce, setAnnounce] = useState('')
     const wasRefreshing = useRef(false)
@@ -269,8 +273,8 @@ export function FirmBriefCard({ brief, loading = false, refreshing = false, stre
 
             <p className="sr-only" aria-live="polite">{announce}</p>
 
-            {refreshing ? (
-                <StreamingBrioSections text={streamText} placeholder={<BrioReading what={reading} />} className="px-4 py-3 text-fg-muted" />
+            {refreshing || typed.typing ? (
+                <StreamingBrioSections text={typed.shown} placeholder={<BrioReading what={reading} />} className="px-4 py-3 text-fg-muted" />
             ) : !loading && !brief && loadError ? (
                 // Not a shimmer forever, and not a card that vanishes: a quiet line with the reason.
                 <div role="status" className="flex flex-wrap items-center gap-x-2 gap-y-1 px-4 py-4 text-small text-fg-muted">

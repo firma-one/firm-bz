@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
-import { prisma } from '@/lib/prisma'
 import { resolveProjectContext } from '@/lib/resolve-project-context'
 import { canEditProject, canViewProjectInternalTabs } from '@/lib/permission-helpers'
 import { blockIfEngagementCompleted } from '@/lib/engagement-access'
@@ -9,7 +8,6 @@ import { aiFailureResponse } from '@/lib/ai/guarded-client'
 import { BRIO_PROPOSALS_FAILED } from '@/lib/ai/brio-failure'
 import { ASSISTANT } from '@/lib/ai/assistant'
 import { ROLE_NAME } from '@/lib/persona-ui-groups'
-import { engagementPath } from '@/lib/navigation/firm-paths'
 import {
     MAX_MEMO_CHARS,
     MAX_NOTES_CHARS,
@@ -17,8 +15,10 @@ import {
     loadNotesDeliverables,
     resolveToday,
 } from '@/lib/ai/notes-proposals'
-import { readMemoText } from '@/lib/memos/memo-store'
-import { alreadyAppliedIds, type MemoAppliedAction } from '@/lib/memos/memo-shared'
+import { readMemoText, writeMemoReview } from '@/lib/memos/memo-store'
+import { auditMemoRead, notesEngagementRef } from '@/lib/memos/memo-review'
+import { alreadyAppliedIds, alreadyAppliedOn, memoReviewOf, type MemoAppliedAction } from '@/lib/memos/memo-shared'
+import { vaultForEngagement } from '@/lib/ai/known-entities'
 
 export const dynamic = 'force-dynamic'
 
@@ -66,7 +66,7 @@ export async function POST(
         ])
         if (!canEdit || !canViewInternal) {
             return NextResponse.json(
-                { error: `Only a ${ROLE_NAME.eng_admin} or a ${ROLE_NAME.eng_member} can find actions in the notes.` },
+                { error: `Only a ${ROLE_NAME.eng_admin} or a ${ROLE_NAME.eng_member} can identify action items in the notes.` },
                 { status: 403 },
             )
         }
@@ -82,12 +82,16 @@ export async function POST(
 
         let notes: string
         let applied: MemoAppliedAction[] | null = null
+        let memoId: string | null = null
+        let memoFileName = ''
         if (body?.memoDocumentId !== undefined) {
             // An internal memo: its text comes from storage, read for this one request.
             const memo = await readMemoText(projectId, body.memoDocumentId)
             if (!memo.ok) return NextResponse.json({ error: memo.error }, { status: memo.status })
             notes = memo.text.trim()
             applied = memo.memo.applied
+            memoId = memo.memo.id
+            memoFileName = memo.memo.fileName
             if (!notes) return NextResponse.json({ error: 'This memo is empty, so there is nothing to read.' }, { status: 400 })
             if (notes.length > MAX_MEMO_CHARS) {
                 return NextResponse.json(
@@ -111,14 +115,7 @@ export async function POST(
 
         const [deliverables, engagement] = await Promise.all([
             loadNotesDeliverables(projectId),
-            prisma.engagement.findUnique({
-                where: { id: projectId },
-                select: {
-                    name: true,
-                    slug: true,
-                    client: { select: { slug: true, firm: { select: { slug: true, group: { select: { slug: true } } } } } },
-                },
-            }),
+            notesEngagementRef(projectId, ctx.firmId),
         ])
 
         const outcome = await findNotesActions({
@@ -126,30 +123,39 @@ export async function POST(
             deliverables,
             today,
             scope: { firmId: ctx.firmId, userId: user.id, feature: 'notesProposals' },
+            vault: await vaultForEngagement(projectId, ctx.firmId),
         })
+        // A memo's words went to Brio: the audit trail says so, and who asked (§14).
+        const auditRead = (actionItems: number | null) => {
+            if (memoId) {
+                auditMemoRead({
+                    firmId: ctx.firmId, clientId: ctx.clientId, engagementId: projectId, memoId, fileName: memoFileName,
+                    actorUserId: user.id, trigger: 'person', actionItems,
+                })
+            }
+        }
         if (!outcome.ok) {
+            if (outcome.reason !== 'unconfigured') auditRead(null)
             if (outcome.reason === 'unconfigured') {
                 return NextResponse.json({ error: `${ASSISTANT.name} isn't available right now.` }, { status: 503 })
             }
             return NextResponse.json({ error: BRIO_PROPOSALS_FAILED }, { status: 502 })
         }
 
-        // What a reminder needs to point back here: the panel creates it with the same action a
-        // person uses by hand, which takes these from its caller.
-        const groupSlug = engagement?.client?.firm?.group?.slug
-        const firmSlug = engagement?.client?.firm?.slug
-        const clientSlug = engagement?.client?.slug
-        const ctaUrl = groupSlug && firmSlug && clientSlug && engagement?.slug
-            ? engagementPath(groupSlug, firmSlug, clientSlug, engagement.slug)
-            : null
+        // A memo's action items wait on it, so they're there the next time it's opened (§13): quotes as
+        // anchors only, never the memo's words.
+        if (memoId) await writeMemoReview(projectId, memoId, memoReviewOf(outcome, notes, 'person'))
+        auditRead(outcome.proposals.length)
 
         return NextResponse.json({
             data: {
                 proposals: outcome.proposals,
                 skipped: outcome.skipped,
                 dropped: outcome.dropped,
-                ...(applied ? { alreadyApplied: alreadyAppliedIds(outcome.proposals, applied) } : {}),
-                engagement: { id: projectId, name: engagement?.name ?? '', firmId: ctx.firmId, ctaUrl },
+                ...(applied ? { alreadyApplied: alreadyAppliedIds(outcome.proposals, applied), appliedOn: alreadyAppliedOn(outcome.proposals, applied) } : {}),
+                // What a reminder needs to point back here: the panel creates it with the same action a
+                // person uses by hand, which takes these from its caller.
+                engagement,
             },
         })
     } catch (error) {

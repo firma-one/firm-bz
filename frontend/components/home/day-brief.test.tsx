@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react'
 
 vi.mock('next/link', () => ({ default: ({ href, children, ...rest }: React.ComponentProps<'a'>) => <a href={href} {...rest}>{children}</a> }))
 vi.mock('next/navigation', () => ({ usePathname: () => '/d/u/home', useSearchParams: () => new URLSearchParams(), useRouter: () => ({ replace: vi.fn(), push: vi.fn(), refresh: vi.fn() }) }))
@@ -163,7 +163,11 @@ describe('the tour\'s Your brief', () => {
     it('makes no calls, and Rewrite answers as the app does when nothing changed', async () => {
         vi.useFakeTimers()
         try {
-            render(<DemoDayBrief work={demoWork} />)
+            const { container } = render(<DemoDayBrief work={demoWork} />)
+            // Typed in, as Brio writes everywhere: the caret while it writes, gone once it has.
+            expect(container.querySelector('.fm-type-caret, .fm-think-dots')).not.toBeNull()
+            await act(async () => { vi.advanceTimersByTime(5000) })
+            expect(container.querySelector('.fm-type-caret, .fm-think-dots')).toBeNull()
             expect(screen.getByText('Two deliverables are waiting for your approval').tagName).toBe('STRONG')
             const sparkle = screen.getByRole('button', { name: 'Rewrite with Brio' })
             fireEvent.click(sparkle)
@@ -210,10 +214,10 @@ describe('on Home', () => {
         expect(await screen.findByText(DAY_BRIEF_ITEMS_LINE)).toBeTruthy()
     })
 
-    it('on the public demo, is written from the sample data with no call', () => {
+    it('on the public demo, is written from the sample data with no call', async () => {
         home(true)
         expect(screen.getByRole('heading', { name: 'Your brief' })).toBeTruthy()
-        expect(screen.getByText('One deliverable is waiting for your approval')).toBeTruthy()
+        expect(await screen.findByText('One deliverable is waiting for your approval', {}, { timeout: 4000 })).toBeTruthy()
         expect(fetchMock).not.toHaveBeenCalled()
     })
 })

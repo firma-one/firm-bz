@@ -28,7 +28,7 @@ vi.mock('@/lib/insights/engagement-insights', () => ({ computeEngagementInsights
 vi.mock('@/lib/files/file-creator', () => ({ loadPeople: async () => new Map() }))
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn() } }))
 
-import { resetRaidSyncThrottle, syncRaidSignals } from './raid-sync'
+import { healthPointsOf, resetRaidSyncThrottle, syncRaidSignals } from './raid-sync'
 
 const NOW = new Date('2026-11-12T12:00:00Z')
 
@@ -72,8 +72,8 @@ describe('syncRaidSignals', () => {
     it("keeps people's edits: a retitle and a close write the title and status, never the owner or the notes", async () => {
         h.insights.mockResolvedValue(insights({ planningGaps: 3 }))
         h.existing = [
-            { id: 'e-plan', signalKey: 'planning', status: 'OPEN', title: '15 planning gaps · missing due dates or assignees', closedBy: null },
-            { id: 'e-pace', signalKey: 'pace', status: 'OPEN', title: 'Behind pace', closedBy: null },
+            { id: 'e-plan', signalKey: 'planning', status: 'OPEN', title: '15 planning gaps · missing due dates or assignees', closedBy: null, priority: 'LOW', prioritySetBy: null },
+            { id: 'e-pace', signalKey: 'pace', status: 'OPEN', title: 'Behind pace', closedBy: null, priority: 'HIGH', prioritySetBy: null },
         ]
         await syncRaidSignals('p1', 'f1', { now: NOW })
 
@@ -87,6 +87,25 @@ describe('syncRaidSignals', () => {
         expect(calls.find(([c]) => c.where.id === 'e-pace')![0].data).toEqual({
             status: 'CLOSED', closedAt: NOW, closedReason: 'Resolved · back on pace', closedBy: null,
         })
+    })
+
+    it("grades an entry saved before priorities, and never changes one a person chose", async () => {
+        h.insights.mockResolvedValue(insights({ planningGaps: 3, overdue: true }))
+        h.existing = [
+            { id: 'e-plan', signalKey: 'planning', status: 'OPEN', title: '3 planning gaps · missing due dates or assignees', closedBy: null, priority: null, prioritySetBy: null },
+        ]
+        await syncRaidSignals('p1', 'f1', { now: NOW })
+        const calls = h.update.mock.calls as unknown as Array<[{ where: { id: string }; data: Record<string, unknown> }]>
+        // No Health deduction in this data: planning gaps default to Low.
+        expect(calls.find(([c]) => c.where.id === 'e-plan')![0].data).toEqual({ priority: 'LOW' })
+
+        h.update.mockClear()
+        resetRaidSyncThrottle()
+        h.existing = [
+            { id: 'e-plan', signalKey: 'planning', status: 'OPEN', title: '3 planning gaps · missing due dates or assignees', closedBy: null, priority: 'HIGH', prioritySetBy: 'u-lead' },
+        ]
+        await syncRaidSignals('p1', 'f1', { now: NOW })
+        expect(h.update).not.toHaveBeenCalled()
     })
 
     it('leaves a completed engagement as it was', async () => {
@@ -109,5 +128,16 @@ describe('syncRaidSignals', () => {
         await expect(syncRaidSignals('p1', 'f1', { now: NOW })).resolves.toBeUndefined()
         await syncRaidSignals('p1', 'f1', { now: NOW })
         expect(h.insights).toHaveBeenCalledTimes(2)
+    })
+})
+
+describe('healthPointsOf', () => {
+    it("reads the Health score's deductions for Behind pace and Planning gaps by their labels", () => {
+        expect(healthPointsOf([
+            { label: 'Behind pace (0% delivered vs 37% elapsed)', points: 16 },
+            { label: 'Planning gaps (15 missing)', points: 9 },
+            { label: '1 overdue deliverable', points: 15 },
+        ])).toEqual({ pace: 16, planning: 9 })
+        expect(healthPointsOf([])).toEqual({ pace: undefined, planning: undefined })
     })
 })

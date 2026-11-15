@@ -11,7 +11,7 @@ vi.mock('./client', () => ({ AI_MODEL: 'test-model' }))
 vi.mock('./guarded-client', () => ({ meterAiCall: meter }))
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn() } }))
 
-import { streamDraft } from './stream-draft'
+import { streamDraft, withoutGreeting } from './stream-draft'
 
 const scope = { firmId: 'f1', userId: 'u1', feature: 'replyDraft' as const }
 
@@ -54,6 +54,47 @@ describe('streamDraft', () => {
         expect(create.mock.calls[0][0]).not.toHaveProperty('temperature')
     })
 
+    it('opens with the given words, then Brio\'s, and the whole text includes them', async () => {
+        const { client } = clientYielding([
+            { type: 'content_block_delta', delta: { type: 'text_delta', text: '\n Just checking in.' } },
+            { type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { output_tokens: 5 } },
+        ])
+        const out = await lines(await streamDraft({
+            client, scope, system: 's', user: 'u', effort: 'low', maxTokens: 1000,
+            failure: 'f', label: 'test', prefix: 'Hi @Dana Whitfield,\n\n',
+        }))
+        expect(out.map((l) => l.type)).toEqual(['meta', 'delta', 'delta', 'done'])
+        expect(out[1].text).toBe('Hi @Dana Whitfield,\n\n')
+        expect(out[2].text).toBe('Just checking in.')
+        expect(out[3].text).toBe('Hi @Dana Whitfield,\n\nJust checking in.')
+    })
+
+    it("drops Brio's own greeting after the opening, however it arrives in pieces", async () => {
+        const { client } = clientYielding([
+            { type: 'content_block_delta', delta: { type: 'text_delta', text: 'Hi Dea' } },
+            { type: 'content_block_delta', delta: { type: 'text_delta', text: 'pak, checking' } },
+            { type: 'content_block_delta', delta: { type: 'text_delta', text: ' in on QSR-9.' } },
+            { type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { output_tokens: 9 } },
+        ])
+        const out = await lines(await streamDraft({
+            client, scope, system: 's', user: 'u', effort: 'low', maxTokens: 1000,
+            failure: 'f', label: 'test', prefix: 'Hi @Deepak Shettigar,\n\n',
+        }))
+        expect(out.filter((l) => l.type === 'delta').map((l) => l.text).join('')).toBe('Hi @Deepak Shettigar,\n\nChecking in on QSR-9.')
+        expect(out[out.length - 1]).toEqual({ type: 'done', text: 'Hi @Deepak Shettigar,\n\nChecking in on QSR-9.' })
+    })
+
+    it('is still empty when Brio writes nothing after the opening', async () => {
+        const { client } = clientYielding([
+            { type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { output_tokens: 0 } },
+        ])
+        const out = await lines(await streamDraft({
+            client, scope, system: 's', user: 'u', effort: 'low', maxTokens: 1000,
+            failure: 'f', label: 'test', prefix: 'Hi @Dana Whitfield,\n\n',
+        }))
+        expect(out[out.length - 1]).toEqual({ type: 'error', message: 'f' })
+    })
+
     it('a declined draft is an error, never a draft to send', async () => {
         const { client } = clientYielding([
             { type: 'content_block_delta', delta: { type: 'text_delta', text: 'Part' } },
@@ -80,5 +121,21 @@ describe('streamDraft', () => {
         const out = await lines(await run(client))
         expect(out.map((l) => l.type)).toEqual(['meta', 'delta', 'error'])
         expect(meter).toHaveBeenCalledTimes(1)
+    })
+})
+
+describe('withoutGreeting', () => {
+    it('drops a greeting ended by punctuation or a line break, and capitalizes what follows', () => {
+        expect(withoutGreeting('Hi Deepak, checking in.')).toBe('Checking in.')
+        expect(withoutGreeting('Hello Dana Whitfield!\n\nA quick note.')).toBe('A quick note.')
+        expect(withoutGreeting('Hi,\nJust checking in.')).toBe('Just checking in.')
+        expect(withoutGreeting('Good morning, Dana. The report…')).toBe('Dana. The report…')
+        expect(withoutGreeting('Dear Dana\nThe report…')).toBe('The report…')
+    })
+
+    it('leaves a message that does not open with a greeting', () => {
+        expect(withoutGreeting('  Just checking in on QSR-9.')).toBe('Just checking in on QSR-9.')
+        expect(withoutGreeting('Highlights from this week: two approvals.')).toBe('Highlights from this week: two approvals.')
+        expect(withoutGreeting('Hey team — a quick note on QSR-9')).toBe('Hey team — a quick note on QSR-9')
     })
 })

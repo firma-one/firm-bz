@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { NextRequest, NextResponse } from 'next/server'
 
 /**
@@ -26,6 +26,8 @@ const h = vi.hoisted(() => {
     }
 })
 
+// Masking has its own tests (lib/ai/pseudonymize, masked-client, known-entities): no vault here.
+vi.mock('@/lib/ai/known-entities', () => ({ vaultForEngagement: async () => null, vaultForFirms: async () => null }))
 vi.mock('@/utils/supabase/server', () => ({
     createClient: async () => ({ auth: { getUser: async () => ({ data: { user: h.user } }) } }),
 }))
@@ -77,7 +79,13 @@ const toolAnswer = (input: unknown) => ({
     content: [{ type: 'tool_use', id: 't1', name: 'record_actions', input }],
 })
 
+// The browser's day is believed within a day of the server's (resolveToday), so the clock is the
+// notes' day: without it the test only passed on Nov 11 to 13.
+afterEach(() => { vi.useRealTimers() })
+
 beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-11-12T15:00:00Z'))
     h.user = { id: 'u1' }
     h.ctx = { firmId: 'f1', orgId: 'f1', clientId: 'c1', projectId: 'p1' }
     h.canEdit = true
@@ -108,7 +116,7 @@ describe('POST /api/projects/[projectId]/ai-notes-proposals: who', () => {
         h.canViewInternal = false
         const res = await post()
         expect(res.status).toBe(403)
-        expect((await res.json()).error).toBe('Only a Lead or a Contributor · Full Access can find actions in the notes.')
+        expect((await res.json()).error).toBe('Only a Lead or a Contributor · Full Access can identify action items in the notes.')
         expect(h.create).not.toHaveBeenCalled()
     })
 

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { StatusProperty, DateProperty, PersonProperty, alreadySaid } from './property-cells'
+import { StatusProperty, DateProperty, PersonProperty, PersonAvatar, alreadySaid } from './property-cells'
 import { ToastProvider, useToast } from './toast'
 
 describe('StatusProperty', () => {
@@ -134,5 +134,16 @@ describe('a save that fails', () => {
         await waitFor(() => expect(error).toHaveBeenCalled())
         expect(document.querySelector('.animate-spin')).toBeNull()
         error.mockRestore()
+    })
+})
+
+describe('PersonAvatar', () => {
+    it("shows the photo without naming the page, and the initials when it won't load", () => {
+        const { container } = render(<PersonAvatar person={{ name: 'Dana Whitfield', avatarUrl: 'https://lh3.googleusercontent.com/a/dana' }} />)
+        const img = container.querySelector('img')!
+        expect(img.getAttribute('referrerpolicy')).toBe('no-referrer')
+        fireEvent.error(img)
+        expect(container.querySelector('img')).toBeNull()
+        expect(screen.getByText('DW')).toBeTruthy()
     })
 })

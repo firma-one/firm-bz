@@ -21,7 +21,7 @@ import { logger } from "@/lib/logger"
 import { getLastEngagementTab } from "@/lib/recents"
 import { countOpenDiscussions } from "@/lib/comments/discussions"
 
-const VALID_TABS = new Set(['files', 'shares', 'comments', 'members', 'analytics', 'sources', 'audit', 'settings', 'wiki'])
+const VALID_TABS = new Set(['files', 'shares', 'comments', 'raid', 'members', 'analytics', 'sources', 'audit', 'settings', 'wiki'])
 
 function parseRest(rest: string[] | undefined, defaultTab: string): ProjectPathSegments {
   const tab = rest?.[0] && VALID_TABS.has(rest[0]) ? rest[0] : defaultTab
@@ -37,11 +37,17 @@ function parseRest(rest: string[] | undefined, defaultTab: string): ProjectPathS
 
 interface PageProps {
   params: Promise<{ groupSlug: string; firmSlug: string; clientSlug: string; engagementSlug: string; rest?: string[] }>
+  searchParams?: Promise<{ view?: string | string[] }>
 }
 
 /** Canonical engagement (project) page under /e/. */
-export default async function EngagementPage({ params }: PageProps) {
+export default async function EngagementPage({ params, searchParams }: PageProps) {
   const { groupSlug, firmSlug, clientSlug, engagementSlug, rest } = await params
+  // The RAID log was a Discussions sub-tab (…/comments?view=raid) before it had a tab of its own: old
+  // links and bookmarks land there.
+  if (rest?.[0] === 'comments' && (await searchParams)?.view === 'raid') {
+    redirect(engagementPath(groupSlug, firmSlug, clientSlug, engagementSlug, { tab: 'raid' }))
+  }
 
   const user = await getSessionUser()
 
@@ -139,6 +145,10 @@ export default async function EngagementPage({ params }: PageProps) {
     redirect(filesPath)
   }
   if (pathSegments.tab === 'wiki' && (!enableBetaFeatures || !canViewInternalTabs)) {
+    redirect(filesPath)
+  }
+  // The RAID log: Leads and Full Access contributors, as its routes allow (lib/raid).
+  if (pathSegments.tab === 'raid' && !(canEdit && canViewInternalTabs)) {
     redirect(filesPath)
   }
 

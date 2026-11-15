@@ -40,7 +40,7 @@ beforeEach(() => mockCreate.mockReset())
 describe('interpretSearchQuery — id validation', () => {
     it('keeps an id that exists in the candidate list', async () => {
         mockCreate.mockResolvedValue(toolUse({ clientId: 'client-acme', residualText: 'scope doc' }))
-        const r = await interpretSearchQuery('Acme scope doc', candidates, scope)
+        const r = await interpretSearchQuery('Acme scope doc', candidates, scope, { vault: null })
         expect(r!.chips).toContainEqual({ stage: 'client', id: 'client-acme', name: 'Acme Corp' })
     })
 
@@ -48,7 +48,7 @@ describe('interpretSearchQuery — id validation', () => {
         // The candidate list is built from the caller's own access scope, so an id outside it is
         // either a hallucination or an attempt to reach another firm's data. Either way: dropped.
         mockCreate.mockResolvedValue(toolUse({ clientId: 'client-not-visible', residualText: 'x' }))
-        const r = await interpretSearchQuery('other client', candidates, scope)
+        const r = await interpretSearchQuery('other client', candidates, scope, { vault: null })
         expect(r!.chips).toHaveLength(0)
     })
 })
@@ -61,7 +61,7 @@ describe('interpretSearchQuery — period tokens must not resolve as entities', 
         mockCreate.mockResolvedValue(toolUse({
             clientId: 'client-acme', engagementId: 'eng-q2', residualText: 'playbooks',
         }))
-        const r = await interpretSearchQuery('Acme playbooks from Q2', candidates, scope)
+        const r = await interpretSearchQuery('Acme playbooks from Q2', candidates, scope, { vault: null })
         expect(r!.chips.map((c) => c.stage)).not.toContain('engagement')
         expect(r!.chips.map((c) => c.stage)).toContain('client')
     })
@@ -70,7 +70,7 @@ describe('interpretSearchQuery — period tokens must not resolve as entities', 
         mockCreate.mockResolvedValue(toolUse({
             engagementId: 'eng-q2', residualText: 'playbooks',
         }))
-        const r = await interpretSearchQuery('Q2 Go-To-Market playbooks', candidates, scope)
+        const r = await interpretSearchQuery('Q2 Go-To-Market playbooks', candidates, scope, { vault: null })
         expect(r!.chips.map((c) => c.stage)).toContain('engagement')
     })
 })
@@ -78,19 +78,19 @@ describe('interpretSearchQuery — period tokens must not resolve as entities', 
 describe('interpretSearchQuery — dates', () => {
     it('accepts a known relative preset', async () => {
         mockCreate.mockResolvedValue(toolUse({ dateRange: 'Last 7 days', residualText: 'x' }))
-        const r = await interpretSearchQuery('recent docs', candidates, scope)
+        const r = await interpretSearchQuery('recent docs', candidates, scope, { vault: null })
         expect(r!.chips).toContainEqual({ stage: 'dateRange', id: 'Last 7 days', name: 'Last 7 days' })
     })
 
     it('rejects a preset that is not in the fixed list', async () => {
         mockCreate.mockResolvedValue(toolUse({ dateRange: 'Last 3 fortnights', residualText: 'x' }))
-        const r = await interpretSearchQuery('odd range', candidates, scope)
+        const r = await interpretSearchQuery('odd range', candidates, scope, { vault: null })
         expect(r!.chips.map((c) => c.stage)).not.toContain('dateRange')
     })
 
     it('resolves an absolute period token', async () => {
         mockCreate.mockResolvedValue(toolUse({ period: 'Q1 2026', residualText: 'x' }))
-        const r = await interpretSearchQuery('docs from Q1 2026', candidates, scope)
+        const r = await interpretSearchQuery('docs from Q1 2026', candidates, scope, { vault: null })
         expect(r!.chips).toContainEqual({ stage: 'dateRange', id: 'Q1 2026', name: 'Q1 2026' })
     })
 
@@ -98,7 +98,7 @@ describe('interpretSearchQuery — dates', () => {
         // The model emits a period NAME and the server does the arithmetic. Accepting a raw date
         // is the failure that killed the 2026-07 chrono approach.
         mockCreate.mockResolvedValue(toolUse({ period: '2026-03-01', residualText: 'x' }))
-        const r = await interpretSearchQuery('docs from March', candidates, scope)
+        const r = await interpretSearchQuery('docs from March', candidates, scope, { vault: null })
         expect(r!.chips.map((c) => c.stage)).not.toContain('dateRange')
     })
 })
@@ -106,11 +106,11 @@ describe('interpretSearchQuery — dates', () => {
 describe('interpretSearchQuery — failure handling', () => {
     it('returns null when the model errors, so the caller falls back to plain search', async () => {
         mockCreate.mockImplementationOnce(() => { throw new Error('upstream failed') })
-        expect(await interpretSearchQuery('anything', candidates, scope)).toBeNull()
+        expect(await interpretSearchQuery('anything', candidates, scope, { vault: null })).toBeNull()
     })
 
     it('returns null when the response carries no tool call', async () => {
         mockCreate.mockResolvedValue({ content: [{ type: 'text', text: 'sorry' }], usage: { input_tokens: 1, output_tokens: 1 } })
-        expect(await interpretSearchQuery('anything', candidates, scope)).toBeNull()
+        expect(await interpretSearchQuery('anything', candidates, scope, { vault: null })).toBeNull()
     })
 })

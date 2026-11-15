@@ -19,6 +19,7 @@ import {
     type FirmChatEngagementRecord,
 } from '@/lib/ai/firm-chat'
 import type { FirmInsightsResponse } from '../insights/route'
+import { vaultForFirms } from '@/lib/ai/known-entities'
 
 /**
  * Firm admins only: the firm brief's gate (ai-brief/route.ts `authorize`), repeated here because a
@@ -127,7 +128,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
         // Gate and client in one call: over the allowance throws before any tokens are spent.
         const meterScope = { firmId, userId: auth.userId, feature: 'firmChat' as const }
-        const client = await getGuardedAnthropic(meterScope)
+        const client = await getGuardedAnthropic(meterScope, { vault: await vaultForFirms([firmId]) })
         if (!client) return NextResponse.json({ error: 'AI is not configured' }, { status: 503 })
 
         const stream = await client.messages.create({

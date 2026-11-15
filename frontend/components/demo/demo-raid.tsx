@@ -6,6 +6,7 @@ import { RaidOverviewView } from '@/components/projects/raid/raid-overview-card'
 import {
     autoLineFor,
     liveStatusFor,
+    priorityOf,
     shortDay,
     type RaidItemView,
     type RaidLogPayload,
@@ -53,7 +54,10 @@ function item(p: Partial<RaidItemView> & Pick<RaidItemView, 'id' | 'type' | 'tit
         closedAt: null,
         closedReason: null,
         canReopen: false,
+        prioritySetByPerson: false,
         ...p,
+        // As the app reads it: Medium for a Risk or an Issue not given one, none for the others.
+        priority: priorityOf({ type: p.type, priority: p.priority }),
     }
 }
 
@@ -62,6 +66,7 @@ export function demoRaidLog(now: Date = new Date()): RaidLogPayload {
     const overdueIssue = item({
         id: 'raid-overdue',
         type: 'ISSUE',
+        priority: 'HIGH',
         title: 'QSR-9 · Market & Competitive Intelligence Report overdue by 5 days',
         sourceKind: 'STATUS',
         sources: [chip('STATUS', 'Board')],
@@ -77,6 +82,7 @@ export function demoRaidLog(now: Date = new Date()): RaidLogPayload {
         item({
             id: 'raid-pace',
             type: 'RISK',
+            priority: 'HIGH',
             title: 'Behind pace · 0% delivered against 36% of time used',
             sourceKind: 'HEALTH',
             sources: [chip('HEALTH', 'Health', { overviewSection: 'pace' })],
@@ -88,6 +94,7 @@ export function demoRaidLog(now: Date = new Date()): RaidLogPayload {
         item({
             id: 'raid-planning',
             type: 'RISK',
+            priority: 'LOW',
             title: '15 planning gaps · missing due dates or assignees',
             sourceKind: 'HEALTH',
             sources: [chip('HEALTH', 'Health', { overviewSection: 'planning' })],
@@ -97,6 +104,7 @@ export function demoRaidLog(now: Date = new Date()): RaidLogPayload {
         item({
             id: 'raid-waiting',
             type: 'ISSUE',
+            priority: 'MEDIUM',
             title: 'Reply on QSR-14 · Interview Guide has waited 5 days',
             sourceKind: 'STATUS',
             sources: [chip('STATUS', 'Thread · QSR-14')],
@@ -136,13 +144,16 @@ export function demoRaidLog(now: Date = new Date()): RaidLogPayload {
 
     const suggestions: RaidItemView[] = [
         item({
-            id: 'raid-suggest-depreciation',
-            type: 'DECISION',
-            title: 'Rental depreciation is scoped separately',
+            // The suggestion waiting on the tour's newest memo (demo-memos.tsx), so the RAID tab's line to
+            // it lands on the same memo, with the same entry.
+            id: 'tour-raid-weekly-1',
+            type: 'RISK',
+            priority: 'MEDIUM',
+            title: 'The signed change order may hold up the launch',
             sourceKind: 'MEMO',
             status: 'SUGGESTED',
-            sources: [chip('MEMO', `Memo · Call with Dana · ${shortDay(day(-1, now))}`)],
-            raisedAt: day(-1, now),
+            sources: [chip('MEMO', `Memo · Weekly check-in · ${shortDay(day(-2, now))}`, { memoId: 'tour-memo-weekly' })],
+            raisedAt: day(-2, now),
         }),
         item({
             id: 'raid-suggest-1099',
@@ -156,6 +167,7 @@ export function demoRaidLog(now: Date = new Date()): RaidLogPayload {
         item({
             id: 'raid-suggest-pricing',
             type: 'ISSUE',
+            priority: 'MEDIUM',
             title: 'Pricing in section 4.2 may be out of date',
             sourceKind: 'THREAD',
             status: 'SUGGESTED',
@@ -179,7 +191,7 @@ export function demoRaidLog(now: Date = new Date()): RaidLogPayload {
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
-/** Discussions › RAID on /tour. */
+/** The RAID tab on /tour. */
 export function DemoRaidTab({ engagementBase = '' }: { engagementBase?: string }) {
     const [log, setLog] = useState<RaidLogPayload>(() => demoRaidLog())
     const update = (fn: (l: RaidLogPayload) => RaidLogPayload) => setLog((l) => fn(l))
@@ -192,7 +204,7 @@ export function DemoRaidTab({ engagementBase = '' }: { engagementBase?: string }
             update((l) => ({ ...l, lastCheckedAt: new Date().toISOString(), conversation: 'current' }))
             return { message: 'Nothing new since the last check.', error: null }
         },
-        onAccept: async (s) => {
+        onAccept: async (s, priority) => {
             update((l) => {
                 const suggestions = l.suggestions.filter((x) => x.id !== s.id)
                 const target = s.attachedTo ? l.items.find((i) => i.id === s.attachedTo!.id) : undefined
@@ -205,7 +217,11 @@ export function DemoRaidTab({ engagementBase = '' }: { engagementBase?: string }
                             : i)),
                     }
                 }
-                return { ...l, suggestions, items: [{ ...s, status: liveStatusFor(s.type), attachedTo: null }, ...l.items] }
+                return {
+                    ...l,
+                    suggestions,
+                    items: [{ ...s, status: liveStatusFor(s.type), attachedTo: null, ...(priority ? { priority, prioritySetByPerson: true } : {}) }, ...l.items],
+                }
             })
             return null
         },
@@ -219,6 +235,8 @@ export function DemoRaidTab({ engagementBase = '' }: { engagementBase?: string }
                 type: input.type as RaidType,
                 title: input.title,
                 notes: input.notes,
+                priority: input.priority ?? null,
+                prioritySetByPerson: !!input.priority,
                 sourceKind: 'MANUAL',
                 sources: [chip('MANUAL', `Added by ${ME.name.split(' ')[0]}`, { internal: false })],
                 raisedAt: new Date().toISOString(),
@@ -231,6 +249,7 @@ export function DemoRaidTab({ engagementBase = '' }: { engagementBase?: string }
                 ...i,
                 ...(patch.title !== undefined && patch.title ? { title: patch.title } : {}),
                 ...(patch.notes !== undefined ? { notes: patch.notes } : {}),
+                ...(patch.priority ? { priority: patch.priority, prioritySetByPerson: true } : {}),
                 ...(patch.ownerUserId !== undefined
                     ? { ownerUserId: patch.ownerUserId, ownerName: MEMBERS.find((m) => m.userId === patch.ownerUserId)?.name ?? null }
                     : {}),

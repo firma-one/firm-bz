@@ -22,6 +22,7 @@ import {
 import { buildEngagementActivity } from '@/lib/ai/engagement-activity'
 import { buildFilesContext, loadEngagementFiles } from '@/lib/ai/files-context'
 import type { EngagementInsightsResponse } from '../insights/route'
+import { vaultForEngagement } from '@/lib/ai/known-entities'
 
 /**
  * Did the stream end because the reader went away, rather than because generation failed?
@@ -172,7 +173,7 @@ export async function POST(
 
         // Gate and client in one call: over-budget throws before any tokens are spent.
         const meterScope = { firmId: ctx.firmId, userId: user.id, feature: 'chat' as const }
-        const client = await getGuardedAnthropic(meterScope)
+        const client = await getGuardedAnthropic(meterScope, { vault: await vaultForEngagement(projectId, ctx.firmId) })
         if (!client) return NextResponse.json({ error: 'AI is not configured' }, { status: 503 })
 
         const stream = await client.messages.create({

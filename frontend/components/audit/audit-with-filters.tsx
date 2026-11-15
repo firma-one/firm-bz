@@ -24,6 +24,7 @@ import {
   Rocket,
   RotateCcw,
   Share2,
+  Sparkles,
   UserPlus,
   X,
 } from 'lucide-react'
@@ -126,6 +127,9 @@ const EVENT_TYPE_OPTIONS: { value: string; label: string }[] = [
   // File
   { value: 'DOCUMENT_CREATED', label: 'File uploaded' },
   { value: 'DOCUMENT_CHANGED', label: 'File updated' },
+  { value: 'DOCUMENT_MEMO_ADDED', label: 'Internal memo added' },
+  { value: 'DOCUMENT_MEMO_EDITED', label: 'Internal memo edited' },
+  { value: 'DOCUMENT_AI_REVIEWED', label: 'Read by Brio' },
   { value: 'DOCUMENT_DELETED', label: 'File deleted' },
   { value: 'DOCUMENT_RESTORED', label: 'File restored' },
   { value: 'DOCUMENT_MOVED', label: 'File moved' },
@@ -192,6 +196,7 @@ const SCOPE_TO_EVENT_TYPES: Record<string, string[]> = {
   ],
   FILE: [
     'DOCUMENT_CREATED', 'DOCUMENT_CHANGED', 'DOCUMENT_DELETED', 'DOCUMENT_RESTORED', 'DOCUMENT_MOVED',
+    'DOCUMENT_MEMO_ADDED', 'DOCUMENT_MEMO_EDITED', 'DOCUMENT_AI_REVIEWED',
     'DOCUMENT_VERSIONED', 'DOCUMENT_OPENED', 'DOCUMENT_DOWNLOADED',
     'DOCUMENT_INDEXED', 'DOCUMENT_FINALIZED', 'DOCUMENT_UNLOCKED',
     'DOCUMENT_STATUS_CHANGED', 'DOCUMENT_BLOCKED', 'DOCUMENT_UNBLOCKED', 'DOCUMENT_COMMENT_CREATED',
@@ -204,7 +209,7 @@ const SCOPE_TO_EVENT_TYPES: Record<string, string[]> = {
 const EVENT_ACTION_OPTIONS = [
   {
     value: 'CREATED', label: 'Created',
-    eventTypes: ['FIRM_CREATED', 'CLIENT_CREATED', 'ENGAGEMENT_CREATED', 'DOCUMENT_CREATED', 'CLIENT_CONTACT_CREATED', 'DOCUMENT_COMMENT_CREATED'],
+    eventTypes: ['FIRM_CREATED', 'CLIENT_CREATED', 'ENGAGEMENT_CREATED', 'DOCUMENT_CREATED', 'DOCUMENT_MEMO_ADDED', 'CLIENT_CONTACT_CREATED', 'DOCUMENT_COMMENT_CREATED'],
   },
   {
     value: 'MODIFIED', label: 'Modified',
@@ -212,7 +217,7 @@ const EVENT_ACTION_OPTIONS = [
       'FIRM_CHANGED', 'FIRM_SETTINGS_CHANGED', 'FIRM_BRANDING_CHANGED',
       'CLIENT_CHANGED', 'CLIENT_SETTINGS_CHANGED', 'CLIENT_CONTACT_CHANGED',
       'ENGAGEMENT_CHANGED', 'ENGAGEMENT_SETTINGS_CHANGED',
-      'DOCUMENT_CHANGED', 'DOCUMENT_MOVED', 'DOCUMENT_VERSIONED',
+      'DOCUMENT_CHANGED', 'DOCUMENT_MEMO_EDITED', 'DOCUMENT_MOVED', 'DOCUMENT_VERSIONED',
       'DOCUMENT_STATUS_CHANGED', 'DOCUMENT_COMMENT_CHANGED', 'DOCUMENT_SHARE_CHANGED',
     ],
   },
@@ -262,6 +267,10 @@ const EVENT_ACTION_OPTIONS = [
   {
     value: 'INDEXED', label: 'Indexed',
     eventTypes: ['DOCUMENT_INDEXED'],
+  },
+  {
+    value: 'READ_BY_BRIO', label: 'Read by Brio',
+    eventTypes: ['DOCUMENT_AI_REVIEWED'],
   },
 ] as const
 
@@ -317,10 +326,12 @@ export function eventDetails(ev: AuditEventRow): string {
   // A rename is the one case where the old value is as important as the new one: "Report.docx"
   // alone does not say what it used to be called, which is what a reviewer is checking.
   const previousName = m.previousName as string | undefined
+  // What happened, in a few words, after the file: "Notes changed", "3 action items · when it was added".
+  const summary = typeof m.summary === 'string' && m.summary ? ` · ${m.summary}` : ''
   if (fileName) {
     return (previousName && previousName !== fileName
       ? `${previousName} → ${fileName}`
-      : fileName) + approval
+      : fileName) + summary + approval
   }
   if (description) return description + approval
   if (name) return name + approval
@@ -360,6 +371,7 @@ function EventIcon({ eventType }: { eventType: string }) {
   if (eventType === 'DOCUMENT_OPENED') return <Eye className="h-3.5 w-3.5 text-fg-subtle" />
   if (eventType === 'DOCUMENT_DOWNLOADED' || eventType === 'DOCUMENT_SHARE_DOWNLOADED') return <Download className="h-3.5 w-3.5 text-fg-subtle" />
   if (eventType === 'AUDIT_LOG_EXPORTED') return <ClipboardList className="h-3.5 w-3.5 text-fg-subtle" />
+  if (eventType === 'DOCUMENT_AI_REVIEWED') return <Sparkles className="h-3.5 w-3.5 text-fg-subtle" />
   if (eventType.startsWith('DOCUMENT_SHARE_')) return <Share2 className="h-3.5 w-3.5 text-fg-subtle" />
   if (eventType.startsWith('DOCUMENT_COMMENT_')) return <MessageSquare className="h-3.5 w-3.5 text-fg-subtle" />
   if (eventType === 'DOCUMENT_FINALIZED' || eventType === 'DOCUMENT_LOCKED') return <Lock className="h-3.5 w-3.5 text-fg-subtle" />

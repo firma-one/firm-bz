@@ -246,3 +246,34 @@ export function validateEncryptionConfig(): void {
 export function generateKey(): string {
   return crypto.randomBytes(KEY_LENGTH).toString('hex')
 }
+
+/**
+ * True for a value `encrypt` wrote: "v{n}$" then base64. Stricter than a "v…$" prefix check, which a
+ * sentence like "valued at $5,000" passes, and which would leave that sentence stored as plain text.
+ */
+export function isCiphertext(value: string): boolean {
+  return /^v\d+\$[A-Za-z0-9+/]+={0,2}$/.test(value)
+}
+
+/**
+ * Encrypts a text field the Prisma extension can't reach, such as one inside a JSON column. Empty
+ * stays empty, and a value already encrypted is left as it is.
+ */
+export function sealText(value: string): string {
+  if (!value || isCiphertext(value)) return value
+  return encrypt(value)
+}
+
+/**
+ * Reads a field `sealText` wrote. A value from before it was encrypted comes back as it is, so old
+ * rows keep working without a backfill.
+ */
+export function openText(value: string): string {
+  if (!value || !isCiphertext(value)) return value
+  try {
+    return decrypt(value)
+  } catch {
+    console.warn('openText: a value could not be decrypted, returning it as stored')
+    return value
+  }
+}

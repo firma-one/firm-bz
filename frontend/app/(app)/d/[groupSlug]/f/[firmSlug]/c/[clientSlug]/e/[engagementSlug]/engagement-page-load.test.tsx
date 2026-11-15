@@ -5,7 +5,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // again. A redirect from the lookup (signed out, firm gone) still happens, and a real miss is still a 404.
 
 const { st } = vi.hoisted(() => ({
-    st: { hierarchy: (async () => []) as () => Promise<unknown> },
+    st: { hierarchy: (async () => []) as () => Promise<unknown>, caps: {} as Record<string, boolean> },
 }))
 
 vi.mock('@/components/projects/engagement-workspace', () => ({ EngagementWorkspace: () => null }))
@@ -15,7 +15,7 @@ vi.mock('@/lib/actions/personas', () => ({ getProjectPersonas: async () => [] })
 vi.mock('@/lib/actions/project', () => ({ getEngagementFolderIds: async () => null }))
 vi.mock('@/lib/permission-helpers', () => ({ canAccessRbacAdmin: async () => false, canManageOrganization: async () => false, getProjectPersona: async () => 'eng_admin' }))
 vi.mock('@/lib/view-as-server', () => ({ getViewAsPersonaFromCookie: async () => null }))
-vi.mock('@/lib/permissions/resolve', () => ({ resolveProjectCapabilitiesForUser: async () => ({}), resolveProjectCapabilitiesForPersona: async () => ({}) }))
+vi.mock('@/lib/permissions/resolve', () => ({ resolveProjectCapabilitiesForUser: async () => st.caps, resolveProjectCapabilitiesForPersona: async () => ({}) }))
 vi.mock('@/lib/auth/session-user', () => ({ getSessionUser: async () => ({ id: 'me' }) }))
 vi.mock('@/lib/prisma', () => ({ prisma: { firm: { findUnique: async () => ({ id: 'f', sandboxOnly: false, settings: {} }) } }, basePrisma: {} }))
 vi.mock('@/lib/engagement-sharing-ids', () => ({ getAccessibleFileCountForPersona: async () => 0 }))
@@ -32,7 +32,7 @@ const params = Promise.resolve({ groupSlug: 'g', firmSlug: 'acme', clientSlug: '
 const isNotFound = (e: unknown) => String((e as { digest?: string })?.digest ?? '').includes('404') || String((e as Error)?.message).includes('NEXT_HTTP_ERROR_FALLBACK')
 const isRedirect = (e: unknown) => String((e as { digest?: string })?.digest ?? '').startsWith('NEXT_REDIRECT')
 
-beforeEach(() => { st.hierarchy = async () => [] })
+beforeEach(() => { st.hierarchy = async () => []; st.caps = {} })
 
 describe.each([
     ['the engagement page', () => EngagementPage({ params })],
@@ -54,5 +54,27 @@ describe.each([
         st.hierarchy = async () => [{ slug: 'cl', id: 'c', engagements: [] }]
         const thrown = await open().then(() => null, (e: unknown) => e)
         expect(isNotFound(thrown)).toBe(true)
+    })
+})
+
+// The RAID log got a tab of its own (2026-11-14): …/raid, for Leads and Full Access contributors.
+describe('the RAID tab', () => {
+    const at = (rest: string[], view?: string) => EngagementPage({
+        params: Promise.resolve({ groupSlug: 'g', firmSlug: 'acme', clientSlug: 'cl', engagementSlug: 'audit', rest }),
+        searchParams: Promise.resolve(view ? { view } : {}),
+    }).then(() => null, (e: unknown) => e)
+    const redirectedTo = (e: unknown) => isRedirect(e) ? String((e as { digest: string }).digest).split(';')[2] : null
+
+    it('an old link to the Discussions sub-tab lands on it', async () => {
+        expect(redirectedTo(await at(['comments'], 'raid'))).toMatch(/\/e\/audit\/raid$/)
+    })
+
+    it.each([
+        ['a Reviewer', { 'project:can_view': true }],
+        ['a Contributor · Limited Access', { 'project:can_view': true, 'project:can_edit': true }],
+    ])('%s is sent to Files', async (_who, caps) => {
+        st.hierarchy = async () => [{ slug: 'cl', id: 'c', engagements: [{ slug: 'audit', id: 'p' }] }]
+        st.caps = caps
+        expect(redirectedTo(await at(['raid']))).toMatch(/\/e\/audit\/files$/)
     })
 })

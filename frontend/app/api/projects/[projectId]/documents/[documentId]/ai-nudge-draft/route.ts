@@ -8,7 +8,10 @@ import { isAiConfigured, AI_EFFORT } from '@/lib/ai/client'
 import { getGuardedAnthropic, aiFailureResponse } from '@/lib/ai/guarded-client'
 import { BRIO_DRAFT_FAILED } from '@/lib/ai/brio-failure'
 import { streamDraft } from '@/lib/ai/stream-draft'
-import { NUDGE_SYSTEM_PROMPT, buildNudgePrompt } from '@/lib/ai/nudge-draft'
+import { NUDGE_SYSTEM_PROMPT, buildNudgePrompt, nudgeGreeting } from '@/lib/ai/nudge-draft'
+import { resolveDisplayName } from '@/lib/auth/display-name'
+import { formatDisplayName } from '@/lib/comments/mentions'
+import { vaultForEngagement } from '@/lib/ai/known-entities'
 
 /**
  * POST /api/projects/[projectId]/documents/[documentId]/ai-nudge-draft  { recipientUserId }
@@ -65,13 +68,15 @@ export async function POST(
 
         const { createAdminClient } = await import('@/utils/supabase/admin')
         const { data } = await createAdminClient().auth.admin.getUserById(recipientUserId)
-        const fullName = (data?.user?.user_metadata?.full_name as string | undefined) ?? data?.user?.email?.split('@')[0] ?? ''
-        const firstName = fullName.split(/\s+/)[0] || 'there'
+        const email = data?.user?.email ?? ''
+        // Their member name, as the comment box and the thread spell it, so the tag reads as theirs.
+        const displayName = formatDisplayName(resolveDisplayName(data?.user?.user_metadata ?? {}, email), email)
+        const firstName = displayName.split(/\s+/)[0] || 'there'
 
         const now = new Date()
         const since = st.activity?.updatedAt ? new Date(st.activity.updatedAt) : now
         const scope = { firmId: ctx.firmId, userId: user.id, feature: 'nudgeDraft' as const }
-        const client = await getGuardedAnthropic(scope)
+        const client = await getGuardedAnthropic(scope, { vault: await vaultForEngagement(projectId, ctx.firmId) })
         if (!client) return NextResponse.json({ error: 'AI is not configured' }, { status: 503 })
 
         return await streamDraft({
@@ -92,6 +97,7 @@ export async function POST(
             maxTokens: 2000,
             failure: BRIO_DRAFT_FAILED,
             label: 'nudge-draft',
+            prefix: displayName ? nudgeGreeting(displayName) : undefined,
         })
     } catch (error) {
         return aiFailureResponse(error, BRIO_DRAFT_FAILED, 'AI nudge draft error:')

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { AlertCircle, Sparkles } from "lucide-react"
 import { Brio } from "@/components/ui/brio"
 import { LoadingAnnouncement, ShimmerBar } from "@/components/ui/shimmer"
+import { ThinkingDots, TypingCaret, useTypedText } from "@/components/brio/brio-typing"
 import { Hint } from "@/components/ui/tooltip"
 import { useOptionalShellData } from "@/components/shell/shell-data-context"
 import { ASSISTANT, ASSISTANT_POLICY, BRIO_GREEN } from "@/lib/ai/assistant"
@@ -158,12 +159,22 @@ type Note = { tone: "info" | "error"; text: string }
 /** Words with a Try again button after them don't also need to say "Try again.". */
 const withoutTryAgain = (words: string) => words.replace(/\s*Try again\.$/, "")
 
-function DayBriefCard({ brief, rewriting, note }: { brief: DayBriefShown; rewriting: boolean; note: Note | null }) {
+function DayBriefCard({ brief, rewriting, note, typeIn = false }: {
+    brief: DayBriefShown
+    rewriting: boolean
+    note: Note | null
+    /** Brio has just written it (the day's first brief, a Rewrite): typed out as Brio writes everywhere. */
+    typeIn?: boolean
+}) {
+    const typed = useTypedText(brief.text, false, { typeIn })
+    const paragraphs = briefParagraphs(typed.shown)
     return (
-        <div className="flex flex-col gap-2.5 rounded-card border border-line bg-surface px-4 py-3.5 text-ui text-fg" aria-busy={rewriting}>
+        <div className="flex flex-col gap-2.5 rounded-card border border-line bg-surface px-4 py-3.5 text-ui text-fg" aria-busy={rewriting || typed.typing}>
             <div className={cn("flex flex-col gap-2.5 transition-opacity", rewriting && "opacity-60")}>
-                {briefParagraphs(brief.text).map((p, i) => (
-                    <p key={i}>{p}</p>
+                {typed.typing && paragraphs.length === 0 ? (
+                    <p><ThinkingDots /></p>
+                ) : paragraphs.map((p, i) => (
+                    <p key={i}>{p}{typed.typing && i === paragraphs.length - 1 && <TypingCaret />}</p>
                 ))}
             </div>
             {/* No link down to them: the sections are right below, a scroll away. */}
@@ -271,6 +282,8 @@ export function DayBrief() {
     const [loadTick, setLoadTick] = useState(0)
     const [rewriting, setRewriting] = useState(false)
     const [note, setNote] = useState<Note | null>(null)
+    // Typed out when Brio has just written it, not on every visit to Home.
+    const [typeIn, setTypeIn] = useState(false)
     const mounted = useRef(true)
 
     useEffect(() => {
@@ -284,7 +297,11 @@ export function DayBrief() {
     useEffect(() => {
         let cancelled = false
         getDayBrief(firmIdRef.current)
-            .then((d) => !cancelled && setState(stateOf(d)))
+            .then((d) => {
+                if (cancelled) return
+                setTypeIn(!!d.brief && justWritten(d.brief.generatedAt))
+                setState(stateOf(d))
+            })
             .catch((e) => !cancelled && setState({ kind: "failed", reason: failureWords(e) }))
         return () => {
             cancelled = true
@@ -298,6 +315,7 @@ export function DayBrief() {
         try {
             const d = await requestDayBrief("POST", firmIdRef.current)
             if (!mounted.current) return
+            setTypeIn(!d.unchanged)
             setState(stateOf(d))
             if (d.unchanged) setNote({ tone: "info", text: DAY_BRIEF_UNCHANGED })
         } catch (e) {
@@ -327,10 +345,16 @@ export function DayBrief() {
             ) : state.kind === "empty" ? (
                 <HomeEmptyLine>{DAY_BRIEF_EMPTY}</HomeEmptyLine>
             ) : (
-                <DayBriefCard brief={state.brief} rewriting={rewriting} note={note} />
+                <DayBriefCard brief={state.brief} rewriting={rewriting} note={note} typeIn={typeIn} />
             )}
         </DayBriefSection>
     )
+}
+
+/** Written in the last minute: Brio wrote it for this visit, so it is typed out. */
+function justWritten(iso: string): boolean {
+    const at = Date.parse(iso)
+    return Number.isFinite(at) && Date.now() - at < 60_000
 }
 
 // ─── Demo (/tour) ────────────────────────────────────────────────────────────
@@ -438,7 +462,8 @@ export function DemoDayBrief({ work, firmName }: {
             ) : brief === null ? (
                 <HomeEmptyLine>{DAY_BRIEF_EMPTY}</HomeEmptyLine>
             ) : (
-                <DayBriefCard brief={brief} rewriting={rewriting} note={note} />
+                // The tour's brief is written as the visitor arrives, so it types in, as on the website.
+                <DayBriefCard brief={brief} rewriting={rewriting} note={note} typeIn />
             )}
         </DayBriefSection>
     )

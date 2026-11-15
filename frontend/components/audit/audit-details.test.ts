@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { eventDetails, type AuditEventRow } from './audit-with-filters'
+import { FIRM_ONLY_AUDIT_EVENTS, isValidAuditEventType } from '@/lib/audit-event-types'
 
 const row = (metadata: Record<string, unknown>): AuditEventRow => ({
     id: 'e1',
@@ -78,3 +79,21 @@ describe('eventDetails — file names, never raw JSON', () => {
     })
 })
 
+
+describe('eventDetails — internal memos and Brio', () => {
+    it('says what happened after the file: added, edited, read by Brio', () => {
+        expect(eventDetails({ ...row({
+            fileName: '2026-11-12-Call-with-Dana.md', previousName: '2026-11-12-Call-notes.md', summary: 'Title or date changed',
+        }), eventType: 'DOCUMENT_MEMO_EDITED' })).toBe('2026-11-12-Call-notes.md → 2026-11-12-Call-with-Dana.md · Title or date changed')
+        expect(eventDetails({ ...row({
+            fileName: '2026-11-12-Call-with-Dana.md', summary: '3 action items · 1 RAID suggestion · when it was added',
+        }), eventType: 'DOCUMENT_AI_REVIEWED' })).toBe('2026-11-12-Call-with-Dana.md · 3 action items · 1 RAID suggestion · when it was added')
+    })
+
+    it('memo events are the firm\'s own: never in a Reviewer\'s or a Limited Access contributor\'s view of the trail', () => {
+        for (const e of ['DOCUMENT_MEMO_ADDED', 'DOCUMENT_MEMO_EDITED', 'DOCUMENT_AI_REVIEWED']) {
+            expect(isValidAuditEventType(e)).toBe(true)
+            expect(FIRM_ONLY_AUDIT_EVENTS).toContain(e)
+        }
+    })
+})

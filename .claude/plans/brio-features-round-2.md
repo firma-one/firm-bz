@@ -158,6 +158,14 @@ Pricing copy changes with it: the "Credits included" tooltip in `config/pricing.
 - **Pairs with (non-AI):** a reason field when a deliverable moves back from in review ("requested
   changes"), which today sends fixed text. Optional in this round.
 - **Route:** `POST /api/projects/[projectId]/documents/[documentId]/ai-nudge-draft`.
+- **After a nudge (2026-11-15, Deepak's call):** the row stays (the deliverable is still waiting) and
+  says "Nudged Dana today" in place of the button, from the moment it is sent. With no response after
+  3 days (`NUDGE_AGAIN_DAYS`), "Nudge again" comes back beside it. A reply from them on the deliverable
+  ("Dana replied today", linking the discussion) or the nudge ticked off in their Inbox ("Dana marked
+  the nudge done") stops further nudges while it stays in review; opening the discussion alone doesn't
+  count. A nudge is any comment reminding one of the engagement's Reviewers or Limited Access
+  contributors, so earlier ones count. Done is recorded in `doc_comment_reminder_done`, since the
+  reminder itself is removed (`lib/ai/nudge-status.ts`).
 
 ## 4. Order of work after the mock is approved
 
@@ -379,3 +387,283 @@ someone who hadn't seen the app. Labels only: the feature keys stay `dayBrief`, 
 `brief`. Renamed across the app, its limit and failure messages, the /tour (the Firm Overview step's
 narration was re-recorded), the website and the campaign email. Website copy that explains it to
 newcomers says "tells you each morning what needs you" / "morning rundown".
+
+## 13. A memo reviewed in one place (Deepak, 2026-11-14; building)
+
+Brio identifies a memo's action items, and its RAID suggestions, automatically when the memo is added,
+and both wait on the memo. Nothing applies itself: action items wait for Apply, RAID suggestions for
+Accept, as before. The daily RAID check and Check now read threads only, so a memo is never read twice.
+
+- **When.** In the memos POST route, after the response (Next `after()`, no Inngest): read the memo
+  (readMemoText), identify its action items, then suggest its RAID entries. A failure or timeout leaves
+  the memo as it was: the sparkle runs it by hand.
+- **Credits.** One per memo, charged to the firm (no person, so no per-person limit): the action items
+  call is `notesProposals` (1); the memo's RAID pass is its own feature at 0, metered for usage. A firm
+  with no credits left is skipped quietly. Firm setting, on by default: "Identify action items when a
+  memo is added".
+- **What's stored, and what isn't.** Action items wait in the memo row's `settings.memo.review`: kind,
+  title/date/deliverable/name, never the quote. Each quote (and each skipped line) is kept as where it
+  sits in the memo (offset and length in the memo's match text, normalizeForMatch) and a short hash; the
+  memo view fills it in from the memo it already reads from storage, and says when the memo has changed.
+  RAID suggestions are SUGGESTED rows as today, sourced to the memo, no memo text.
+  (Found while building: an applied action already stores a lowercase copy of its quote in
+  `settings.memo.applied`, so "firmä keeps no copy of a memo's text" isn't strictly true today.)
+- **The memo view.** Waiting action items show without a click, editable, Apply as now; the memo's RAID
+  suggestions show under them with Accept and Dismiss (the RAID log's own routes). Dismiss all clears what
+  waits. The memo row says "N to review". The sparkle runs action items again by hand (per person, 1 credit).
+- **Never applies.** The job writes proposals and SUGGESTED rows only: no reminder, no due date, no
+  accepted RAID entry. A test pins it.
+
+**Memo suggestions wait on the memo only (Deepak, 2026-11-14: "why is it showing directly on RAID").**
+A memo's RAID suggestions are accepted or dismissed on the memo, with its action items. The RAID tab's
+strip lists thread suggestions only ("suggests N from new messages"), plus one line per memo: "N
+suggestions wait on the memo “Title · date”, with its action items · Review in Memos". The Overview
+card's "N suggestions to review" leaves memo ones out (the memo's row counts them). A memo source chip
+opens Discussions › Memos with the memo, not Files (`waitsOnMemo`, `memoSuggestionGroups`,
+`memoReviewHref` in lib/raid/raid-shared.ts).
+
+## 14. Next, from Deepak (2026-11-14, for the next session)
+
+0. **First: commit and push** the uncommitted round on `dev` (about 50 files: memos in three fixed-height
+   columns with editable action items, "Identify action items", folder-lock on internal-only folders shown
+   only inside deliverables, and §13's memo review on add). All 3,826 tests passed on 2026-11-14; checked
+   on the tour, not yet with a live memo in the app. Then try adding a memo in the app (after() on Vercel).
+
+1. **RAID as its own engagement tab.** Move the RAID log out of Discussions into a tab of its own
+   (Overview · Files · Board · RAID · Discussions · Audit…, internal only with the lock, like Audit); the
+   Overview's RAID card and every `raidLogHref` link point at it; /tour too. Later, optional: a firm-level
+   card on Firm Overview listing open risks and issues across engagements, each linking to its tab.
+   (The zero-credit `memoRaid` feature from §13 is already in the AI feature list.)
+   **Built 2026-11-14 (uncommitted):** `…/raid` after Discussions (ShieldAlert, open count, internal-only
+   lock), guarded on the page for a Lead or a Contributor · Full Access (`canEdit && canViewInternalTabs`,
+   as the RAID routes); `…/comments?view=raid` redirects there; Discussions is Threads | Memos (the switch
+   still takes a RAID option if one is passed); `raidLogHref` → `/raid` or `?tab=raid`; header crumb;
+   /tour mirrored. Firm-level card not built.
+2. **Native comment threads from inside documents.** Read Google Docs/Sheets/Slides comments (Drive API
+   `comments.list`, also works for Office files kept in Drive) and Microsoft Office comments on OneDrive
+   (Graph has no comments API for Word/Excel/PowerPoint: the file would have to be downloaded and its
+   comments read from the OOXML parts), show them as a sub-tab under Discussions, and let Brio identify
+   action items in them as it does for internal memos. **Decide first:** reading them, above all
+   downloading an Office file to do it, conflicts with the published promise that Brio "never opens the
+   files you deliver" (website, FAQ, Trust Center, email). The copy and the promise need to change with it.
+   **Do this one last (Deepak, 2026-11-15).** Feasible without the .NET Open XML SDK: an Office file is a
+   ZIP of XML parts, read in Node with `jszip` (already a dependency) plus a small XML parser.
+   - Excel: threaded comments in `xl/threadedComments/*.xml` + `xl/persons/person.xml` (sheet and cell
+     ref); notes in `xl/comments*.xml` (skip the legacy "[Threaded comment]" placeholders). Graph's Excel
+     workbook API may list threaded comments with no parsing: confirm when building.
+   - PowerPoint: `ppt/comments/modernComment_*.xml` + `ppt/authors.xml` (replies, resolved); older decks
+     `ppt/comments/comment*.xml` + `ppt/commentAuthors.xml`. Word: `word/comments.xml` + `commentsExtended.xml`.
+   - Read only the comment parts: range requests for the ZIP's central directory, then just those parts,
+     so a deck full of images costs a few kilobytes. Read only (reply opens the file in Office); re-read
+     when the file's modified time moves. Anchors shown as "Sheet2!B14" or "Slide 4", not the body text.
+   - Promise wording to change first, e.g. "reads comments people left on files; never the files' content".
+3. **Edit a memo.** Rename its title, re-upload the whole transcript or minutes, or edit the notes in
+   place. Risks to handle, given §13:
+   - *Waiting action items* keep their quotes as positions in the memo (anchors); after an edit a moved
+     line shows "The memo has changed since" rather than the wrong words. An edit should offer to
+     identify the action items again (a new review, one credit), not do it silently on every keystroke.
+   - *Applied actions* stay applied (the reminder or due date exists). A new review marks them "Applied
+     earlier" by kind, target and date (`appliedStoredIds`); an edit that changes a date or a reminder's
+     words can make the same action look new, so guard against applying a duplicate (match on the
+     deliverable or a close title, and show what was applied from this memo).
+   - *RAID suggestions* from the old text that still wait should be withdrawn on a re-upload and the memo
+     read again; accepted entries stay in the log (they record what was decided), their source chip still
+     points at the memo.
+   - *Rename* renames the file in Drive or OneDrive (date-title.md) and the row; RAID source labels and
+     links that name the memo must follow (or be computed from the row when shown).
+   - Every edit is audited; a memo edited in storage directly is the same case as an in-app edit.
+   - **Mocked 2026-11-14, waiting for Deepak's OK** (memos canvas, "Edit memo · the sheet" and "· after
+     saving"): Edit beside Open in Drive opens the Add sheet filled in; a "When you save" box says what
+     changes (rename; old waiting items and RAID suggestions stop waiting; applied ones kept) with
+     "Identify action items in the new notes · 1 credit" ticked. Title or date only: no new review.
+   - **Approved and built 2026-11-14 (uncommitted).**
+     - **Route.** `PATCH /api/projects/[id]/memos/[documentId]` → `editMemo` (memo-store) rewrites the file
+       and renames it (Drive `renameFile`, OneDrive `renameOneDriveFile`). A rename storage refuses is a
+       warning; the notes are already saved.
+     - **New notes.**
+       - The old review is kept but dismissed, and `notesChangedAt` is set.
+       - The memo's SUGGESTED RAID rows are deleted.
+       - With the box ticked, `reviewMemoOnAdd({ requested: true, trigger: 'edited' })` runs in `after()`:
+         firm-charged, and the firm's automatic switch doesn't apply.
+     - **Title or date only.** `reanchorReview` moves every quote anchor with the heading. Nothing else
+       changes.
+     - **"Changed since Brio read it".** Each review stores `bodyHash` (`memoBodyHash`: the notes without
+       the heading). The pane compares it with the file it read, which catches edits made in Drive
+       directly with no modified-time check. `MemoListItem.changedSinceRead` covers an in-app edit that
+       wasn't read again.
+     - **"Applied earlier".** Dated ("Applied on Nov 12 from this memo, so it isn't applied twice.").
+       Matched on kind and day plus the deliverable or a close title (`closeTitles`, word Jaccard ≥ 0.6).
+     - **Audited, firm-only types** (lib/audit-event-types.ts), so Reviewers and Limited Access
+       contributors never see them:
+       - `DOCUMENT_MEMO_ADDED`
+       - `DOCUMENT_MEMO_EDITED`
+       - `DOCUMENT_AI_REVIEWED` ("Read by Brio": on add, after an edit, or from the sparkle; who set it
+         off, and counts only, never the words)
+     - **Mirrored on /tour.**
+4. **Reword the claims, not the code (Deepak, 2026-11-15).** Nothing is removed. An applied action keeps
+   the line of the memo it came from (lowercase, `settings.memo.applied[].quote`) as its citation: useful,
+   so it stays, and the copy stops saying "firmä keeps no copy of a memo's text" (home FAQ) or anything
+   like it. Waiting action items keep quotes as anchors (§13) as built. The file promise is worded as
+   "keep", never "touch": files stream through our servers for preview, download and upload but are never
+   saved, so "we never keep a copy of what's in your files" is accurate. Proposed promise, for when the
+   document comments ship: "Your files stay in your Drive. We never keep a copy of what's in them, and
+   Brio never reads the files you deliver. It works from their names, dates and status, the comments people
+   leave, and the internal memos you write for it." Say plainly that text Brio reads (a memo, a comment)
+   goes to Anthropic for that one request. Before publishing, confirm preview keeps no cache and Sentry
+   never records file bodies.
+5. **De-identify before Brio reads free text (Deepak asked 2026-11-14; designed, not built).**
+   - **Sent today, with nothing masked:**
+     - Memo review (`buildNotesContext`): the memo's text, plus deliverable names and dates.
+     - RAID check (`buildRaidContext`): comment text, author names and roles, document names and the
+       engagement name.
+     - Privacy policy §05 is wrong on two counts. It says "the contents of your documents are never sent".
+       It also says Anthropic "does not retain": its default is up to 30 days, and zero only under a Zero
+       Data Retention (ZDR) agreement. Fix both with #4.
+   - **Layer 1, the contract (Deepak).** Ask Anthropic for ZDR. Haiku 5.5 is eligible; the Fable and Mythos
+     5.x models are carved out and keep 30 days. Until it's signed, the policy says 30 days.
+   - **Layer 2, `lib/ai/pseudonymize.ts`** (server-only, pure, no network, no extra provider):
+     - **The vault.** Built from what we already know: engagement members' names, first names, last names
+       and emails; the client and its contacts; the firm and group names. Longest match first, at word
+       boundaries, possessives included ("Dana's"), case-insensitive.
+     - **Patterns.**
+       - Emails and URLs, internal ones included.
+       - Phone numbers: formatted ones only, never a bare 10 digits. Salesforce documents an order number
+         masked as a phone, which spoiled the answer.
+       - SSN, EIN and ITIN.
+       - Card numbers (Luhn check) and IBANs.
+     - **One vault per prompt.** The memo, deliverable names, authors, document names and engagement name
+       are all masked with the same vault. Otherwise "Smith" masked in the notes but left in
+       "Smith Family Trust Return" re-links them, and due-date matching breaks.
+     - **Placeholder tokens.** Typed and stable within a call: `[CLIENT]`, `[FIRM]`, `[PERSON_3]`,
+       `[EMAIL_1]`, `[LINK_2]`, `[PHONE_1]`, `[TAX_ID_1]`. Roles already in the prompt stay. One prompt
+       line: "Text in square brackets like [PERSON_1] stands for a real value. Copy it exactly; never guess
+       what it stands for."
+     - **Unmasking.** Put the real values back into titles, quotes and reasons, then ground quotes against
+       the original text as today (`groundedQuote`, `anchorQuote`). A proposal with a token the vault
+       doesn't know is dropped and counted in `dropped`.
+     - **The vault never lasts beyond its call.** It lives in memory for that one call; it is never
+       logged, never stored and never in a Sentry breadcrumb.
+     - **Streaming surfaces (chat, briefs), later.** Hold back output from an open `[` until its `]`.
+   - **Scope: every Brio call, not only memos (Deepak, 2026-11-14).** All 15 features in `lib/ai/features.ts`:
+     - **Free text:** `notesProposals`, `memoRaid`, `raidCheck`, `replyDraft`, and the question typed into
+       `chat`, `firmChat`, `reviewerChat` and `searchInterpret`.
+     - **Names and labels:** `brief`, `dayBrief`, `dayBriefRewrite`, `summary`, `statusUpdate`, `nudgeDraft`,
+       `filesAgent`.
+   - **One choke point.** Every call already goes through `getGuardedAnthropic`; it takes the vault:
+     - It masks every string the call sends: `system`, message text and tool results.
+     - It unmasks the answer: text blocks, tool-use input (deep), and streamed deltas. A stream holds back
+       from an unclosed `[` until its `]`, at most 24 characters.
+     - So a call site changes one argument. Grounding checks (a quote must be in the notes) compare the
+       unmasked answer with the original text, as today.
+   - **Stable tokens.** The vault is built in a fixed order from `lib/ai/known-entities.ts`, so the same
+     person is `[PERSON_2]` on every request.
+     - Chat history re-masks the same way.
+     - The prompt cache keeps hitting.
+     - Engagement scope covers the firm, the client and its contacts, and the members. Firm scope (firm
+       chat, briefs) covers every client, contact and member of the firm.
+   - **Guard test.** Like the completed-engagement one: every `getGuardedAnthropic` call passes a vault, or
+     `vault: null` with a written reason. A new feature can't skip it silently.
+   - **Order of work.**
+     1. The core: vault, mask, unmask, stream unmask; tests.
+     2. Wire the free-text features: memos, RAID, reply drafts.
+     3. Wire the chats, which stream.
+     4. Wire the rest.
+     5. Firm switch, then the privacy and trust copy, only once it's live.
+   - **Built 2026-11-14 (uncommitted): steps 1 to 5, apart from the copy.**
+     - **Core:** `lib/ai/pseudonymize.ts`, `lib/ai/known-entities.ts`, `lib/ai/masked-client.ts`.
+     - **Placeholders come from the record's id, not a stored slug** (Deepak's ask, 2026-11-14: one
+       identity per person).
+       - `[PERSON_7F3A91C2]`: 8 hex digits, the norm (Deepak, 2026-11-14), hashed from the user, contact,
+         client or firm id, never the name. The same in every engagement, firm chat and request, with no
+         column and no backfill.
+       - Clashes: at 8 digits, 0.003% for a 500-person firm. On one, the earlier id keeps its code and the
+         later takes more digits, decided by the ids alone.
+       - A first name two people share gets `[NAME_n]` for the request, numbered, never hashed from the
+         name.
+       - A name written another way gets `_V2`, so quotes still match the notes exactly.
+       - A client's legal suffix stays visible ("[CLIENT_…], Inc.").
+     - **Enforced by the compiler:** `getGuardedAnthropic(scope, { vault })` and `completeText({ vault })`
+       require a vault. `lib/ai/masking-coverage.test.ts` fails on any call that passes a literal null.
+     - **Wired:** all 15 call sites, plus an end-to-end test on reply drafts.
+     - **Firm switch:** Settings › Brio › "Replace names, emails and links before Brio reads", on by
+       default, also on /tour.
+     - **Left:** ZDR (Deepak's step).
+   - **Built later on 2026-11-14 (uncommitted):**
+     - **Name recognition (Layer 3), by rules:** `lib/ai/name-detection.ts` finds speakers, titles,
+       greetings and who-did-what words, plus first and last names alone. They're masked as `[NAME_n]`
+       across the whole request (`learnNames`).
+       - No model: BERT-NER through transformers.js would add a download on every cold start and seconds
+         per long memo.
+       - The npm install of compromise was blocked by the session's permissions, so no new dependency.
+     - **Copy:**
+       - Privacy section 05 has a "Names replaced before Brio reads" clause, page and embedded.
+       - The terms' "What Brio reads" gains a sentence.
+       - The trust center's Brio box gains a line and a point.
+     - **Caching:** names are kept per server for 2 minutes and the firm switch for 1
+       (`lib/ai/known-entities.ts`).
+     - **Firm Overview risks and issues:** built as mock A
+       (https://claude.ai/artifact/2o23j97xEMmr1ifjSUmmBJ), its own section under the Action Center.
+       - Open issues and risks across the firm's live engagements, from every source, issues first, up to
+         5, each opening its engagement's RAID tab.
+       - Status and health entries are listed too, as in the mock. At first only thread and memo
+         entries were, copying the engagement Overview, whose own Action Center shows the rest. The
+         firm's Action Center doesn't show them, so a firm with only status and health entries got an
+         empty list (Deepak, 2026-11-14).
+       - The engagement Overview now does the same: every open entry, up to 5 rows with the latest
+         decision. It showed counts over an empty list too, and Behind pace was never in its Action
+         Center anyway, only under Engagement Health. The Board's approvals still stay out of
+         "latest decision", since the Board shows them.
+       - **Show all** on the Firm Overview: it shows the first 5 and "Show all N" opens the rest in place,
+         like the Action Center's passed checks. The route sends up to 100 (`FIRM_RAID_MAX_ROWS`); past
+         that, a line says how many more and that they're in each engagement's RAID log. On the
+         engagement Overview the same "Show all N in the RAID log" opens the RAID tab instead: the
+         whole log is one click away there.
+       - **Columns:** on the Firm Overview the client and engagement have a column of their own, each
+         after its icon (the handshake, the briefcase), with the full names on hover. The owner and the
+         day are columns on both Overviews, after UserRound and CalendarDays as in the app's tables.
+         Where the list is narrower than 56rem, the place goes on a second line under the entry.
+     - **RAID explained in the app** (`components/projects/raid/raid-info.tsx`): an info icon after RAID,
+       with `RAID_MEANING`, one per block on its first mention. It's on the tab, the breadcrumb, the
+       Overview section, a memo's RAID suggestions, the memo sheet's warning, firm settings and the Firm
+       Overview's "more" line. /privacy and /terms use the website's `RaidTerm`. Each R, A, I and D letter
+       shows its full word on hover. Left without: error and toast messages, emails, the audit trail's
+       text and the System Admin AI efficacy page.
+     - **Priority on Risks and Issues** (mock https://claude.ai/artifact/GXfE5U1XXvZojUWGGaExkL; Deepak
+       chose the gray signal bars over the Health score's colored words, which share red with the I letter):
+       - High, Medium or Low, as three gray bars and the word (`components/projects/raid/raid-priority.tsx`).
+         Assumptions and Decisions have none and show a dash.
+       - Migration `20261114170000_raid_priority`: `priority` (enum) and `prioritySetBy`. No backfill: an
+         older Risk or Issue reads as Medium, and the next sync grades every live automatic entry.
+       - Where it comes from: automatic entries take the Health score's grade where Health scores the same
+         thing (an overdue deliverable High; Behind pace and Planning gaps by their points, 15+ High, 8+
+         Medium). Otherwise Blocked is High, and long in review or a waiting thread is Medium. Brio proposes
+         one with each Risk or Issue it suggests (rule 9 of its prompt), changeable on the card before
+         accepting. One added by hand starts at Medium.
+       - A person's choice (`prioritySetBy`) is final: the sync never changes it.
+       - One order everywhere (`compareRaid`): High, Medium, Low; within each, issues before risks; then
+         newest. It applies to the RAID page, both Overviews and the Firm Overview, whose count line adds
+         "N High".
+       - Shown only for engagements whose RAID log the person may open, decided as the RAID tab decides
+         it (`mayReadRaid` in `lib/raid/firm-raid.ts`). With none, `GET /api/firms/[firmId]/raid`
+         answers 403 and the section isn't drawn.
+       - Mirrored on /tour.
+     - **One look for the RAID log's short form** (`components/projects/raid/raid-list.tsx`):
+       - The engagement Overview's RAID card was restyled to match the firm section: a header like the
+         Action Center's, a count line, and rows.
+       - The R, A, I and D letters take the Board's stage colors everywhere: Risk waiting, Assumption
+         underway, Issue problem, Decision done.
+   - **Firm switch.** Settings › Brio › "Replace names, emails and links before Brio reads", on by default.
+   - **Honest copy.** "Brio replaces the names, emails, links and ID numbers it recognizes before it reads."
+     Never "anonymized": names we don't know get through, context can still identify someone, and under
+     GDPR pseudonymized data is still personal data.
+   - **Layer 3, only if a regulated customer asks:**
+     - Name recognition for names we don't know: Presidio as a sidecar, or Bedrock Guardrails'
+       sensitive-information filters.
+     - Or call Claude through Bedrock in a chosen region, the Slack-style boundary.
+   - **Tests.**
+     - A masked value comes back unchanged after unmasking.
+     - Possessives.
+     - Two people named Dana.
+     - A phone number vs. an order number.
+     - A token the model invented is dropped.
+     - A guard test that every free-text AI feature masks.

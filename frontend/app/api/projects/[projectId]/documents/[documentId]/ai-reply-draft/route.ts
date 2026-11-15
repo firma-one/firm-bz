@@ -9,6 +9,7 @@ import { getGuardedAnthropic, aiFailureResponse } from '@/lib/ai/guarded-client'
 import { BRIO_DRAFT_FAILED } from '@/lib/ai/brio-failure'
 import { streamDraft } from '@/lib/ai/stream-draft'
 import { REPLY_DRAFT_SYSTEM_PROMPT, buildReplyDraftPrompt, loadReplyDraftContext } from '@/lib/ai/reply-draft'
+import { vaultForEngagement } from '@/lib/ai/known-entities'
 
 /** Room for thinking as well as a reply of ~120 words: thinking counts toward it. */
 const REPLY_DRAFT_MAX_TOKENS = 2000
@@ -62,7 +63,7 @@ export async function POST(
         }
 
         const scope = { firmId: ctx.firmId, userId: user.id, feature: 'replyDraft' as const }
-        const client = await getGuardedAnthropic(scope)
+        const client = await getGuardedAnthropic(scope, { vault: await vaultForEngagement(projectId, ctx.firmId) })
         if (!client) return NextResponse.json({ error: 'AI is not configured' }, { status: 503 })
 
         return await streamDraft({

@@ -1,16 +1,20 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AlertCircle, Plus, Search } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { AlertCircle, Plus, Search, Sparkles } from 'lucide-react'
+import { RaidInfo } from './raid/raid-info'
+import { RaidPriorityPicker } from './raid/raid-priority'
+import { RaidTypeBadge } from './raid/raid-tab'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Tag } from '@/components/ui/tag'
+import { InternalOnlyTag } from '@/components/ui/internal-only-tag'
+import { Brio } from '@/components/ui/brio'
+import { ThinkingDots } from '@/components/brio/brio-typing'
 import { Hint } from '@/components/ui/tooltip'
 import { LoadFailed } from '@/components/ui/load-failed'
 import { ChatMarkdown } from '@/components/ui/chat-markdown'
 import { useToast } from '@/components/ui/toast'
 import {
-    FindActionsButton,
     NotesProposalsReview,
     proposalsFailureMessage,
     requestNotesProposals,
@@ -19,9 +23,10 @@ import {
     type NotesEngagementRef,
     type NotesProposalsFound,
 } from '@/components/projects/notes-proposals-panel'
-import { AddMemoSheet, type AddMemoInput, type AddMemoOutcome } from '@/components/projects/add-memo-sheet'
+import { AddMemoSheet, type AddMemoInput, type AddMemoOutcome, type EditMemoContext, type MemoEditInput } from '@/components/projects/add-memo-sheet'
 import { DiscussionsBarPortal } from '@/components/projects/discussions-switch'
 import { AiAbortedError } from '@/lib/ai/fetch-timeout'
+import { ASSISTANT, BRIO_GREEN } from '@/lib/ai/assistant'
 import { failureFrom, failureReason } from '@/lib/files/action-failure'
 import { cn } from '@/lib/utils'
 import {
@@ -29,19 +34,26 @@ import {
     appliedTargetOf,
     boldSpeakers,
     byNewestMemo,
+    memoBodyHash,
     memoMetaLine,
+    resolveMemoReview,
     splitMemoMarkdown,
     type MemoListItem,
+    type MemoRaidSuggestion,
+    type MemoReviewPayload,
 } from '@/lib/memos/memo-shared'
+import type { RaidPriority } from '@/lib/raid/raid-shared'
 import type { DeliverableProposal, NotesProposal } from '@/lib/ai/notes-proposals'
 import { LoadingAnnouncement, ShimmerBar, ShimmerBlock } from '@/components/ui/shimmer'
 
 /*
  * Discussions › Memos (.claude/plans/brio-features-round-2.md, §8): call and meeting notes kept as one
  * Markdown file each in the engagement's "Internal Memos" folder, internal only. The list on the left,
- * newest call first; the memo open on the right, read from storage when opened and never stored; Find
- * actions under it, which has Brio read that memo and propose reminders, due-date moves and new
- * deliverables. Leads and Full Access contributors only (the routes refuse anyone else).
+ * newest call first; the memo beside it, read from storage when opened and never stored; and Action items,
+ * where Brio's sparkle has it read that memo and propose reminders, due-date moves and new deliverables,
+ * each editable before it's applied. From 1040 px wide the three are columns of one short, fixed height,
+ * each scrolling on its own, so a long transcript scrolls while the list and the actions stay in view;
+ * narrower, they stack. Leads and Full Access contributors only (the routes refuse anyone else).
  *
  * `MemosView` is the sub-tab alone, with what it does passed in, so /tour renders the same one over
  * memos kept in memory (components/demo/demo-memos.tsx). `EngagementMemosTab` is the app's, driven by
@@ -55,7 +67,7 @@ export interface MemoFound extends NotesProposalsFound {
     engagement?: NotesEngagementRef
 }
 
-export const MEMO_PROPOSALS_FOOTNOTE = 'Applied actions note this memo, so running it again shows them as done.'
+export const MEMO_PROPOSALS_FOOTNOTE = 'Applied action items note this memo, so identifying them again shows them as done.'
 
 /** Where the memos are kept, as the memos route names it. */
 export type MemoStorageName = 'Google Drive' | 'OneDrive'
@@ -66,25 +78,30 @@ export interface MemoContent {
     webUrl: string | null
 }
 
-/** "Nov" over "12": the day of the call. Spans, so it can sit inside a row's button. */
+/**
+ * "Nov" over "12": the day of the call, drawn as a desk calendar (Deepak, 2026-11-14): the month in white
+ * on the app's red, the day in black on gray. The same font and sizes as before. Spans, so it can sit
+ * inside a row's button.
+ */
 export function MemoDateBlock({ date }: { date: string }) {
     const d = new Date(`${date}T00:00:00Z`)
     const month = d.toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' })
     const label = d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
     return (
         <span
-            className="flex w-10 shrink-0 flex-col items-center rounded-control border border-line bg-surface py-1 leading-none"
+            className="flex w-10 shrink-0 flex-col items-stretch overflow-hidden rounded-control leading-none"
             title={d.getUTCFullYear() === new Date().getFullYear() ? undefined : label}
             aria-label={label}
             role="img"
         >
-            <span className="text-[11px] font-medium text-fg-subtle">{month}</span>
-            <span className="mt-0.5 text-ui font-semibold tabular-nums text-fg">{d.getUTCDate()}</span>
+            {/* The red runs to the edge; only the gray part has a border (a ring round the red read as a white rim). */}
+            <span className="bg-danger py-0.5 text-center text-[11px] font-medium text-white">{month}</span>
+            <span className="rounded-b-control border border-t-0 border-line bg-surface-muted py-1 text-center text-ui font-semibold tabular-nums text-fg">{d.getUTCDate()}</span>
         </span>
     )
 }
 
-const appliedLine = (n: number) => `${n} action${n === 1 ? '' : 's'} applied`
+const appliedLine = (n: number) => `${n} action item${n === 1 ? '' : 's'} applied`
 
 // ── The app's memos ───────────────────────────────────────────────────────────────────────────
 
@@ -93,7 +110,7 @@ export type MemoSaveOutcome =
     | { ok: false; error: string }
 
 /**
- * The engagement's memos from the memos route, and what's done with them: save one, find the actions
+ * The engagement's memos from the memos route, and what's done with them: save one, identify the action items
  * in one, apply one of those (then note it on the memo). Render `dueDialog`: a due date may stop to ask.
  */
 export function useEngagementMemos(projectId: string) {
@@ -102,6 +119,10 @@ export function useEngagementMemos(projectId: string) {
     const [storage, setStorage] = useState<MemoStorageName | null>(null)
     const [loadError, setLoadError] = useState<string | null>(null)
     const [tick, setTick] = useState(0)
+    // Memos saved or edited here whose action items (§13) are still being identified: the list is read again
+    // every few seconds while the tab is visible, until each has a review newer than `after` (the one it had
+    // when saved; none for a new memo) or three minutes have passed.
+    const [awaiting, setAwaiting] = useState<{ id: string; after: string | null }[]>([])
     const { apply: applyProposal, dialog: dueDialog } = useApplyNotesProposal(projectId)
 
     useEffect(() => {
@@ -112,7 +133,12 @@ export function useEngagementMemos(projectId: string) {
                 if (!res.ok) throw await failureFrom(res)
                 const body = await res.json() as { data: { memos?: MemoListItem[]; readOnly?: boolean; storage?: MemoStorageName | null } }
                 if (!live) return
-                setMemos(body.data.memos ?? [])
+                const list = body.data.memos ?? []
+                setMemos(list)
+                setAwaiting((waits) => waits.filter((w) => {
+                    const reviewedAt = list.find((m) => m.id === w.id)?.reviewedAt ?? null
+                    return !reviewedAt || reviewedAt === w.after
+                }))
                 setReadOnly(!!body.data.readOnly)
                 setStorage(body.data.storage ?? null)
                 setLoadError(null)
@@ -125,6 +151,22 @@ export function useEngagementMemos(projectId: string) {
 
     const reload = useCallback(() => setTick((t) => t + 1), [])
 
+    const awaitingCount = awaiting.length
+    useEffect(() => {
+        if (awaitingCount === 0) return
+        let polls = 0
+        const id = window.setInterval(() => {
+            if (document.visibilityState !== 'visible') return
+            polls += 1
+            if (polls > REVIEW_POLLS) {
+                setAwaiting([])
+                return
+            }
+            setTick((t) => t + 1)
+        }, REVIEW_POLL_MS)
+        return () => window.clearInterval(id)
+    }, [awaitingCount])
+
     const save = useCallback(async (input: AddMemoInput): Promise<MemoSaveOutcome> => {
         try {
             const res = await fetch(`/api/projects/${projectId}/memos`, {
@@ -136,7 +178,29 @@ export function useEngagementMemos(projectId: string) {
             const out = await res.json() as { data: { memo: MemoListItem; fileName: string }; warning?: string }
             const memo = out.data.memo
             setMemos((list) => [memo, ...(list ?? []).filter((m) => m.id !== memo.id)].sort(byNewestMemo))
+            setAwaiting((waits) => [...waits, { id: memo.id, after: null }])
             return { ok: true, memo, fileName: out.data.fileName, ...(out.warning ? { warning: out.warning } : {}) }
+        } catch (e) {
+            return { ok: false, error: failureReason(e) }
+        }
+    }, [projectId])
+
+    /** Edits a memo (§14.3): renamed and rewritten in storage; new notes read again when asked. */
+    const edit = useCallback(async (memo: MemoListItem, input: MemoEditInput): Promise<MemoSaveOutcome> => {
+        try {
+            const res = await fetch(`/api/projects/${projectId}/memos/${memo.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(input),
+            })
+            if (!res.ok) throw await failureFrom(res)
+            const out = await res.json() as { data: { memo: MemoListItem; fileName: string; identifying: boolean }; warning?: string }
+            const saved = out.data.memo
+            setMemos((list) => (list ?? []).map((m) => (m.id === saved.id ? saved : m)).sort(byNewestMemo))
+            if (out.data.identifying) {
+                setAwaiting((waits) => [...waits.filter((w) => w.id !== saved.id), { id: saved.id, after: saved.reviewedAt }])
+            }
+            return { ok: true, memo: saved, fileName: out.data.fileName, ...(out.warning ? { warning: out.warning } : {}) }
         } catch (e) {
             return { ok: false, error: failureReason(e) }
         }
@@ -152,10 +216,11 @@ export function useEngagementMemos(projectId: string) {
     }, [projectId])
 
     /** Applies it as a person would, then notes it on the memo. A note that fails doesn't undo the apply. */
-    const apply = useCallback(async (memo: MemoListItem, found: MemoFound, p: ApplicableProposal): Promise<ApplyOutcome> => {
+    const apply = useCallback(async (memo: MemoListItem, found: MemoFound, p: ApplicableProposal, original?: ApplicableProposal): Promise<ApplyOutcome> => {
         const outcome = await applyProposal(p, found.engagement ?? null, `From the memo “${memo.title}”: “${p.quote}”`)
         if (!outcome.ok) return outcome
-        const target = appliedTargetOf(p)
+        // What Brio found is what's recorded, so identifying them again knows it's done even after an edit.
+        const target = appliedTargetOf(original ?? p)
         try {
             const res = await fetch(`/api/projects/${projectId}/memos/${memo.id}/applied`, {
                 method: 'POST',
@@ -165,6 +230,8 @@ export function useEngagementMemos(projectId: string) {
             if (!res.ok) throw await failureFrom(res)
             const body = await res.json() as { data: { appliedCount: number } }
             setMemos((list) => (list ?? []).map((m) => (m.id === memo.id ? { ...m, appliedCount: body.data.appliedCount } : m)))
+            // What still waits on the memo changed with it.
+            setTick((t) => t + 1)
             return outcome
         } catch (e) {
             const done = p.kind === 'reminder' ? 'Reminder added' : 'Due date moved'
@@ -172,8 +239,42 @@ export function useEngagementMemos(projectId: string) {
         }
     }, [applyProposal, projectId])
 
-    return { memos, readOnly, storage, loadError, reload, save, findActions, apply, dueDialog }
+    /** What waits on a memo (§13), from the database: read on every open and after every action. */
+    const loadReview = useCallback(async (memo: MemoListItem, signal: AbortSignal): Promise<MemoReviewPayload> => {
+        const res = await fetch(`/api/projects/${projectId}/memos/${memo.id}/review`, { signal })
+        if (!res.ok) throw await failureFrom(res)
+        return (await res.json() as { data: MemoReviewPayload }).data
+    }, [projectId])
+
+    /** Dismiss all: the memo's action items no longer wait. Throws an error carrying the words to show. */
+    const dismissReview = useCallback(async (memo: MemoListItem): Promise<void> => {
+        const res = await fetch(`/api/projects/${projectId}/memos/${memo.id}/review`, { method: 'DELETE' })
+        if (!res.ok) throw await failureFrom(res)
+        setTick((t) => t + 1)
+    }, [projectId])
+
+    /** Accepts or dismisses one of the memo's RAID suggestions, through the RAID log's own route. */
+    const actOnRaid = useCallback(async (_memo: MemoListItem, itemId: string, action: 'accept' | 'dismiss', priority?: RaidPriority): Promise<void> => {
+        const res = await fetch(`/api/projects/${projectId}/raid/${itemId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action, ...(action === 'accept' && priority ? { priority } : {}) }),
+        })
+        if (!res.ok) throw await failureFrom(res)
+        setTick((t) => t + 1)
+    }, [projectId])
+
+    const identifyingIds = useMemo(() => awaiting.map((w) => w.id), [awaiting])
+
+    return {
+        memos, readOnly, storage, loadError, reload, save, edit, findActions, apply, dueDialog,
+        loadReview, dismissReview, actOnRaid, identifyingIds,
+    }
 }
+
+/** How often, and how many times, the list is read again for a new memo's action items (§13). */
+const REVIEW_POLL_MS = 5_000
+const REVIEW_POLLS = 36
 
 export type EngagementMemosController = ReturnType<typeof useEngagementMemos>
 
@@ -197,6 +298,9 @@ export function EngagementMemosTab({
 }) {
     const { addToast } = useToast()
     const [adding, setAdding] = useState(false)
+    // The memo being edited, and a fresh sheet for each opening.
+    const [editing, setEditing] = useState<{ memo: MemoListItem; context: MemoEditOpening; key: number } | null>(null)
+    const [editOpen, setEditOpen] = useState(false)
 
     const loadContent = useCallback(async (memo: MemoListItem, signal: AbortSignal): Promise<MemoContent> => {
         const res = await fetch(`/api/projects/${projectId}/memos/${memo.id}/content`, { signal })
@@ -222,6 +326,22 @@ export function EngagementMemosTab({
         return { ok: true }
     }
 
+    const startEdit = (memo: MemoListItem, context: MemoEditOpening) => {
+        setEditing((prev) => ({ memo, context, key: (prev?.key ?? 0) + 1 }))
+        setEditOpen(true)
+    }
+
+    const saveEdit = async (memo: MemoListItem, input: MemoEditInput): Promise<AddMemoOutcome> => {
+        const out = await m.edit(memo, input)
+        if (!out.ok) return out
+        addToast({
+            type: out.warning ? 'warning' : 'success',
+            title: 'Memo saved',
+            message: out.warning ?? (out.fileName !== memo.fileName ? `Renamed to ${out.fileName} in Internal Memos.` : 'Your changes are in Internal Memos.'),
+        })
+        return { ok: true }
+    }
+
     return (
         <>
             <MemosView
@@ -238,8 +358,21 @@ export function EngagementMemosTab({
                 filesHref={filesHref}
                 findActions={m.findActions}
                 apply={m.apply}
+                loadReview={m.loadReview}
+                dismissReview={m.dismissReview}
+                actOnRaid={m.actOnRaid}
+                identifyingIds={m.identifyingIds}
+                onEdit={startEdit}
             />
             <AddMemoSheet open={adding} onOpenChange={setAdding} onSave={save} />
+            {editing && (
+                <AddMemoSheet
+                    key={editing.key}
+                    open={editOpen}
+                    onOpenChange={setEditOpen}
+                    edit={{ ...editing.context, onSave: (input) => saveEdit(editing.memo, input) }}
+                />
+            )}
         </>
     )
 }
@@ -269,8 +402,57 @@ export interface MemosViewProps {
     openUnavailable?: string
     /** Brio's proposals from one memo. Throws an error carrying the words to show (or an AiAbortedError). */
     findActions: (memo: MemoListItem, signal: AbortSignal) => Promise<MemoFound>
-    /** Applies one reminder or due date found in `memo`. */
-    apply: (memo: MemoListItem, found: MemoFound, proposal: ApplicableProposal) => Promise<ApplyOutcome>
+    /**
+     * Applies one reminder or due date found in `memo`: `proposal` as the person edited it, `original`
+     * as Brio found it (what the memo records as applied).
+     */
+    apply: (memo: MemoListItem, found: MemoFound, proposal: ApplicableProposal, original?: ApplicableProposal) => Promise<ApplyOutcome>
+    /** What waits on a memo (§13): its action items and RAID suggestions. Absent: nothing waits. */
+    loadReview?: (memo: MemoListItem, signal: AbortSignal) => Promise<MemoReviewPayload>
+    /** Dismiss all: the memo's action items no longer wait. Throws an error carrying the words to show. */
+    dismissReview?: (memo: MemoListItem) => Promise<void>
+    /** Accepts or dismisses one of the memo's RAID suggestions. Throws an error carrying the words to show. */
+    /** `priority`: the one chosen on the card, when it differs from Brio's. */
+    actOnRaid?: (memo: MemoListItem, itemId: string, action: 'accept' | 'dismiss', priority?: RaidPriority) => Promise<void>
+    /** Memos whose action items are being identified right now (just added, or edited). */
+    identifyingIds?: readonly string[]
+    /**
+     * Opens the Edit sheet (§14.3) for a memo, with what the pane knows: its notes as read, what waits on
+     * it, and what was applied. `onSave` is the caller's. Absent: no Edit.
+     */
+    onEdit?: (memo: MemoListItem, context: MemoEditOpening) => void
+}
+
+/** When the memo pane opens the edit sheet: everything but where the edit is saved. */
+export type MemoEditOpening = Omit<EditMemoContext, 'onSave'>
+
+/**
+ * The list, the memo and Action items. From 1040 px wide (the view, not the window): three columns of
+ * one short, fixed height, each scrolling on its own, so a 30-minute transcript scrolls inside the memo
+ * while the list and the action items stay beside it. Narrower, they stack, and the memo keeps the same
+ * short height. Deepak asked for the memo to be "quite short" (2026-11-14); one number to tune.
+ */
+// Written out whole: Tailwind only builds classes it can read in the source.
+const MEMO_COLUMNS_HEIGHT = '@[1040px]:h-[480px]'
+const MEMO_STACKED_MAX_HEIGHT = 'max-h-[480px]'
+
+function MemosColumns({ withActions, children }: { withActions: boolean; children: ReactNode }) {
+    return (
+        <div className="@container">
+            <div
+                className={cn(
+                    // The bottom edge closes the columns, so their dividers don't just stop.
+                    'flex flex-wrap border-b border-line @[1040px]:grid',
+                    MEMO_COLUMNS_HEIGHT,
+                    withActions
+                        ? '@[1040px]:grid-cols-[260px_minmax(0,1fr)_minmax(300px,360px)]'
+                        : '@[1040px]:grid-cols-[260px_minmax(0,1fr)]',
+                )}
+            >
+                {children}
+            </div>
+        </div>
+    )
 }
 
 export function MemosView({
@@ -288,9 +470,15 @@ export function MemosView({
     openUnavailable,
     findActions,
     apply,
+    loadReview,
+    dismissReview,
+    actOnRaid,
+    identifyingIds,
+    onEdit,
 }: MemosViewProps) {
     const [query, setQuery] = useState('')
     // Files read this visit, so going back to a memo doesn't read it again. Never stored anywhere else.
+    // Kept by the memo and its last edit: an edited memo is read afresh.
     const [contents, setContents] = useState<Record<string, MemoContent>>({})
     const remember = useCallback((id: string, content: MemoContent) => setContents((prev) => ({ ...prev, [id]: content })), [])
 
@@ -346,8 +534,11 @@ export function MemosView({
                         {readOnly ? 'No memos were added to this engagement.' : 'No memos yet. Add one after your next call.'}
                     </p>
                 ) : (
-                    <div className="flex flex-wrap">
-                        <section aria-label="Memos" className="min-w-0 flex-[1_1_320px] border-line sm:max-w-[420px] sm:border-r">
+                    <MemosColumns withActions={!readOnly}>
+                        <section
+                            aria-label="Memos"
+                            className="min-w-0 flex-[1_1_320px] border-line sm:max-w-[420px] sm:border-r @[1040px]:min-h-0 @[1040px]:max-w-none @[1040px]:overflow-y-auto"
+                        >
                             {shown.length === 0 ? (
                                 <p className="border-b border-line px-4 py-3 text-small text-fg-muted">No memos match “{query.trim()}”.</p>
                             ) : (
@@ -370,8 +561,10 @@ export function MemosView({
                                                     <MemoDateBlock date={memo.date} />
                                                     <span className="min-w-0 flex-1">
                                                         <span className="block truncate text-ui font-semibold text-fg">{memo.title}</span>
-                                                        <span className="block text-small text-fg-muted">{memoMetaLine(memo)}</span>
-                                                        {memo.appliedCount > 0 && (
+                                                        <span className="block text-small text-fg-muted">{memoMetaLine(memo)}{memo.edited ? ' · edited' : ''}</span>
+                                                        {memo.toReview > 0 ? (
+                                                            <span className="mt-0.5 block text-caption font-medium text-fg">{memo.toReview} to review</span>
+                                                        ) : memo.appliedCount > 0 && (
                                                             <span className="mt-0.5 block text-caption font-normal text-fg-muted">{appliedLine(memo.appliedCount)}</span>
                                                         )}
                                                     </span>
@@ -387,29 +580,38 @@ export function MemosView({
                                 </p>
                             )}
                         </section>
-                        <section aria-label="Memo" className="flex min-w-0 flex-[999_1_480px] flex-col border-t border-line sm:border-t-0">
-                            {selected && (
-                                <MemoPane
-                                    key={selected.id}
-                                    memo={selected}
-                                    storage={storage}
-                                    readOnly={readOnly}
-                                    cached={contents[selected.id]}
-                                    onLoaded={remember}
-                                    loadContent={loadContent}
-                                    filesHref={filesHref}
-                                    openUnavailable={openUnavailable}
-                                    findActions={findActions}
-                                    apply={apply}
-                                />
-                            )}
-                        </section>
-                    </div>
+                        {selected && (
+                            <MemoPane
+                                key={memoContentKey(selected)}
+                                memo={selected}
+                                storage={storage}
+                                readOnly={readOnly}
+                                cached={contents[memoContentKey(selected)]}
+                                onLoaded={remember}
+                                loadContent={loadContent}
+                                filesHref={filesHref}
+                                openUnavailable={openUnavailable}
+                                findActions={findActions}
+                                apply={apply}
+                                loadReview={loadReview}
+                                dismissReview={dismissReview}
+                                actOnRaid={actOnRaid}
+                                identifying={!!identifyingIds?.includes(selected.id)}
+                                onEdit={onEdit ? (context) => onEdit(selected, { ...context, storage, canIdentify: true }) : undefined}
+                            />
+                        )}
+                    </MemosColumns>
                 )}
             </div>
         </>
     )
 }
+
+/** A memo's read text is kept by the memo and its last edit, so an edit reads it afresh. */
+const memoContentKey = (memo: MemoListItem) => `${memo.id}:${memo.edited?.at ?? ''}`
+
+/** "Nov 14": the day of an edit, as the pane says it. */
+const editDay = (iso: string) => new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 
 type PaneContent =
     | { status: 'loading' }
@@ -423,7 +625,11 @@ const MEMO_BODY_CLASS = cn(
     '[&_h2]:text-ui [&_h2]:text-fg [&_h4]:font-semibold',
 )
 
-/** The open memo: its header row (Internal only, the file, Open, Find actions), the memo, and Brio's proposals. */
+/**
+ * The open memo and its Actions, two sections side by side in the view's columns: the memo's header row
+ * (Internal only, the file, Open) over its notes, which scroll on their own; then Actions, with Brio's
+ * sparkle at the heading's right (Identify action items) and the proposals, editable, under it.
+ */
 function MemoPane({
     memo,
     storage,
@@ -435,17 +641,27 @@ function MemoPane({
     openUnavailable,
     findActions,
     apply,
+    loadReview,
+    dismissReview,
+    actOnRaid,
+    identifying,
+    onEdit,
 }: {
     memo: MemoListItem
     storage: MemoStorageName | null
     readOnly: boolean
     cached?: MemoContent
-    onLoaded: (id: string, content: MemoContent) => void
+    onLoaded: (key: string, content: MemoContent) => void
     loadContent: MemosViewProps['loadContent']
     filesHref?: MemosViewProps['filesHref']
     openUnavailable?: string
     findActions: MemosViewProps['findActions']
     apply: MemosViewProps['apply']
+    loadReview?: MemosViewProps['loadReview']
+    dismissReview?: MemosViewProps['dismissReview']
+    actOnRaid?: MemosViewProps['actOnRaid']
+    identifying: boolean
+    onEdit?: (context: Omit<EditMemoContext, 'onSave' | 'storage' | 'canIdentify'>) => void
 }) {
     const [content, setContent] = useState<PaneContent>(() => (cached ? { status: 'ready', content: cached } : { status: 'loading' }))
     const [attempt, setAttempt] = useState(0)
@@ -459,7 +675,7 @@ function MemoPane({
             .then((c) => {
                 if (ctrl.signal.aborted) return
                 setContent({ status: 'ready', content: c })
-                onLoaded(memo.id, c)
+                onLoaded(memoContentKey(memo), c)
             })
             .catch((e: unknown) => {
                 if (!ctrl.signal.aborted) setContent({ status: 'error', reason: failureReason(e) })
@@ -469,7 +685,7 @@ function MemoPane({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [attempt])
 
-    // Find actions: one round at a time, under the memo.
+    // Identify action items: one round at a time, in the Action items column.
     const [round, setRound] = useState(0)
     const [busy, setBusy] = useState(false)
     const [found, setFound] = useState<MemoFound | null>(null)
@@ -496,11 +712,51 @@ function MemoPane({
         }
     }
 
+    // What waits on the memo (§13): read on open, when a new memo's action items land, and after actions.
+    const [waitingPayload, setWaitingPayload] = useState<MemoReviewPayload | null>(null)
+    const [reviewTick, setReviewTick] = useState(0)
+    const [actionError, setActionError] = useState<string | null>(null)
+    useEffect(() => {
+        if (!loadReview || readOnly) return
+        const ctrl = new AbortController()
+        loadReview(memo, ctrl.signal)
+            .then((p) => { if (!ctrl.signal.aborted) setWaitingPayload(p) })
+            // Nothing waiting is shown; the sparkle still works.
+            .catch(() => undefined)
+        return () => ctrl.abort()
+        // The pane is keyed by the memo: it asks again only when told to.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [reviewTick])
+    // A memo just added: its action items land a little after the save, so read them when they do.
+    const wasIdentifying = useRef(identifying)
+    useEffect(() => {
+        if (wasIdentifying.current && !identifying) setReviewTick((t) => t + 1)
+        wasIdentifying.current = identifying
+    }, [identifying])
+
     const dismiss = () => {
         ctrlRef.current?.abort()
         setFound(null)
         setFindError(null)
         setBusy(false)
+        setActionError(null)
+        // What waits on the memo goes too, whether Brio found it on its own or by hand.
+        setWaitingPayload((p) => (p ? { ...p, review: null } : p))
+        dismissReview?.(memo).catch((e: unknown) => {
+            setActionError(e instanceof Error && e.message ? e.message : failureReason(e))
+            setReviewTick((t) => t + 1)
+        })
+    }
+
+    const actRaid = async (item: MemoRaidSuggestion, action: 'accept' | 'dismiss', priority?: RaidPriority) => {
+        if (!actOnRaid) return
+        setActionError(null)
+        try {
+            await actOnRaid(memo, item.id, action, priority)
+            setWaitingPayload((p) => (p ? { ...p, raid: p.raid.filter((r) => r.id !== item.id) } : p))
+        } catch (e) {
+            setActionError(e instanceof Error && e.message ? e.message : failureReason(e))
+        }
     }
 
     const webUrl = content.status === 'ready' ? content.content.webUrl : null
@@ -525,63 +781,244 @@ function MemoPane({
     const parts = content.status === 'ready' ? splitMemoMarkdown(content.content.text) : null
     const body = parts ? (memo.source === 'transcript' ? boldSpeakers(parts.body) : parts.body) : ''
 
+    const actionsHeadingId = `memo-actions-${memo.id}`
+    // What waits on the memo, its quotes filled in from the memo itself (only anchors are stored).
+    const memoText = content.status === 'ready' ? content.content.text : null
+    const waiting: MemoFound | null = waitingPayload?.review && memoText !== null
+        ? {
+            ...resolveMemoReview(waitingPayload.review, memoText),
+            alreadyApplied: waitingPayload.alreadyApplied,
+            appliedOn: waitingPayload.appliedOn,
+            engagement: waitingPayload.engagement,
+        }
+        : null
+    // Its notes changed since Brio read them: edited here (and not read again), or in storage.
+    const review = waitingPayload?.review ?? null
+    const changedInStorage = !!review?.bodyHash && memoText !== null && memoBodyHash(memoText) !== review.bodyHash
+    const changedSinceRead = (memo.changedSinceRead || changedInStorage) && !found && !busy && !identifying
+    // Read again after an edit: the heading says so.
+    const caption = !found && review && memo.edited && review.at > memo.edited.at
+        ? `Read again after the edit on ${editDay(memo.edited.at)}. Edit any of them. Nothing changes until you apply it.`
+        : undefined
+
+    const openEdit = () => {
+        if (!onEdit || memoText === null) return
+        const appliedIds = new Set(waitingPayload?.alreadyApplied ?? [])
+        onEdit({
+            memo,
+            body: splitMemoMarkdown(memoText).body,
+            waiting: {
+                actionItems: review ? review.proposals.filter((p) => !appliedIds.has(p.id)).length : 0,
+                raid: waitingPayload?.raid.length ?? 0,
+            },
+            applied: waitingPayload?.applied ?? [],
+        })
+    }
+    const shown = found ?? waiting
+    const shownKey = found ? `run-${round}` : `waiting-${waitingPayload?.review?.at ?? ''}`
+    const raidItems = waitingPayload?.raid ?? []
+    const raidSection = raidItems.length > 0 ? <MemoRaidSuggestions items={raidItems} onAct={actRaid} /> : null
+
     return (
         <>
-            <div className="flex flex-wrap items-center gap-2 border-b border-line px-6 py-3">
-                <Tag color="gray">Internal only</Tag>
-                <span className="min-w-0 truncate text-small text-fg-muted" title={memo.fileName}>{memo.fileName}</span>
-                <span className="flex-1" />
-                {open}
-                {!readOnly && (
-                    <FindActionsButton
-                        label="Find actions"
-                        busyLabel="Reading…"
-                        aria-label={`Find actions in ${memo.title}`}
-                        busy={busy}
-                        onClick={() => void find()}
-                    />
-                )}
-            </div>
-
-            {content.status === 'loading' ? (
-                <MemoBodySkeleton />
-            ) : content.status === 'error' ? (
-                <LoadFailed compact what="this memo" reason={content.reason} onRetry={() => setAttempt((a) => a + 1)} />
-            ) : (
-                <article className="flex max-w-[720px] flex-col gap-2.5 px-6 py-5" aria-label={memo.title}>
-                    <h3 className="text-h3 text-fg">{parts?.title || memo.title}</h3>
-                    {parts?.byline && <p className="text-small text-fg-muted">{parts.byline}</p>}
-                    {body.trim()
-                        ? <ChatMarkdown content={body} className={MEMO_BODY_CLASS} />
-                        : <p className="text-small text-fg-muted">This memo has no notes under its title.</p>}
-                </article>
-            )}
-
-            {(findError || (found && !busy)) && (
-                <div className="mx-6 mb-6 max-w-[720px]">
-                    {findError ? (
-                        <div className="flex flex-wrap items-center gap-2">
-                            <p className="flex items-start gap-1 text-small text-danger" role="alert">
-                                <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
-                                {findError}
-                            </p>
-                            <Button type="button" variant="ghost" size="sm" onClick={dismiss}>Dismiss</Button>
-                        </div>
-                    ) : found ? (
-                        <NotesProposalsReview
-                            key={round}
-                            found={found}
-                            apply={(p) => apply(memo, found, p)}
-                            onDismiss={dismiss}
-                            readOnly={readOnly}
-                            footnote={MEMO_PROPOSALS_FOOTNOTE}
-                        />
-                    ) : null}
+            <section
+                aria-label="Memo"
+                className="flex min-w-0 flex-[999_1_480px] flex-col border-t border-line sm:border-t-0 @[1040px]:min-h-0 @[1040px]:border-r"
+            >
+                <div className="flex flex-none flex-wrap items-center gap-2 border-b border-line px-6 py-3">
+                    <InternalOnlyTag />
+                    <span className="min-w-0 truncate text-small text-fg-muted" title={memo.fileName}>{memo.fileName}</span>
+                    <span className="flex-1" />
+                    {onEdit && !readOnly && (
+                        <Button type="button" variant="outline" size="sm" onClick={openEdit} disabled={content.status !== 'ready'}>
+                            Edit
+                        </Button>
+                    )}
+                    {open}
                 </div>
+
+                {/* The notes scroll inside the pane: a 30-minute transcript never pushes the actions away. */}
+                <div tabIndex={0} aria-label={`${memo.title}, notes`} className={cn(MEMO_STACKED_MAX_HEIGHT, 'overflow-y-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-action/30 @[1040px]:max-h-none @[1040px]:min-h-0 @[1040px]:flex-1')}>
+                    {content.status === 'loading' ? (
+                        <MemoBodySkeleton />
+                    ) : content.status === 'error' ? (
+                        <LoadFailed compact what="this memo" reason={content.reason} onRetry={() => setAttempt((a) => a + 1)} />
+                    ) : (
+                        <article className="flex max-w-[720px] flex-col gap-2.5 px-6 py-5" aria-label={memo.title}>
+                            <h3 className="text-h3 text-fg">{parts?.title || memo.title}</h3>
+                            {(parts?.byline || memo.edited) && (
+                                <p className="text-small text-fg-muted">
+                                    {[parts?.byline, memo.edited ? `Edited ${editDay(memo.edited.at)}${memo.edited.byName ? ` by ${memo.edited.byName}` : ''}` : null].filter(Boolean).join(' · ')}
+                                </p>
+                            )}
+                            {body.trim()
+                                ? <ChatMarkdown content={body} className={MEMO_BODY_CLASS} />
+                                : <p className="text-small text-fg-muted">This memo has no notes under its title.</p>}
+                        </article>
+                    )}
+                </div>
+            </section>
+
+            {!readOnly && (
+                <section
+                    aria-labelledby={actionsHeadingId}
+                    className="flex min-w-0 basis-full flex-col border-t border-line @[1040px]:min-h-0 @[1040px]:border-t-0"
+                >
+                    <div className="flex flex-none items-center gap-2 border-b border-line px-4 py-2.5">
+                        <h3 id={actionsHeadingId} className="text-ui font-semibold text-fg">Action items</h3>
+                        <span className="text-small text-fg-muted">from this memo</span>
+                        <span className="flex-1" />
+                        <Hint
+                            label={
+                                <span className="flex flex-col gap-0.5">
+                                    <span>Identify action items with <Brio /></span>
+                                    <span className="opacity-70">1 credit · reads this memo</span>
+                                </span>
+                            }
+                        >
+                            {/* aria-disabled, not disabled, while Brio reads: a disabled button shows no tooltip. */}
+                            <button
+                                type="button"
+                                onClick={() => { if (!busy) void find() }}
+                                aria-disabled={busy}
+                                aria-label={`Identify action items in ${memo.title}`}
+                                className={cn(ICON_BUTTON, busy && 'cursor-default hover:bg-transparent')}
+                            >
+                                <Sparkles className={cn('h-4 w-4', busy && 'animate-pulse')} style={{ color: BRIO_GREEN }} aria-hidden />
+                            </button>
+                        </Hint>
+                    </div>
+
+                    <div className="@[1040px]:min-h-0 @[1040px]:flex-1 @[1040px]:overflow-y-auto">
+                        {changedSinceRead && (
+                            <p className="flex items-start gap-1.5 border-b border-line px-4 py-2.5 text-small text-fg-muted" data-testid="memo-changed-since-read">
+                                <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+                                <span>Changed since <Brio /> read it. The sparkle reads it again.</span>
+                            </p>
+                        )}
+                        {busy ? (
+                            // Brio's dots while it reads, as it waits everywhere (components/brio/brio-typing.tsx).
+                            <div className="flex items-center gap-2 px-4 py-4 text-small text-fg-subtle" aria-busy="true">
+                                <LoadingAnnouncement label={`${ASSISTANT.name} is reading the memo`} />
+                                <ThinkingDots />
+                                <span aria-hidden><Brio /> is reading the memo…</span>
+                            </div>
+                        ) : findError ? (
+                            <div className="flex flex-wrap items-center gap-2 px-4 py-4">
+                                <p className="flex items-start gap-1 text-small text-danger" role="alert">
+                                    <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+                                    {findError}
+                                </p>
+                                <Button type="button" variant="ghost" size="sm" onClick={dismiss}>Dismiss</Button>
+                            </div>
+                        ) : shown ? (
+                            <NotesProposalsReview
+                                key={shownKey}
+                                found={shown}
+                                apply={(p, original) => apply(memo, shown, p, original)}
+                                onDismiss={dismiss}
+                                readOnly={readOnly}
+                                footnote={MEMO_PROPOSALS_FOOTNOTE}
+                                layout="column"
+                                extra={raidSection}
+                                caption={found ? undefined : caption}
+                            />
+                        ) : raidSection ? (
+                            raidSection
+                        ) : identifying ? (
+                            <div className="flex items-start gap-2 px-4 py-4" aria-busy="true">
+                                <LoadingAnnouncement label={`${ASSISTANT.name} is identifying the action items`} />
+                                <ThinkingDots className="shrink-0" />
+                                <p className="text-small text-fg-muted">
+                                    <Brio /> is identifying this memo&apos;s action items. They&apos;ll appear here in a moment.
+                                </p>
+                            </div>
+                        ) : (
+                            <div className="px-4 py-5 @[1040px]:pt-16">
+                                <p className="text-ui text-fg-muted">
+                                    <Brio /> reads this memo and suggests reminders, due-date moves and new deliverables.
+                                </p>
+                                <p className="mt-2 text-small text-fg-muted">
+                                    You can edit each one before it&apos;s applied, and nothing changes until you apply it.
+                                </p>
+                            </div>
+                        )}
+                        {actionError && (
+                            <p className="flex items-start gap-1 px-4 py-2 text-small text-danger" role="alert">
+                                <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+                                {actionError}
+                            </p>
+                        )}
+                    </div>
+                </section>
             )}
         </>
     )
 }
+
+/**
+ * A memo's RAID suggestions (§13), under its action items: each accepted into the RAID log or dismissed
+ * here, through the log's own route. Nothing of the memo's text is kept with them.
+ */
+function MemoRaidSuggestions({ items, onAct }: {
+    items: MemoRaidSuggestion[]
+    onAct: (item: MemoRaidSuggestion, action: 'accept' | 'dismiss', priority?: RaidPriority) => Promise<void>
+}) {
+    const [acting, setActing] = useState<string | null>(null)
+    // A suggestion's priority as changed here, before it's accepted.
+    const [chosen, setChosen] = useState<Record<string, RaidPriority>>({})
+    const act = async (item: MemoRaidSuggestion, action: 'accept' | 'dismiss') => {
+        setActing(item.id)
+        try {
+            const picked = chosen[item.id]
+            await onAct(item, action, picked && picked !== item.priority ? picked : undefined)
+        } finally {
+            setActing(null)
+        }
+    }
+    return (
+        <section aria-label="RAID suggestions" className="border-t border-line px-4 py-3">
+            <h4 className="flex items-center gap-1 text-ui font-semibold text-fg">RAID suggestions <RaidInfo /></h4>
+            <p className="text-caption font-normal text-fg-muted">
+                Risks, Assumptions, Issues and Decisions from this memo. What you accept goes into the RAID log.
+            </p>
+            <ul className="mt-2 flex flex-col">
+                {items.map((item) => (
+                    <li key={item.id} className="flex items-start gap-2.5 border-t border-line py-2.5 first:border-t-0">
+                        <RaidTypeBadge type={item.type} />
+                        <div className="min-w-0 flex-1">
+                            <p className="text-small text-fg">{item.title}</p>
+                            {item.priority && (
+                                <div className="mt-0.5 flex items-center gap-1.5 text-caption text-fg-muted">
+                                    <span>Priority</span>
+                                    <RaidPriorityPicker
+                                        value={chosen[item.id] ?? item.priority}
+                                        onChange={(p) => setChosen((c) => ({ ...c, [item.id]: p }))}
+                                        label={`Priority of ${item.title}`}
+                                        disabled={acting === item.id}
+                                        className="mx-0 h-6"
+                                    />
+                                    <span className="text-fg-subtle">· {ASSISTANT.name}&apos;s suggestion</span>
+                                </div>
+                            )}
+                            <div className="mt-1.5 flex justify-end gap-1.5">
+                                <Button type="button" variant="ghost" size="sm" disabled={acting === item.id} onClick={() => void act(item, 'dismiss')}>
+                                    Dismiss
+                                </Button>
+                                <Button type="button" variant="outline" size="sm" disabled={acting === item.id} onClick={() => void act(item, 'accept')}>
+                                    Accept
+                                </Button>
+                            </div>
+                        </div>
+                    </li>
+                ))}
+            </ul>
+        </section>
+    )
+}
+
+/** Brio's sparkle as an icon button, as on Your brief and the RAID log. */
+const ICON_BUTTON = 'inline-flex h-7 w-7 items-center justify-center rounded-control text-fg-muted transition-colors duration-ui-fast hover:bg-surface-hover hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action/30'
 
 /**
  * A memo's text while it's read from Drive or OneDrive, the slow part of opening one: the heading, the

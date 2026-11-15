@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { nudgeGreeting } from '@/lib/ai/nudge-draft'
 import {
     AlertTriangle,
     Archive,
@@ -190,7 +191,8 @@ export function DemoEngagementOverview({ engagement }: { engagement: DemoEngagem
                     }))}
                     demo={{
                         recipients: [{ userId: 'tour-reviewer', name: 'Dana Whitfield', role: 'Reviewer' }],
-                        draft: (c, first) => `Hi ${first}, a quick check-in on ${c.name}${c.docId ? ` (${c.docId})` : ''}. It's been with you for review for ${c.daysWaiting} days.\n\nIf anything needs changing, a comment here is the quickest way to get it to us.`,
+                        // Opens as the app's does: the person tagged by their member name, then Brio's words.
+                        draft: (c, name) => `${nudgeGreeting(name)}A quick check-in on ${c.name}${c.docId ? ` (${c.docId})` : ''}. It's been with you for review for ${c.daysWaiting} days.\n\nIf anything needs changing, a comment here is the quickest way to get it to us.`,
                     }}
                 />
                 {/* As the app: the RAID log's short form under the Action Center. */}

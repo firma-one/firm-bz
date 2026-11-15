@@ -19,11 +19,13 @@ describe('FirmBriefCard while rewriting', () => {
         expect(stop).toHaveBeenCalled()
     })
 
-    it('draws the sections as they stream in, in place of the old brief', () => {
-        render(<FirmBriefCard brief={OLD} refreshing streamText={'## Needs attention\nTwo engagements'} onRewrite={vi.fn()} onStop={vi.fn()} />)
-        expect(screen.getByRole('heading', { name: 'Needs attention' })).toBeTruthy()
-        expect(screen.getByText(/Two/)).toBeTruthy()
+    it('types the sections out as they stream in, in place of the old brief', async () => {
+        const { container } = render(<FirmBriefCard brief={OLD} refreshing streamText={'## Needs attention\nTwo engagements'} onRewrite={vi.fn()} onStop={vi.fn()} />)
         expect(screen.queryByText('Old news.')).toBeNull()
+        expect(await screen.findByRole('heading', { name: 'Needs attention' })).toBeTruthy()
+        expect(await screen.findByText(/Two/)).toBeTruthy()
+        // Brio's caret after the last word, as it writes.
+        expect(container.querySelector('.fm-type-caret')).not.toBeNull()
     })
 })
 

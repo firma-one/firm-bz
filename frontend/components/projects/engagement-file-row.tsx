@@ -3,7 +3,6 @@
 import { failureFrom, failureReason } from '@/lib/files/action-failure'
 import React from 'react'
 import {
-    Folder,
     Share2,
     Lock,
     Link2,
@@ -24,13 +23,14 @@ import { SharedFolderIcon } from '@/components/ui/folder-shared-icon'
 import { DeliverableIcon } from '@/components/ui/deliverable-icon'
 import { DocumentActionMenu } from '@/components/ui/document-action-menu'
 import { openAssetDetailsPane } from '@/components/files/asset-details-pane'
+import type { ActivityStatus } from '@/lib/sharing-settings'
 import { useRightPane } from '@/lib/right-pane-context'
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
 import type { EngagementRoleSlug } from '@/lib/deliverable-stage-roles'
 import { FileAssigneeCell, FileDueDateCell, FileStatusCell } from '@/components/projects/file-property-cells'
 import { fileStage } from '@/lib/files/file-stage'
 import { BlockedTag } from '@/components/files/blocked-tag'
-import { PrivateMark } from '@/components/files/private-mark'
+import { InternalFolderIcon, InternalOnlyFolderIcon, PrivateMark } from '@/components/files/private-mark'
 import { MissingDueWarning } from '@/components/files/missing-due-warning'
 import { needsDueDate } from '@/lib/ui/due-date'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -256,6 +256,10 @@ function EngagementFileRowInner({
     // Plain folders only organize, so they have no Status or Due: a dash.
     const isInsideDeliverable = isInsideApprovedDeliverable || inDeliverableFolder
         || (isGuest ? descendantIdsForGuest : isEC ? descendantIdsForEC : descendantIds).has(file.id)
+    // Internal only shows, and comes off, only inside a deliverable: outside one, Limited Access contributors
+    // and Reviewers reach nothing, so everything there is internal already and the mark would say nothing.
+    // The stored mark stays (the memos folder keeps its own, in case it's ever moved into a deliverable).
+    const shownInternalOnly = !!file.isPrivate && isInsideDeliverable
     // The stage the Status column shows (and its filter matches).
     const { tracked: isTracked, stage: shownStage } = fileStage(file, { isFolder, isInsideDeliverable, isExternalViewer: isEC || isGuest })
     const emptyTrackedValue = isTracked ? 'Not set' : '—'
@@ -273,9 +277,39 @@ function EngagementFileRowInner({
     const isIndexing = !isFolder && !!file.projectDocumentId && file.indexingStatus === 'PROCESSING'
     // Row tools appear on hover or keyboard focus, and stay while the row is in use.
     const toolsPinned = isActionMenuOpen || isSelected || isIndexing || isPreviewPaneOpen || isHighlighted
+    // A deliverable folder's Details is the Board's own pane for it; any other folder has none on the row.
+    const isDeliverableFolder = isFolder && !!file.isDeliverable && !!file.projectDocumentId
     // Details, from the row icon and the ⋮ menu alike: Info edits what this row's own cells may.
     const openDetails = () => {
         onOpenInfoPane(file.id)
+        if (isDeliverableFolder) {
+            // Loaded when opened: the Board's pane module sets up its own storage client on import,
+            // which a row (and its tests) shouldn't need until Details is pressed.
+            void import('@/components/projects/shares/deliverable-detail-panel').then(({ openDeliverableDetailPane }) => openDeliverableDetailPane(rightPane, {
+                documentId: file.projectDocumentId!,
+                projectId,
+                docId: file.docId ?? null,
+                fileName: file.name ?? '',
+                activityStatus: ((file as { deliverableStatus?: ActivityStatus }).deliverableStatus ?? 'to_do'),
+                dueDate: savedDue,
+                canManage: isProjectLead,
+                readOnly,
+                isExternalViewer: isGuest,
+                isExternalCollaborator: isEC,
+                roleSlug: roleSlug ?? undefined,
+                orgSlug,
+                deeplinkBase: typeof window !== 'undefined' ? window.location.href.replace(/#.*$/, '') : '',
+                onOpenSubtaskDocument: (doc) => onOpenDocument(
+                    { id: doc.externalId ?? doc.documentId, name: doc.fileName, mimeType: doc.mimeType ?? undefined } as DriveFile,
+                    file,
+                ),
+                openLabel,
+                // The row's Status and Due follow what changes in the pane.
+                onStatusChange: () => onShareSaved?.(),
+                onClose: () => rightPane.clearPane(),
+            }))
+            return
+        }
         openAssetDetailsPane(rightPane, {
             document: file,
             projectId,
@@ -343,7 +377,7 @@ function EngagementFileRowInner({
                 // can replace the rows it is not rendering with plain spacers.
                 "group grid gap-4 h-[35px] border-b border-line overflow-hidden pl-1 pr-2 transition-colors items-center cursor-default relative text-ui",
                 (isFolderApproved || isInsideApprovedDeliverable) && "bg-primary/5 hover:bg-primary/10",
-                (isIntakeRow || file.lock?.type === 'finalize' || (file.isPrivate && !isFolder)) ? "hover:bg-surface-hover opacity-60" : !(isFolderApproved || isInsideApprovedDeliverable) && "hover:bg-surface-hover",
+                (isIntakeRow || file.lock?.type === 'finalize' || (shownInternalOnly && !isFolder)) ? "hover:bg-surface-hover opacity-60" : !(isFolderApproved || isInsideApprovedDeliverable) && "hover:bg-surface-hover",
                 !isIntakeRow && isSelected && "bg-surface-selected hover:bg-surface-selected",
                 !isIntakeRow && isActionMenuOpen && "bg-surface-muted",
                 !isIntakeRow && (isCommentPaneOpen || isInfoPaneOpen || isPreviewPaneOpen) && "bg-surface-muted",
@@ -391,15 +425,19 @@ function EngagementFileRowInner({
                 <div className="flex-shrink-0 w-4 h-4 flex items-center justify-center">
                     {/* A deliverable folder and the folders inside one wear folder-plus (inside ones a shade lighter);
                         documents keep their file-type icons; a folder that only contains a deliverable keeps the
-                        shared-folder mark */}
+                        shared-folder mark; an internal only folder wears folder-lock; any other folder is the firm's
+                        alone and says so on hover */}
                     {isFolder && file.isDeliverable ? (
                         <DeliverableIcon hint />
+                    ) : isFolder && shownInternalOnly ? (
+                        <InternalOnlyFolderIcon />
                     ) : isFolder && (isAncestorShared || isInsideApprovedDeliverable) ? (
                         <DeliverableIcon hint inside />
                     ) : isFolder && showBadge ? (
                         <SharedFolderIcon fillLevel={1} tooltip="Contains a deliverable" />
                     ) : isFolder ? (
-                        <Folder className="h-4 w-4 fill-surface-muted text-fg-muted flex-shrink-0" />
+                        // Outside any deliverable: the firm's alone, as its hint says. No lock; that marks the exception.
+                        <InternalFolderIcon />
                     ) : (
                         <DocumentIcon mimeType={file.mimeType} className="h-4 w-4" />
                     )}
@@ -529,8 +567,8 @@ function EngagementFileRowInner({
                                 </TooltipContent>
                             </Tooltip>
                         ) : null}
-                        {/* Whoever the ⋮ menu lets make it public can do so from the mark. */}
-                        {file.isPrivate && <PrivateMark onMakePublic={canOrganizeTree ? () => onPrivacy(file, false) : undefined} />}
+                        {/* Whoever the ⋮ menu lets make it public can do so from the mark. A folder's is its icon. */}
+                        {shownInternalOnly && !isFolder && <PrivateMark onMakePublic={canOrganizeTree ? () => onPrivacy(file, false) : undefined} />}
                         {/* Last, and pulled up against the strip: Bookmark leads the row's quick actions. */}
                         {bookmarkId && (
                             <Tooltip>
@@ -559,7 +597,7 @@ function EngagementFileRowInner({
                         ⋮ menu) gives way when the table is at its narrowest. */}
                     <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
 
-                        {!isFolder && file.documentType !== 'LINK' && (
+                        {(!isFolder || isDeliverableFolder) && file.documentType !== 'LINK' && (
                             <Tooltip>
                                 <TooltipTrigger asChild>
                                     <button
@@ -727,7 +765,7 @@ function EngagementFileRowInner({
                             onCrossEngagementCopy={isProjectLead && canMutateFile ? (doc) => onOpenCrossEngagement(doc as DriveFile) : undefined}
                             onDeleteDocument={canMutateFile ? (doc) => onTrash(doc as DriveFile) : undefined}
                             onMakePrivate={canManage && !locked && !isIntakeRow && !file.isPrivate && isInsideDeliverable ? () => onPrivacy(file, true) : undefined}
-                            onMakePublic={canManage && !locked && !isIntakeRow && file.isPrivate ? () => onPrivacy(file, false) : undefined}
+                            onMakePublic={canManage && !locked && !isIntakeRow && shownInternalOnly ? () => onPrivacy(file, false) : undefined}
                             onOpenChange={(open) => onActionMenuOpenChange(file.id, open)}
                             onOpenDocument={(doc) => onOpenDocument(doc as DriveFile, file)}
                             connectorAccountEmail={connectorAccountEmail}

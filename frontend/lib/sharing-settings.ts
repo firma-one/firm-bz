@@ -376,15 +376,37 @@ export function privateSubtreeIds(
   return hidden
 }
 
+/** A folder tagged as a deliverable (settings.share.createdAt), as the Board decides. */
+function isDeliverableSettings(settings: unknown): boolean {
+  try {
+    return !!parseSettingsFromDb(settings).share?.createdAt
+  } catch {
+    return false
+  }
+}
+
 /**
- * What the Files "Internal only" filter keeps: everything hidden (privateSubtreeIds), and the folders above
- * it, so it can still be reached by walking down the tree, as the Deliverables filter does.
+ * What the Files "Internal only" filter keeps: what's hidden inside a deliverable (privateSubtreeIds), and
+ * the folders above it, so it can still be reached by walking down the tree, as the Deliverables filter
+ * does. A mark outside every deliverable is left out, as the Files row leaves it unshown: Limited Access
+ * contributors and Reviewers reach nothing outside one, so there everything is internal already. The
+ * mark itself stays (the memos folder keeps its own, in case it's ever moved into a deliverable).
  */
 export function internalOnlyTree(
   rows: ReadonlyArray<{ externalId: string | null; parentId: string | null; settings: unknown }>,
 ): { ids: Set<string>; ancestorIds: Set<string> } {
-  const ids = privateSubtreeIds(rows)
   const parentOf = new Map(rows.filter((r) => r.externalId).map((r) => [r.externalId as string, r.parentId]))
+  const settingsOf = new Map(rows.filter((r) => r.externalId).map((r) => [r.externalId as string, r.settings]))
+  const insideDeliverable = (id: string): boolean => {
+    const seen = new Set<string>()
+    // Stops at a folder already walked, so a cycle in provider data can't hang it.
+    for (let parent = parentOf.get(id) ?? null; parent && !seen.has(parent); parent = parentOf.get(parent) ?? null) {
+      seen.add(parent)
+      if (isDeliverableSettings(settingsOf.get(parent))) return true
+    }
+    return false
+  }
+  const ids = new Set(Array.from(privateSubtreeIds(rows)).filter(insideDeliverable))
   const ancestorIds = new Set<string>()
   ids.forEach((id) => {
     let parent = parentOf.get(id) ?? null

@@ -12,6 +12,7 @@ import {
     buildStatusUpdatePrompt,
     loadStatusUpdateInputs,
 } from '@/lib/ai/status-update'
+import { vaultForEngagement } from '@/lib/ai/known-entities'
 
 /**
  * POST /api/projects/[projectId]/ai-status-update
@@ -51,7 +52,7 @@ export async function POST(
         }
 
         const scope = { firmId: ctx.firmId, userId: user.id, feature: 'statusUpdate' as const }
-        const client = await getGuardedAnthropic(scope)
+        const client = await getGuardedAnthropic(scope, { vault: await vaultForEngagement(projectId, ctx.firmId) })
         if (!client) return NextResponse.json({ error: 'AI is not configured' }, { status: 503 })
 
         return await streamDraft({

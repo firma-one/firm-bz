@@ -264,7 +264,7 @@ describe('findNotesActions', () => {
 
     it('asks once, with the strict tool and without sampling parameters', async () => {
         create.mockResolvedValue({ stop_reason: 'tool_use', usage, content: [{ type: 'tool_use', id: 't1', name: NOTES_TOOL_NAME, input: empty }] })
-        await findNotesActions({ ...ctx, scope })
+        await findNotesActions({ ...ctx, scope, vault: null })
         const [body, options] = create.mock.calls[0]
         expect(body).toMatchObject({ model: 'test-model', max_tokens: 4000, output_config: { effort: 'medium' }, tools: [NOTES_TOOL] })
         expect(body.tools[0].strict).toBe(true)
@@ -275,13 +275,13 @@ describe('findNotesActions', () => {
 
     it('a refusal is a failure, and the tokens are still metered', async () => {
         create.mockResolvedValue({ stop_reason: 'refusal', usage, content: [] })
-        expect(await findNotesActions({ ...ctx, scope })).toEqual({ ok: false, reason: 'declined' })
+        expect(await findNotesActions({ ...ctx, scope, vault: null })).toEqual({ ok: false, reason: 'declined' })
         expect(meter).toHaveBeenCalledWith(scope, { inputTokens: 900, outputTokens: 300 })
     })
 
     it('an answer without the tool call is no answer', async () => {
         create.mockResolvedValue({ stop_reason: 'end_turn', usage, content: [{ type: 'text', text: 'Here are the actions…' }] })
-        expect(await findNotesActions({ ...ctx, scope })).toEqual({ ok: false, reason: 'no_answer' })
+        expect(await findNotesActions({ ...ctx, scope, vault: null })).toEqual({ ok: false, reason: 'no_answer' })
     })
 
     it('validates what the tool call carries', async () => {
@@ -296,7 +296,7 @@ describe('findNotesActions', () => {
                 },
             }],
         })
-        const out = await findNotesActions({ ...ctx, scope })
+        const out = await findNotesActions({ ...ctx, scope, vault: null })
         expect(out).toMatchObject({ ok: true, dropped: 1, proposals: [{ kind: 'reminder', title: 'Chase the brokerage 1099-B' }] })
     })
 })

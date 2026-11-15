@@ -12,6 +12,8 @@ const st = vi.hoisted(() => ({
 }))
 const { create, meter } = vi.hoisted(() => ({ create: vi.fn(), meter: vi.fn(async () => {}) }))
 
+// Masking has its own tests (lib/ai/pseudonymize, masked-client, known-entities): no vault here.
+vi.mock('@/lib/ai/known-entities', () => ({ vaultForEngagement: async () => null, vaultForFirms: async () => null }))
 vi.mock('@/utils/supabase/server', () => ({
     createClient: async () => ({ auth: { getUser: async () => ({ data: { user: { id: 'dana' } } }) } }),
 }))

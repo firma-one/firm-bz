@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma'
 import { logger } from '@/lib/logger'
 import { computeEngagementInsights, type DeliverableProgress } from '@/lib/insights/engagement-insights'
 import { ROLE_NAME } from '@/lib/persona-ui-groups'
+import { resolveDisplayName } from '@/lib/auth/display-name'
+import { formatDisplayName } from '@/lib/comments/mentions'
 import { readInsightsSummary } from './engagement-summary'
 import { PLATFORM_DATA_MODEL } from './engagement-chat'
 
@@ -129,9 +131,9 @@ export async function clientSideRecipients(engagementId: string): Promise<Status
         try {
             const { data } = await admin.auth.admin.getUserById(m.userId)
             const u = data?.user
-            const name = (u?.user_metadata?.full_name as string | undefined)
-                ?? u?.email?.split('@')[0]
-                ?? 'Member'
+            // Their member name, as the comment box and threads spell it, so a nudge's tag reads as theirs.
+            const email = u?.email ?? ''
+            const name = formatDisplayName(resolveDisplayName(u?.user_metadata ?? {}, email), email) || 'Member'
             return { userId: m.userId, name, role: ROLE_NAME[m.role as keyof typeof ROLE_NAME] ?? m.role }
         } catch (error) {
             logger.warn(`Status update: could not name member ${m.userId}`, error as Error)

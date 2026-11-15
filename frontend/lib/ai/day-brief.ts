@@ -13,6 +13,7 @@ import { statusOf } from '@/lib/ui/status'
 import { ASSISTANT } from './assistant'
 import { AI_EFFORT, AI_MODEL, extractText } from './client'
 import { getGuardedAnthropic, meterAiCall, usageOf, type AiScope } from './guarded-client'
+import { vaultForFirms } from '@/lib/ai/known-entities'
 
 /*
  * "Your brief" (was "Your day"): Brio's short brief at the top of Home (.claude/plans/brio-features-round-2.md, §3.2).
@@ -528,7 +529,10 @@ export async function generateDayBrief(
     feature: 'dayBrief' | 'dayBriefRewrite' = 'dayBrief',
 ): Promise<DayBriefResult> {
     const scope: AiScope = { firmId: input.billFirmId, userId: who.userId, feature }
-    const client = await getGuardedAnthropic(scope)
+    // Home spans firms: the names of every firm the brief draws from are masked (§14 item 5).
+    const firmIds = [input.billFirmId, ...Object.keys(input.firmNames ?? {}), ...[...input.needsYou, ...input.overdue, ...input.week].map((i) => i.firmId)]
+        .filter((id): id is string => !!id)
+    const client = await getGuardedAnthropic(scope, { vault: await vaultForFirms(firmIds) })
     if (!client) return { ok: false, reason: 'unconfigured' }
 
     // No temperature, top_p or top_k: Haiku 5.5 answers them with a 400.

@@ -20,6 +20,7 @@ export const AI_FEATURES = [
     'dayBrief',
     'dayBriefRewrite',
     'raidCheck',
+    'memoRaid',
 ] as const
 
 export type AiFeature = (typeof AI_FEATURES)[number]
@@ -61,10 +62,14 @@ export const CREDIT_WEIGHTS: Record<AiFeature, number> = {
     // 2026-11-13). Only when their items changed: an unchanged day answers without a model call.
     dayBriefRewrite: 1,
     // The RAID log's Brio check (.claude/plans/brio-features-round-2.md, §9): one batched call per
-    // engagement over its new comment messages and memos. At most one run per engagement per active
-    // day (the daily check runs only where there is something new since the last one), plus each
-    // Check now a person presses. The log's status, health and Board entries are free.
+    // engagement over its new comment messages (memos are read when added, §13). At most one run per
+    // engagement per active day (the daily check runs only where there is something new since the
+    // last one), plus each Check now a person presses. The log's status, health and Board entries are free.
     raidCheck: 1,
+    // A memo's RAID suggestions, read when the memo is added (§13), beside its action items. Free:
+    // the memo's one credit is its action items (notesProposals), as agreed with Deepak 2026-11-14.
+    // Still recorded, so its token cost stays visible in the ledger.
+    memoRaid: 0,
 }
 
 /**

@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Sparkles, Hourglass } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/toast'
@@ -9,8 +9,8 @@ import { BRIO_GREEN } from '@/lib/ai/assistant'
 import { failureFrom, failureReason } from '@/lib/files/action-failure'
 import { formatFullDate } from '@/lib/utils'
 import type { DeliverableProgress } from '@/lib/insights/engagement-insights'
-import { nudgeCandidates, type NudgeCandidate } from '@/lib/ai/nudge-draft'
-import { getNudgeRecipients } from '@/lib/actions/status-update'
+import { daysAgoWords, nudgeCandidates, nudgeRowState, type NudgeCandidate, type NudgeRowState, type NudgeStatus } from '@/lib/ai/nudge-draft'
+import { getNudgeRecipients, getNudgeStatuses } from '@/lib/actions/status-update'
 import type { ActionResult } from '@/lib/actions/action-result'
 
 function refOf(c: Pick<NudgeCandidate, 'docId' | 'name'>): string {
@@ -23,6 +23,10 @@ function refOf(c: Pick<NudgeCandidate, 'docId' | 'name'>): string {
  * nudge". Brio drafts a short check-in to one Reviewer or Limited Access contributor; the Lead edits
  * it and sends it as a comment on the deliverable, which also reminds that person.
  *
+ * After a nudge, the row says who was nudged and when instead of offering another, from the moment
+ * it is sent. Another is offered NUDGE_AGAIN_DAYS later if they haven't responded; once they reply
+ * on the deliverable or tick the nudge off in their Inbox, the row says so and offers none.
+ *
  * Leads only; the caller decides. Renders nothing when nothing is waiting.
  */
 export function WaitingOnClient({
@@ -34,8 +38,8 @@ export function WaitingOnClient({
     projectId: string
     deliverables: DeliverableProgress[]
     engagementBase: string
-    /** The /tour: canned people and drafts; no requests, nothing sent. */
-    demo?: { recipients: ComposerRecipient[]; draft: (c: NudgeCandidate, firstName: string) => string }
+    /** The /tour: canned people and drafts (`name` is the person's member name); no requests, nothing sent. */
+    demo?: { recipients: ComposerRecipient[]; draft: (c: NudgeCandidate, name: string) => string }
 }) {
     const { addToast } = useToast()
     const candidates = useMemo(() => nudgeCandidates(deliverables), [deliverables])
@@ -43,6 +47,26 @@ export function WaitingOnClient({
     const [recipients, setRecipients] = useState<ComposerRecipient[] | null>(null)
     const [recipientId, setRecipientId] = useState<string | null>(null)
     const [error, setError] = useState<string | null>(null)
+    // Each row's last nudge and what came of it (lib/ai/nudge-status.ts); a nudge sent here is added
+    // as soon as it is sent.
+    const [statuses, setStatuses] = useState<Map<string, NudgeStatus>>(() => new Map())
+    const candidateIds = candidates.map((c) => c.deliverableId).join(',')
+    useEffect(() => {
+        if (demo || !candidateIds) return
+        let cancelled = false
+        getNudgeStatuses(projectId, candidateIds.split(','))
+            .then((r) => {
+                if (cancelled || !r.ok) return
+                setStatuses((prev) => {
+                    const next = new Map(r.data.map((s) => [s.deliverableId, s] as const))
+                    // A nudge sent while this was loading wins over what was read before it.
+                    prev.forEach((s, id) => { if (!next.has(id) || next.get(id)!.nudgedAt < s.nudgedAt) next.set(id, s) })
+                    return next
+                })
+            })
+            .catch(() => { /* the rows still offer a nudge; this only quiets them */ })
+        return () => { cancelled = true }
+    }, [projectId, candidateIds, demo])
 
     if (candidates.length === 0) return null
 
@@ -107,10 +131,11 @@ export function WaitingOnClient({
                             {refOf(c)}
                         </a>
                         {c.dueDate && <span className="text-small text-fg-muted">due {formatFullDate(c.dueDate)}</span>}
-                        <Button variant="outline" size="sm" onClick={() => void open(c)}>
-                            <Sparkles className="h-3.5 w-3.5" style={{ color: BRIO_GREEN }} aria-hidden />
-                            Draft a nudge
-                        </Button>
+                        <NudgeAction
+                            state={nudgeRowState(statuses.get(c.deliverableId))}
+                            discussionHref={engagementBase ? `${engagementBase}/comments#doc-comment:${c.deliverableId}` : undefined}
+                            onNudge={() => void open(c)}
+                        />
                     </li>
                 ))}
             </ul>
@@ -142,12 +167,63 @@ export function WaitingOnClient({
                     draftUrl={`/api/projects/${projectId}/documents/${active.deliverableId}/ai-nudge-draft`}
                     draftBody={{ recipientUserId: chosen.userId }}
                     sendLabel="Send nudge"
-                    staticDraft={demo ? demo.draft(active, chosen.name.split(/\s+/)[0]) : undefined}
+                    staticDraft={demo ? demo.draft(active, chosen.name) : undefined}
+                    // The draft opens by tagging them ("Hi @Dana Whitfield,"): a chip, as in the comment box.
+                    mentionNames={[chosen.name]}
                     sentNote={`Posts as a comment on ${active.docId ?? `"${active.name}"`} and reminds ${chosen.name.split(/\s+/)[0]}.`}
                     onSend={send}
-                    onSent={() => addToast({ type: 'success', title: 'Nudge sent', message: `Posted on ${refOf(active)}.` })}
+                    onSent={() => {
+                        // The row says so at once: no second nudge while this one is fresh.
+                        setStatuses((prev) => new Map(prev).set(active.deliverableId, {
+                            deliverableId: active.deliverableId,
+                            nudgedAt: new Date().toISOString(),
+                            recipientId: chosen.userId,
+                            recipientName: chosen.name,
+                            repliedAt: null,
+                            doneAt: null,
+                        }))
+                        addToast({ type: 'success', title: 'Nudge sent', message: `Posted on ${refOf(active)}.` })
+                    }}
                 />
             )}
         </section>
     )
+}
+
+/**
+ * The row's right-hand side: Draft a nudge, or what the last nudge came to. Quiet text when there is
+ * nothing to do; the button only when a nudge is due.
+ */
+function NudgeAction({ state, discussionHref, onNudge }: {
+    state: NudgeRowState
+    discussionHref?: string
+    onNudge: () => void
+}) {
+    const button = (label: string) => (
+        <Button variant="outline" size="sm" onClick={onNudge}>
+            <Sparkles className="h-3.5 w-3.5" style={{ color: BRIO_GREEN }} aria-hidden />
+            {label}
+        </Button>
+    )
+    switch (state.kind) {
+        case 'due':
+            return button('Draft a nudge')
+        case 'nudged':
+            return <span className="text-small text-fg-muted">Nudged {state.name} {daysAgoWords(state.at)}</span>
+        case 'again':
+            return (
+                <span className="inline-flex items-center gap-3">
+                    <span className="text-small text-fg-muted">Nudged {state.name} {daysAgoWords(state.at)}</span>
+                    {button('Nudge again')}
+                </span>
+            )
+        case 'replied': {
+            const words = `${state.name} replied ${daysAgoWords(state.at)}`
+            return discussionHref
+                ? <a href={discussionHref} className="text-small text-fg-muted underline-offset-2 hover:text-fg hover:underline">{words}</a>
+                : <span className="text-small text-fg-muted">{words}</span>
+        }
+        case 'done':
+            return <span className="text-small text-fg-muted">{state.name} marked the nudge done {daysAgoWords(state.at)}</span>
+    }
 }

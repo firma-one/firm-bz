@@ -83,9 +83,10 @@ describe('Memos on /tour', () => {
         await within(pane).findByRole('heading', { name: 'Kickoff call' }, { timeout: 2000 })
         expect(within(pane).getAllByText('Dana Whitfield:')[0].tagName).toBe('STRONG')
 
-        fireEvent.click(within(pane).getByRole('button', { name: 'Find actions in Kickoff call' }))
-        fireEvent.click(await within(pane).findByRole('button', { name: 'Apply 1 selected' }, { timeout: 3000 }))
-        await waitFor(() => expect(within(screen.getByTestId('memo-row-tour-memo-kickoff')).getByText('1 action applied')).toBeTruthy(), { timeout: 3000 })
+        const actions = screen.getByRole('region', { name: 'Action items' })
+        fireEvent.click(within(actions).getByRole('button', { name: 'Identify action items in Kickoff call' }))
+        fireEvent.click(await within(actions).findByRole('button', { name: 'Apply 1 selected' }, { timeout: 3000 }))
+        await waitFor(() => expect(within(screen.getByTestId('memo-row-tour-memo-kickoff')).getByText('1 action item applied')).toBeTruthy(), { timeout: 3000 })
         expect(fetch).not.toHaveBeenCalled()
     })
 

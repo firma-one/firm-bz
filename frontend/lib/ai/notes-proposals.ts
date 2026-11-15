@@ -5,6 +5,7 @@ import { AI_EFFORT, AI_MODEL } from '@/lib/ai/client'
 import { getGuardedAnthropic, meterAiCall, type AiScope } from '@/lib/ai/guarded-client'
 import { isDeliverableFolder } from '@/lib/notification-links'
 import { logger } from '@/lib/logger'
+import type { Vault } from '@/lib/ai/pseudonymize'
 
 /**
  * Call notes into proposals (.claude/plans/brio-features-round-2.md, §3.5).
@@ -535,8 +536,10 @@ export async function findNotesActions(params: {
     deliverables: NotesDeliverable[]
     today: string
     scope: AiScope
+    /** What the model may read (§14 item 5): the engagement's vault, from lib/ai/known-entities.ts. */
+    vault: Vault | null
 }): Promise<FindNotesActionsOutcome> {
-    const client = await getGuardedAnthropic(params.scope)
+    const client = await getGuardedAnthropic(params.scope, { vault: params.vault })
     if (!client) return { ok: false, reason: 'unconfigured' }
 
     const message = await client.messages.create({

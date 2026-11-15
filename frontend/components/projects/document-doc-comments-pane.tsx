@@ -34,6 +34,7 @@ import { useToast } from '@/components/ui/toast'
 import { LoadFailed } from '@/components/ui/load-failed'
 import { failureFrom, failureReason } from '@/lib/files/action-failure'
 import { useBrioDraft } from '@/components/brio/use-brio-draft'
+import { ThinkingDots, TypingCaret } from '@/components/brio/brio-typing'
 import { BrioDraftLabel } from '@/components/brio/brio-draft-label'
 import { BRIO_DRAFT_FAILED } from '@/lib/ai/brio-failure'
 import { ASSISTANT, BRIO_GREEN } from '@/lib/ai/assistant'
@@ -1032,6 +1033,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
     : <React.Fragment key={k}>{part}</React.Fragment>)
   /** The box holds a draft of Brio's: it says so above the text, until it's sent or discarded. */
   const showDraftNote = !!drafting && (draft.status === 'streaming' || !!draft.text)
+  const draftWriting = !!drafting && draft.status === 'streaming'
   const ghostButton = 'inline-flex h-7 shrink-0 items-center gap-1 rounded-control px-2 text-small text-fg-muted hover:bg-surface-hover hover:text-fg disabled:opacity-40'
   const Composer = readOnly ? (
     <p className="shrink-0 text-small text-fg-muted">This engagement is completed, so it&apos;s read only.</p>
@@ -1102,6 +1104,10 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
             ))}
           {/* A trailing new line needs a character to take up its line, as it does in the text box. */}
           {newContent.endsWith('\n') && '\u200b'}
+          {/* Brio writing the draft, as it writes everywhere: dots until its first word, then the
+              caret after the last (components/brio/brio-typing.tsx). This layer sits exactly under
+              the text, so they land where the next word will. */}
+          {draftWriting && (draft.text ? <TypingCaret /> : <ThinkingDots className="align-middle" />)}
         </div>
         <textarea
           ref={textareaRef}
@@ -1109,7 +1115,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
           rows={1}
           onScroll={(e) => { if (backdropRef.current) backdropRef.current.scrollTop = e.currentTarget.scrollTop }}
           disabled={submitting}
-          placeholder={internalMode ? 'Internal note · only Leads and Full Access contributors see this…' : 'Leave a comment…'}
+          placeholder={draftWriting ? '' : internalMode ? 'Internal note · only Leads and Full Access contributors see this…' : 'Leave a comment…'}
           aria-label={internalMode ? 'Internal note' : 'Comment'}
           aria-describedby={showDraftNote ? draftLabelId : undefined}
           aria-busy={drafting && draft.status === 'streaming' ? true : undefined}

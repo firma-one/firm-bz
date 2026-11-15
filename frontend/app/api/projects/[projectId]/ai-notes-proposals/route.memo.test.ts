@@ -22,8 +22,12 @@ const h = vi.hoisted(() => ({
     create: vi.fn(),
     getRenderableContent: vi.fn(),
     recordAiUsage: vi.fn(async () => {}),
+    update: vi.fn<(args: { where: { id: string }; data: { settings: Record<string, unknown> } }) => Promise<object>>(async () => ({})),
+    audits: [] as Array<Record<string, unknown>>,
 }))
 
+// Masking has its own tests (lib/ai/pseudonymize, masked-client, known-entities): no vault here.
+vi.mock('@/lib/ai/known-entities', () => ({ vaultForEngagement: async () => null, vaultForFirms: async () => null }))
 vi.mock('@/utils/supabase/server', () => ({
     createClient: async () => ({ auth: { getUser: async () => ({ data: { user: { id: 'u1' } } }) } }),
 }))
@@ -38,6 +42,18 @@ vi.mock('@/lib/engagement-access', () => ({
         : null),
 }))
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn() } }))
+vi.mock('@/lib/audit', () => ({
+    audit: (event: string) => {
+        const entry: Record<string, unknown> = { event }
+        h.audits.push(entry)
+        const builder: Record<string, unknown> = new Proxy({}, {
+            get: (_t, key: string) => (key === 'fireAndForget' ? () => {} : (value: unknown) => { entry[key] = value; return builder }),
+        })
+        return builder
+    },
+    AUDIT_EVENT: { DOCUMENT_AI_REVIEWED: 'DOCUMENT_AI_REVIEWED' },
+    AUDIT_SCOPE: { DOCUMENT: 'DOCUMENT' },
+}))
 vi.mock('@/lib/ai/client', () => ({
     isAiConfigured: () => true,
     AI_MODEL: 'test-model',
@@ -62,6 +78,8 @@ vi.mock('@/lib/prisma', () => ({
         engagementDocument: {
             findMany: async () => [],
             findFirst: async ({ where }: { where: Record<string, unknown> }) => h.docs.find((d) => matches(d, where)) ?? null,
+            findUnique: async ({ where }: { where: { id: string } }) => h.docs.find((d) => d.id === where.id) ?? null,
+            update: h.update,
         },
         engagement: {
             findUnique: async () => ({
@@ -119,6 +137,7 @@ beforeEach(() => {
     h.getRenderableContent.mockReset()
     h.getRenderableContent.mockImplementation(async () => ({ stream: Buffer.from(h.text, 'utf-8'), mimeType: 'text/markdown', fileName: 'memo.md' }))
     h.recordAiUsage.mockClear()
+    h.audits.length = 0
 })
 
 describe('Find actions on an internal memo', () => {
@@ -133,6 +152,19 @@ describe('Find actions on an internal memo', () => {
         // Titled differently this time, but the same line on the same day: shown as done.
         expect(data.alreadyApplied).toEqual(['reminder-1'])
         expect(h.recordAiUsage).toHaveBeenCalledWith(expect.objectContaining({ feature: 'notesProposals' }))
+
+        // They wait on the memo (§13), with no word of it kept: the quote is a place in the memo, not text.
+        const stored = h.update.mock.calls.at(-1)![0].data.settings as { memo: { review: { by: string; proposals: Array<Record<string, unknown>> } } }
+        expect(stored.memo.review.by).toBe('person')
+        expect(stored.memo.review.proposals[0]).toMatchObject({ kind: 'reminder', title: 'Chase the 1099-B', quoteAt: { at: expect.any(Number) } })
+        expect(JSON.stringify(stored.memo.review)).not.toContain('brokerage 1099-B, still missing')
+
+        // The audit trail says Brio read it, at this person's asking, and what it found: never the words.
+        expect(h.audits).toEqual([expect.objectContaining({
+            event: 'DOCUMENT_AI_REVIEWED', document: MEMO_ID, actor: 'u1', client: 'c1',
+            meta: expect.objectContaining({ trigger: 'person', agent: 'Brio', summary: expect.stringMatching(/ · asked for$/) }),
+        })])
+        expect(JSON.stringify(h.audits)).not.toContain('brokerage')
     })
 
     it('404 for another engagement\'s memo, without reading it', async () => {

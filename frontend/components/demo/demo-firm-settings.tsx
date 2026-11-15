@@ -2,6 +2,7 @@
 
 import { useId, useState, type ReactNode } from 'react'
 import { AtSign, Bell, BarChart2, Building2, DollarSign, Factory, FileText, Globe, Lock, MessagesSquare, Palette, RefreshCw, Shield, Sparkles, Trash2, Type, User, Users2 } from 'lucide-react'
+import { withRaidInfo } from '@/components/projects/raid/raid-info'
 import { Brio } from '@/components/ui/brio'
 import { REVIEWER_DAILY_ANSWERS } from '@/lib/ai/features'
 import { Button } from '@/components/ui/button'
@@ -201,6 +202,21 @@ export function DemoFirmSettings({ firm }: { firm: DemoFirm }) {
                                 ))}
                             </NotionTableBody>
                         </NotionTable>
+                    </section>
+                    <section>
+                        <h3 className={SETTINGS_SECTION_HEADING_CLASS}><Brio /></h3>
+                        <SwitchRow
+                            icon={<Sparkles />}
+                            title="Identify action items when a memo is added"
+                            description={withRaidInfo("Brio reads a new internal memo once, and its action items and RAID suggestions wait on it for someone to apply or accept. Nothing changes on its own. 1 credit per memo, from your firm's credits.")}
+                            initial={true}
+                        />
+                        <SwitchRow
+                            icon={<Shield />}
+                            title="Replace names, emails and links before Brio reads"
+                            description="What Brio's AI provider reads has the names of your people, clients and contacts, emails, links, phone and ID numbers replaced by placeholders. The real words come back in what Brio writes. A name Brio doesn't know, such as someone mentioned only in a memo, isn't replaced."
+                            initial={true}
+                        />
                     </section>
                     <section>
                         <h3 className={SETTINGS_SECTION_HEADING_CLASS}>Overview for Limited Access contributors and Reviewers</h3>

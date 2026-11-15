@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowUp, Square } from 'lucide-react'
 import { Brio } from '@/components/ui/brio'
 import { ChatMarkdown } from '@/components/ui/chat-markdown'
+import { BrioTypedText, ThinkingDots, useTypedText } from '@/components/brio/brio-typing'
 import { ASSISTANT } from '@/lib/ai/assistant'
 import { AI_TIMEOUT_MS, AiAbortedError, AiTimeoutError, fetchWithTimeout } from '@/lib/ai/fetch-timeout'
 import { BRIO_ANSWER_CUT_OFF, BRIO_ANSWER_FAILED, BRIO_TOO_SLOW, BRIO_UNREACHABLE_RETRY } from '@/lib/ai/brio-failure'
@@ -46,6 +47,12 @@ export function ReviewerBrioPanel({ projectId, engagementBase }: { projectId: st
     const [input, setInput] = useState('')
     const [streaming, setStreaming] = useState(false)
     const ctrlRef = useRef<AbortController | null>(null)
+
+    // The newest answer is typed out as Brio writes it (components/brio/brio-typing.tsx); a failed
+    // one shows what arrived at once.
+    const lastTurn = turns[turns.length - 1]
+    const typed = useTypedText(lastTurn?.role === 'assistant' ? lastTurn.content : '', streaming, { finishNow: !!lastTurn?.failed })
+    const answering = streaming || typed.typing
 
     useEffect(() => {
         let cancelled = false
@@ -155,7 +162,11 @@ export function ReviewerBrioPanel({ projectId, engagementBase }: { projectId: st
                                 <p key={i} className="self-end rounded-card bg-surface-muted px-3 py-1.5 text-ui text-fg">{t.content}</p>
                             ) : (
                                 <div key={i} className="text-ui text-fg">
-                                    {t.content ? <ChatMarkdown content={t.content} /> : !t.failed && <span className="text-fg-muted">Thinking…</span>}
+                                    {answering && i === turns.length - 1 ? (
+                                        typed.shown
+                                            ? <span className="whitespace-pre-line"><BrioTypedText shown={typed.shown} /></span>
+                                            : !t.failed && <ThinkingDots />
+                                    ) : t.content ? <ChatMarkdown content={t.content} /> : !t.failed && <span className="text-fg-muted">Thinking…</span>}
                                     {t.failed && <p className="mt-1 text-small text-danger">{t.failed}</p>}
                                 </div>
                             ))}

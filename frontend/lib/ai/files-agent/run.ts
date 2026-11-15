@@ -7,6 +7,7 @@ import { buildScaffold } from './scaffold'
 import { assessOrganization, assessmentMarkdown, renderAssessment } from './assess'
 import { TOOLS, validateProposals, type Proposal } from './tools'
 import { RunBudget, MAX_AGENT_TURNS } from './budget'
+import type { Vault } from '@/lib/ai/pseudonymize'
 
 /**
  * One review run: analyze deterministically, then ask the model to propose fixes.
@@ -189,6 +190,8 @@ export async function runFilesReview(params: {
      * before this existed.
      */
     engagementKind?: string | null
+    /** What the model may read (§14 item 5): file and folder names masked, as everywhere. */
+    vault: Vault | null
 }): Promise<RunResult | null> {
     // One assessment, shared with the Overview score — see assess.ts. The model is GIVEN it rather
     // than offered a tool to fetch it: there is nothing to decide about whether to assess a tree
@@ -234,7 +237,7 @@ export async function runFilesReview(params: {
         }
     }
 
-    const client = await getGuardedAnthropic(params.scope)
+    const client = await getGuardedAnthropic(params.scope, { vault: params.vault })
     if (!client) return null
 
     const budget = new RunBudget(MAX_AGENT_TURNS)

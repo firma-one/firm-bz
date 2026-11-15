@@ -8,6 +8,7 @@ import { aiLimitResponse } from '@/lib/ai/guarded-client'
 import { buildInterpretCacheKey, getCachedInterpretation, setCachedInterpretation } from '@/lib/ai/interpret-cache'
 import { interpretSearchQuery, type InterpretCandidates } from '@/lib/ai/search-interpreter'
 import { recordAiUsage } from '@/lib/ai/usage'
+import { vaultForFirms } from '@/lib/ai/known-entities'
 
 // Local, not exported: Next.js only permits route handlers and its own config keys to be
 // exported from a route file.
@@ -101,7 +102,7 @@ export async function POST(
             firmId,
             userId: user.id,
             feature: 'searchInterpret',
-        })
+        }, { vault: await vaultForFirms([firmId]) })
         // Interpretation is an enhancement: on failure the caller searches the raw text instead.
         if (!result) return NextResponse.json({ chips: [], residualText: text, degraded: true })
 

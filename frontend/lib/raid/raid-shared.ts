@@ -6,6 +6,8 @@
  * Safe to import from client components: no database, no SDK.
  */
 
+import type { StatusStage } from '@/lib/ui/status'
+
 /** What RAID stands for, in one line: the Overview card's hint and the website's RAID info tip. */
 export const RAID_MEANING =
     'Risks, Assumptions, Issues and Decisions: what could go wrong, what the plan relies on, what has gone wrong, and what people agreed.'
@@ -17,6 +19,14 @@ export type RaidSourceKind = 'STATUS' | 'HEALTH' | 'BOARD' | 'THREAD' | 'MEMO' |
 export const RAID_TYPES: readonly RaidType[] = ['RISK', 'ASSUMPTION', 'ISSUE', 'DECISION']
 
 export const RAID_TYPE_LETTER: Record<RaidType, string> = { RISK: 'R', ASSUMPTION: 'A', ISSUE: 'I', DECISION: 'D' }
+
+/**
+ * Each type's color, from the Board's own stages (lib/ui/status.ts), so the log uses the colors the app
+ * already uses for state and adds none (Deepak, 2026-11-14): a risk might happen (waiting, amber), an
+ * assumption is held for now (underway, blue), an issue is happening (problem, red), a decision is
+ * settled (done, green).
+ */
+export const RAID_TYPE_STAGE: Record<RaidType, StatusStage> = { RISK: 'waiting', ASSUMPTION: 'underway', ISSUE: 'problem', DECISION: 'done' }
 export const RAID_TYPE_LABEL: Record<RaidType, string> = { RISK: 'Risk', ASSUMPTION: 'Assumption', ISSUE: 'Issue', DECISION: 'Decision' }
 export const RAID_TYPE_PLURAL: Record<RaidType, string> = { RISK: 'Risks', ASSUMPTION: 'Assumptions', ISSUE: 'Issues', DECISION: 'Decisions' }
 
@@ -33,14 +43,65 @@ export function isAutoSource(kind: RaidSourceKind): boolean {
     return kind === 'STATUS' || kind === 'HEALTH' || kind === 'BOARD'
 }
 
-/** Raised in conversation: Brio read it in a thread or a memo. */
-export function isConversationSource(kind: RaidSourceKind): boolean {
-    return kind === 'THREAD' || kind === 'MEMO'
-}
-
 /** A decision is recorded rather than opened; everything else opens. */
 export function liveStatusFor(type: RaidType): 'OPEN' | 'RECORDED' {
     return type === 'DECISION' ? 'RECORDED' : 'OPEN'
+}
+
+// ── Priority ──────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * How much a Risk or an Issue matters (Deepak, 2026-11-14), shown as gray signal bars. Assumptions and
+ * Decisions have none. Sorted on wherever the log is listed: the RAID tab and both Overviews.
+ */
+export type RaidPriority = 'HIGH' | 'MEDIUM' | 'LOW'
+export const RAID_PRIORITIES: readonly RaidPriority[] = ['HIGH', 'MEDIUM', 'LOW']
+export const RAID_PRIORITY_LABEL: Record<RaidPriority, string> = { HIGH: 'High', MEDIUM: 'Medium', LOW: 'Low' }
+/** Filled bars of three. */
+export const RAID_PRIORITY_BARS: Record<RaidPriority, 1 | 2 | 3> = { HIGH: 3, MEDIUM: 2, LOW: 1 }
+
+/** Only Risks and Issues carry a priority. */
+export function hasPriority(type: RaidType): boolean {
+    return type === 'RISK' || type === 'ISSUE'
+}
+
+/** An entry's priority as shown: its own, Medium for a Risk or an Issue saved before priorities, none otherwise. */
+export function priorityOf(item: { type: RaidType; priority?: RaidPriority | null }): RaidPriority | null {
+    if (!hasPriority(item.type)) return null
+    return item.priority ?? 'MEDIUM'
+}
+
+/** A value from a request or the model: one of the three, or null. */
+export function parsePriority(raw: unknown): RaidPriority | null {
+    return typeof raw === 'string' && (RAID_PRIORITIES as readonly string[]).includes(raw) ? raw as RaidPriority : null
+}
+
+/**
+ * The Health score's own grade for a deduction (components/projects/insight-rings.tsx): 15 points or more
+ * is High, 8 or more Medium, less Low. Status and health entries take the grade of the deduction they
+ * stand for, so the log and the score never disagree.
+ */
+export function priorityForPoints(points: number): RaidPriority {
+    return points >= 15 ? 'HIGH' : points >= 8 ? 'MEDIUM' : 'LOW'
+}
+
+const PRIORITY_RANK: Record<RaidPriority, number> = { HIGH: 0, MEDIUM: 1, LOW: 2 }
+/** Issues before risks before assumptions before decisions: what a reader acts on first. */
+const TYPE_RANK: Record<RaidType, number> = { ISSUE: 0, RISK: 1, ASSUMPTION: 2, DECISION: 3 }
+
+/**
+ * The one order the log is read in, everywhere: High, Medium, Low (none last); within each, issues before
+ * risks before assumptions before decisions; then newest first.
+ */
+export function compareRaid(
+    a: { type: RaidType; priority?: RaidPriority | null; raisedAt: string },
+    b: { type: RaidType; priority?: RaidPriority | null; raisedAt: string },
+): number {
+    const pa = priorityOf(a)
+    const pb = priorityOf(b)
+    return (pa ? PRIORITY_RANK[pa] : 3) - (pb ? PRIORITY_RANK[pb] : 3)
+        || TYPE_RANK[a.type] - TYPE_RANK[b.type]
+        || b.raisedAt.localeCompare(a.raisedAt)
 }
 
 // ── Limits ────────────────────────────────────────────────────────────────────────────────────
@@ -132,6 +193,10 @@ export interface RaidItemView {
     autoLine: string | null
     /** An Issue about a deliverable past its due date: shown in the danger tone. */
     overdue: boolean
+    /** Risks and Issues: High, Medium or Low (priorityOf). Null for Assumptions and Decisions. */
+    priority: RaidPriority | null
+    /** A person chose the priority: the sync leaves it as they set it. */
+    prioritySetByPerson: boolean
     /** A suggestion that adds to an entry already in the log. */
     attachedTo: { id: string; type: RaidType; title: string } | null
     /** ISO. */
@@ -203,14 +268,14 @@ function inState(item: Pick<RaidItemView, 'status'>, state: RaidStateFilter): bo
 }
 
 /** The table's rows for a type and Open or Closed, newest first. */
-export function filterRaidItems<T extends Pick<RaidItemView, 'status' | 'type' | 'raisedAt'>>(
+export function filterRaidItems<T extends Pick<RaidItemView, 'status' | 'type' | 'raisedAt'> & { priority?: RaidPriority | null }>(
     items: readonly T[],
     type: RaidTypeFilter,
     state: RaidStateFilter,
 ): T[] {
     return items
         .filter((i) => inState(i, state) && (type === 'ALL' || i.type === type))
-        .sort((a, b) => b.raisedAt.localeCompare(a.raisedAt))
+        .sort(compareRaid)
 }
 
 /** The counts beside each type filter, for Open or Closed. */
@@ -224,32 +289,31 @@ export function raidCountsByType(items: readonly Pick<RaidItemView, 'status' | '
     return counts
 }
 
-/** Issues before risks before assumptions: what a reader acts on first. */
-const OVERVIEW_ORDER: Record<RaidType, number> = { ISSUE: 0, RISK: 1, ASSUMPTION: 2, DECISION: 3 }
-
 export interface RaidOverview {
     counts: { openRisks: number; assumptions: number; openIssues: number; decisions: number }
-    /** The top open entries raised in conversation (threads and memos). */
-    conversation: RaidItemView[]
+    /** The top open entries, from every source. */
+    open: RaidItemView[]
+    /** How many open entries there are in all, shown or not: "and 2 more". */
+    openTotal: number
     /** The newest decision people recorded (not the Board's approvals, which the Board shows). */
     latestDecision: RaidItemView | null
     suggestionCount: number
 }
 
 /**
- * The Overview card: counts by type, the top open entries raised in conversation and the latest
- * decision. It leaves out what the Action Center already shows (overdue work, planning gaps, pace,
- * waiting threads), so status and health entries are never among its rows.
+ * The Overview's RAID section: counts by type, the top open entries and the latest decision. Every source
+ * is listed, status and health too (overdue work, planning gaps, pace, waiting threads), as on the Firm
+ * Overview: leaving them out showed counts over an empty list (Deepak, 2026-11-14).
  */
-export function raidOverviewOf(log: Pick<RaidLogPayload, 'items' | 'suggestions'>, maxRows = 3): RaidOverview {
+export function raidOverviewOf(log: Pick<RaidLogPayload, 'items' | 'suggestions'>, maxRows = 5): RaidOverview {
     const live = log.items.filter(isLive)
     const latestDecision = live
         .filter((i) => i.type === 'DECISION' && !isAutoSource(i.sourceKind))
         .sort((a, b) => b.raisedAt.localeCompare(a.raisedAt))[0] ?? null
-    const conversation = live
-        .filter((i) => i.status === 'OPEN' && isConversationSource(i.sourceKind))
-        .sort((a, b) => (OVERVIEW_ORDER[a.type] - OVERVIEW_ORDER[b.type]) || b.raisedAt.localeCompare(a.raisedAt))
-        .slice(0, Math.max(0, maxRows - (latestDecision ? 1 : 0)))
+    const raised = live
+        .filter((i) => i.status === 'OPEN' && i.type !== 'DECISION')
+        .sort(compareRaid)
+    const open = raised.slice(0, Math.max(0, maxRows - (latestDecision ? 1 : 0)))
     return {
         counts: {
             openRisks: live.filter((i) => i.type === 'RISK' && i.status === 'OPEN').length,
@@ -257,10 +321,41 @@ export function raidOverviewOf(log: Pick<RaidLogPayload, 'items' | 'suggestions'
             openIssues: live.filter((i) => i.type === 'ISSUE' && i.status === 'OPEN').length,
             decisions: live.filter((i) => i.type === 'DECISION').length,
         },
-        conversation,
+        open,
+        openTotal: raised.length,
         latestDecision,
-        suggestionCount: log.suggestions.length,
+        // A memo's suggestions wait on the memo (waitsOnMemo); its row in Memos counts them.
+        suggestionCount: log.suggestions.filter((s) => !waitsOnMemo(s)).length,
     }
+}
+
+/**
+ * A suggestion Brio made from a memo waits on that memo, to accept or dismiss there with its action
+ * items: a memo reviewed in one place (.claude/plans/brio-features-round-2.md, §13). The RAID tab and
+ * the Overview card leave it out and point to the memo instead.
+ */
+export function waitsOnMemo(s: Pick<RaidItemView, 'sourceKind'>): boolean {
+    return s.sourceKind === 'MEMO'
+}
+
+/** The memos that have suggestions waiting on them, each once, in the order the suggestions came. */
+export function memoSuggestionGroups(suggestions: RaidItemView[]): { memoId: string | null; title: string; count: number }[] {
+    const groups = new Map<string, { memoId: string | null; title: string; count: number }>()
+    for (const s of suggestions) {
+        if (!waitsOnMemo(s)) continue
+        const source = s.sources.find((x) => x.kind === 'MEMO')
+        const key = source?.memoId ?? source?.label ?? 'memo'
+        const group = groups.get(key) ?? { memoId: source?.memoId ?? null, title: (source?.label ?? '').replace(/^Memo( · )?/, ''), count: 0 }
+        group.count += 1
+        groups.set(key, group)
+    }
+    return Array.from(groups.values())
+}
+
+/** Where a memo is reviewed: Discussions › Memos with it open (on /tour, the page's own query). */
+export function memoReviewHref(engagementBase: string, memoId: string | null): string {
+    const memo = memoId ? `&memo=${encodeURIComponent(memoId)}` : ''
+    return engagementBase ? `${engagementBase}/comments?view=memos${memo}` : `?tab=comments&view=memos${memo}`
 }
 
 // ── Words ─────────────────────────────────────────────────────────────────────────────────────
@@ -290,11 +385,10 @@ export function attachPhrase(target: { type: RaidType; title: string }): string 
     return `adds to the ${state} ${RAID_TYPE_LABEL[target.type]} “${target.title}”`
 }
 
-/** Where the Discussions RAID sub-tab is. The param may change with the Discussions switch. */
+/** Where the RAID log is: the engagement's RAID tab (it was a Discussions sub-tab until 2026-11-14). */
 export function raidLogHref(engagementBase: string): string {
-    // Without a base (/tour), the page's own query: the tour switches tabs with ?tab=, so the link
-    // names the Discussions tab too, or it would stay on the Overview it was clicked from.
-    return engagementBase ? `${engagementBase}/comments?view=raid` : '?tab=comments&view=raid'
+    // Without a base (/tour), the page's own query: the tour switches tabs with ?tab=.
+    return engagementBase ? `${engagementBase}/raid` : '?tab=raid'
 }
 
 /**
@@ -306,7 +400,7 @@ export function raidLogHref(engagementBase: string): string {
  */
 export function sourceHref(engagementBase: string, source: Pick<RaidSourceView, 'kind' | 'documentId' | 'memoId' | 'label' | 'overviewSection'>): string | null {
     if (!engagementBase) return tourSourceHref(source)
-    if (source.kind === 'MEMO') return source.memoId ? `${engagementBase}/files#doc-file:${source.memoId}` : null
+    if (source.kind === 'MEMO') return source.memoId ? memoReviewHref(engagementBase, source.memoId) : null
     if (source.kind === 'HEALTH') return `${engagementBase}/analytics${source.overviewSection ? `#ring-${source.overviewSection}` : ''}`
     if (!source.documentId) return null
     if (source.kind === 'THREAD' || source.label.startsWith('Thread')) return `${engagementBase}/comments#doc-comment:${source.documentId}`
@@ -332,4 +426,43 @@ export const RAID_CHANGED_EVENT = 'firma:raid-changed'
 export interface RaidChangedDetail {
     projectId: string
     count: number
+}
+
+// ── The firm's open risks and issues (Firm Overview) ──────────────────────────────────────────
+
+/** One open Risk or Issue on the Firm Overview, with the engagement it's in. */
+export interface FirmRaidRow {
+    id: string
+    type: 'RISK' | 'ISSUE'
+    priority: RaidPriority
+    title: string
+    /** The owner's first name, or null when no one owns it. */
+    ownerFirstName: string | null
+    /** ISO. */
+    raisedAt: string
+    engagement: { name: string; clientName: string; /** Its RAID tab. */ href: string }
+}
+
+/**
+ * What GET /api/firms/[firmId]/raid answers: the open Risks and Issues across the engagements the person
+ * may see the RAID log of, from every source, issues first, newest first.
+ */
+export interface FirmRaidOverview {
+    counts: {
+        openIssues: number
+        openRisks: number
+        /** Of those, how many are High. */
+        high: number
+        /** Engagements with at least one open. */
+        engagements: number
+    }
+    rows: FirmRaidRow[]
+    /** Open but not sent, past FIRM_RAID_MAX_ROWS: "and 2 more, in their engagements' RAID logs". */
+    more: number
+}
+
+/** "Dana" from "Dana Whitfield": how a row names its owner. */
+export function firstNameOf(name: string | null | undefined): string | null {
+    const first = (name ?? '').trim().split(/\s+/)[0]
+    return first || null
 }

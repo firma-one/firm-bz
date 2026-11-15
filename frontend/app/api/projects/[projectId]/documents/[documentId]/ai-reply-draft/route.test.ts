@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { buildVault } from '@/lib/ai/pseudonymize'
 import { NextRequest } from 'next/server'
 
 /**
@@ -19,6 +20,8 @@ const { st, creditCap, LimitError, create } = vi.hoisted(() => {
             completed: false,
             doc: { id: 'd1', externalId: 'ext-1' } as { id: string; externalId: string } | null,
             rows: [] as { projectDocumentId: string; authorUserId: string; content: string; createdAt: Date; isInternal: boolean }[],
+            /** The engagement's vault: none, except in the test that masks (§14 item 5). */
+            vault: null as unknown,
         },
         creditCap: vi.fn(async () => {}),
         LimitError,
@@ -26,6 +29,8 @@ const { st, creditCap, LimitError, create } = vi.hoisted(() => {
     }
 })
 
+// Masking has its own tests (lib/ai/pseudonymize, masked-client, known-entities); one test here masks end to end.
+vi.mock('@/lib/ai/known-entities', () => ({ vaultForEngagement: async () => st.vault, vaultForFirms: async () => null }))
 vi.mock('@/utils/supabase/server', () => ({
     createClient: async () => ({ auth: { getUser: async () => ({ data: { user: st.user } }) } }),
 }))
@@ -101,6 +106,7 @@ beforeEach(() => {
     st.member = { role: 'eng_admin' }
     st.completed = false
     st.doc = { id: 'd1', externalId: 'ext-1' }
+    st.vault = null
     st.rows = [
         { projectDocumentId: 'd1', authorUserId: 'priya', content: 'The report is ready for your review.', createdAt: at(6), isInternal: false },
         { projectDocumentId: 'd1', authorUserId: 'priya', content: SECRET, createdAt: at(7), isInternal: true },
@@ -128,6 +134,23 @@ describe('POST /api/projects/[projectId]/documents/[documentId]/ai-reply-draft',
         expect(call).not.toHaveProperty('temperature')
         expect(call.max_tokens).toBe(2000)
         expect(creditCap).toHaveBeenCalledWith(expect.objectContaining({ firmId: 'f1', feature: 'replyDraft' }))
+    })
+
+    it('with the firm\'s masking on, Brio reads placeholders, never the names, and the draft comes back with them', async () => {
+        const vault = buildVault([{ kind: 'person', id: 'dana', name: 'Dana Whitfield' }, { kind: 'client', id: 'c1', name: 'Brightline' }])
+        st.vault = vault
+        const first = vault.tokenOf('person', 'dana')!.replace(/\]$/, '_FIRST]')
+        create.mockResolvedValue(streaming(`Thanks, ${first}. On 4.2 and ${vault.tokenOf('client', 'c1')}: [confirm whether the pricing is current].`))
+        const res = await draft()
+        const events = (await res.text()).trim().split('\n').map((l) => JSON.parse(l))
+        expect(events.at(-1)).toEqual({ type: 'done', text: 'Thanks, Dana. On 4.2 and Brightline: [confirm whether the pricing is current].' })
+
+        const call = create.mock.calls[0][0]
+        const sent = JSON.stringify(call.messages)
+        expect(sent).not.toMatch(/Dana|Brightline/)
+        expect(sent).toContain(first)
+        // Brio's own fill-in brackets aren't placeholders; the instruction about them reaches the model.
+        expect(call.system).toContain('placeholder in square brackets')
     })
 
     it('also for a Full Access contributor', async () => {

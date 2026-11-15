@@ -16,6 +16,7 @@
  * state.
  */
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { Lock } from 'lucide-react';
 import { Brio } from '@/components/ui/brio';
 import { FILES_AGENT_PUBLIC } from '../config';
 import type { DemoDates } from '../demo-dates';
@@ -230,7 +231,7 @@ function ReplyStory({ e }: { e: number }) {
   );
 }
 
-/** 1:00 PM: Find actions in an internal memo's call notes; two are kept, one is skipped. */
+/** 1:00 PM: Identify action items in an internal memo's call notes; two are kept, one is skipped. */
 function ActionsStory({ D, e, live }: { D: DemoDates; e: number; live: boolean }) {
   const rows: { on: boolean; kind: string; text: string }[] = [
     { on: true, kind: 'Reminder', text: `Send Dana the revised launch timeline · ${D.follow}` },
@@ -239,9 +240,14 @@ function ActionsStory({ D, e, live }: { D: DemoDates; e: number; live: boolean }
   ];
   return (
     <>
-      <CardHead title="Found 3 actions" meta="Internal memo" />
+      <CardHead title="3 action items" meta="Internal memo" />
       <span className="mk-brio-memo">
-        Call with Dana <span className="mk-brio-tag">Internal only</span>
+        Call with Dana{' '}
+        {/* With the lock the app's Internal only badge carries (components/ui/internal-only-tag.tsx). */}
+        <span className="mk-brio-tag mk-brio-tag--lock">
+          <Lock aria-hidden="true" />
+          Internal only
+        </span>
       </span>
       {rows.map((row, i) => (
         <span key={row.kind} className="mk-brio-row" style={rise(e >= 300 + i * 350)}>
@@ -425,9 +431,9 @@ function dayMoments(D: DemoDates): MomentDef[] {
     },
     {
       minutes: 780,
-      label: '1:00 PM · Call notes into actions',
+      label: '1:00 PM · Call notes into action items',
       isNew: true,
-      ariaLabel: 'Brio finds three actions in the notes of a call with Dana: a reminder, a due date and a new deliverable. Two are kept and applied.',
+      ariaLabel: 'Brio identifies three action items in the notes of a call with Dana: a reminder, a due date and a new deliverable. Two are kept and applied.',
       foot: 'You · keep what’s right, skip the rest',
       footAt: 2300,
       story: (e, live) => <ActionsStory D={D} e={e} live={live} />,

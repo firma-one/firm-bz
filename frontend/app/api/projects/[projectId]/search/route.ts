@@ -8,6 +8,8 @@ import { resolveEngagementConnectorId } from '@/lib/connectors/resolve-client-co
 import { getPermissionAdapter } from '@/lib/connectors/registry'
 import { isExternalEngagementRole, requireEngagementMember, visibleDocumentIdsFor } from '@/lib/engagement-access'
 import { privateExternalIds } from '@/lib/engagement-sharing-ids'
+import { canAccessRbacAdmin } from '@/lib/permission-helpers'
+import type { EngagementRole } from '@prisma/client'
 
 export async function GET(
     request: NextRequest,
@@ -29,7 +31,15 @@ export async function GET(
         // A Limited Access contributor or Reviewer is shown only what's shared with them, and nothing
         // private to the firm. Their search fails closed: what can't be checked isn't listed.
         const searcher = await requireEngagementMember(projectId, authResult.user.id)
-        const isClient = isExternalEngagementRole(searcher?.role)
+        // "View as" (the Files search sends `viewAs`): a firm admin previewing the engagement as a Limited
+        // Access contributor or a Reviewer is shown what that role would get, as the engagement page honors
+        // the preview (canAccessRbacAdmin). It can only narrow what's listed; from anyone else it's ignored.
+        const viewAs = searchParams.get('viewAs')
+        const previewing = (viewAs === 'eng_ext_collaborator' || viewAs === 'eng_viewer')
+            && !isExternalEngagementRole(searcher?.role)
+            && await canAccessRbacAdmin(authResult.user.id)
+        const role: EngagementRole | null = previewing ? (viewAs as EngagementRole) : (searcher?.role ?? null)
+        const isClient = isExternalEngagementRole(role)
 
         const project = await prisma.engagement.findUnique({
             where: { id: projectId },
@@ -246,7 +256,7 @@ export async function GET(
         // filter above reads a file's own lock, not its folders'). Either check failing fails the search.
         if (isClient && finalFiles.length > 0) {
             const [visible, hidden] = await Promise.all([
-                visibleDocumentIdsFor(projectId, searcher!.role),
+                visibleDocumentIdsFor(projectId, role!),
                 privateExternalIds(projectId),
             ])
             finalFiles = finalFiles.filter((f: any) => (!visible || visible.has(f.id)) && !hidden.has(f.id))
@@ -302,7 +312,7 @@ export async function GET(
 
         const limited = finalFiles.slice(0, 20)
         const parentIds = Array.from(new Set(limited.map((f: any) => f.parents?.[0]).filter(Boolean))) as string[]
-        let parentNames: Record<string, string> = {}
+        const parentNames: Record<string, string> = {}
         if (parentIds.length > 0 && project.firmId) {
             try {
                 const rows = await (prisma as any).$queryRawUnsafe(

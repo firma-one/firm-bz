@@ -10,7 +10,7 @@
  * one-file edit, not a repo-wide grep.
  */
 
-const ENGAGEMENT_TABS = ['files', 'shares', 'comments', 'members', 'analytics', 'sources', 'audit', 'settings', 'wiki'] as const
+const ENGAGEMENT_TABS = ['files', 'shares', 'comments', 'raid', 'members', 'analytics', 'sources', 'audit', 'settings', 'wiki'] as const
 export type EngagementTab = (typeof ENGAGEMENT_TABS)[number]
 
 /** /d/[groupSlug]/f/ — the group-scoped firm picker. */

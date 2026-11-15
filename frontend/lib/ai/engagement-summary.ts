@@ -151,6 +151,7 @@ export function isDraftFromToday(draft: InsightsSummaryDraft | null | undefined)
 
 export { SUMMARY_SECTIONS, LEAD_PLACEHOLDER, findUnfilledSections } from './summary-sections'
 import { LEAD_PLACEHOLDER } from './summary-sections'
+import type { Vault } from '@/lib/ai/pseudonymize'
 
 export const SUMMARY_SYSTEM_PROMPT = `You are writing the standing status summary for one engagement at a professional services firm.
 
@@ -218,9 +219,10 @@ export const SUMMARY_MAX_TOKENS = 3000
 
 export async function generateEngagementSummary(
     data: EngagementInsightsResponse,
-    meta: { clientName?: string; engagementName?: string },
+    meta: { clientName?: string; engagementName?: string; vault: Vault | null },
 ): Promise<string | null> {
     return completeText({
+        vault: meta.vault,
         system: SUMMARY_SYSTEM_PROMPT,
         userMessage: `Engagement snapshot:\n${buildEngagementContext(data, meta)}`,
         maxTokens: SUMMARY_MAX_TOKENS,

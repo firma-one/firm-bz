@@ -183,10 +183,19 @@ describe('writes', () => {
         await patch({ action: 'dismiss' })
         await patch({ action: 'edit', notes: 'Re-plan on the call' })
         await patch({ action: 'reopen' })
-        expect(h.accept).toHaveBeenCalledWith('p1', { userId: 'u1', firstName: 'Alex' }, ITEM)
+        expect(h.accept).toHaveBeenCalledWith('p1', { userId: 'u1', firstName: 'Alex' }, ITEM, {})
         expect(h.dismiss).toHaveBeenCalled()
         expect(h.edit).toHaveBeenCalledWith('p1', expect.anything(), ITEM, { notes: 'Re-plan on the call' })
         expect(h.reopen).toHaveBeenCalled()
+    })
+
+    it('passes a priority on accepting, editing and adding', async () => {
+        await patch({ action: 'accept', priority: 'HIGH' })
+        await patch({ action: 'edit', priority: 'LOW' })
+        await post({ type: 'ISSUE', title: 'The client is unhappy with the draft', priority: 'HIGH' })
+        expect(h.accept).toHaveBeenCalledWith('p1', expect.anything(), ITEM, { priority: 'HIGH' })
+        expect(h.edit).toHaveBeenCalledWith('p1', expect.anything(), ITEM, { priority: 'LOW' })
+        expect(h.addRaidItem).toHaveBeenCalledWith(expect.objectContaining({ type: 'ISSUE', priority: 'HIGH' }))
     })
 
     it('400 with words for an unknown action', async () => {

@@ -7,6 +7,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { AtSign, Clock3, Info, Mail, MoreHorizontal, Plus, Send, Shield, Trash2, Type, User, UserCircle, UserCog, UserMinus, X } from 'lucide-react'
 import { NotionTable, NotionTableActions, NotionTableActionsHead, NotionTableBody, NotionTableCell, NotionTableHead, NotionTableHeader, NotionTableRow } from '@/components/ui/notion-table'
 import { Tag } from '@/components/ui/tag'
+import { InternalMemberTag } from '@/components/ui/internal-only-tag'
+import { canWriteInternalNote } from '@/lib/comments/internal-notes'
 import { StatusPill } from '@/components/ui/status-pill'
 import { FRESH_CHIP_CLASS, useApprovalFeedback } from '@/lib/ui/use-approval-feedback'
 import { EmptyPanel } from '@/components/ui/empty-panel'
@@ -281,11 +283,15 @@ export function MemberList({ members, invitations, personas, onRefresh, canManag
                 </NotionTableCell>
                 <NotionTableCell className="hidden max-w-[16rem] truncate text-fg-muted md:table-cell" title={member.user.email}>{member.user.email}</NotionTableCell>
                 <NotionTableCell>
-                    {canManage ? (
-                        <button type="button" onClick={() => handleOpenEdit(member)} className="-mx-1 rounded-control px-1 py-0.5 hover:bg-surface-selected" aria-label={`Change role for ${member.user.name}`}>
-                            {roleTag(member.role)}
-                        </button>
-                    ) : roleTag(member.role, description)}
+                    <div className="flex items-center gap-1.5">
+                        {canManage ? (
+                            <button type="button" onClick={() => handleOpenEdit(member)} className="-mx-1 rounded-control px-1 py-0.5 hover:bg-surface-selected" aria-label={`Change role for ${member.user.name}`}>
+                                {roleTag(member.role)}
+                            </button>
+                        ) : roleTag(member.role, description)}
+                        {/* Who sees Internal only items: the same lock as on the items. */}
+                        {canWriteInternalNote(member.role) && <InternalMemberTag />}
+                    </div>
                 </NotionTableCell>
                 <NotionTableCell className="hidden whitespace-nowrap text-small tabular-nums text-fg-muted sm:table-cell">{formatDate(member.createdAt)}</NotionTableCell>
                 <NotionTableActions>{memberActions(member)}</NotionTableActions>
@@ -306,7 +312,12 @@ export function MemberList({ members, invitations, personas, onRefresh, canManag
                     </div>
                 </NotionTableCell>
                 <NotionTableCell className="hidden text-fg-subtle md:table-cell">—</NotionTableCell>
-                <NotionTableCell>{roleTag(persona?.slug, roleDescription(persona?.slug))}</NotionTableCell>
+                <NotionTableCell>
+                    <div className="flex items-center gap-1.5">
+                        {roleTag(persona?.slug, roleDescription(persona?.slug))}
+                        {canWriteInternalNote(persona?.slug) && <InternalMemberTag />}
+                    </div>
+                </NotionTableCell>
                 <NotionTableCell className="hidden sm:table-cell">
                     <StatusPill kind="invitation" status={invite.status} className={cn(resendFeedback.isFresh(invite.id) && FRESH_CHIP_CLASS)} />
                 </NotionTableCell>
