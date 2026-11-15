@@ -37,7 +37,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { ShareDetailPanel } from './share-detail-panel'
-import { DeliverableDetailPanel } from './deliverable-detail-panel'
+import { openDeliverableDetailPane } from './deliverable-detail-panel'
 import { Hint, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { StatusIcon } from '@/components/ui/status-icon'
 import { StatusPill } from '@/components/ui/status-pill'
@@ -52,9 +52,9 @@ import { supabase } from '@/lib/supabase'
 import { useSecureOpenDocument } from '@/lib/use-secure-open-document'
 import { logger } from '@/lib/logger'
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
-import { displayFolderName, splitFolderOrdinal } from '@/lib/display-names'
+import { splitFolderOrdinal } from '@/lib/display-names'
 import { DocumentDocCommentsPane } from '@/components/projects/document-doc-comments-pane'
-import { createPanePreview, LocatedDocumentPreview } from './pane-preview'
+import { LocatedDocumentPreview } from './pane-preview'
 import { folderPathLabels } from '@/lib/files/engagement-root'
 import { formatDistanceToNow } from 'date-fns'
 import { cn, formatFullDate } from '@/lib/utils'
@@ -1807,66 +1807,53 @@ export function EngagementSharesTab({
       setOpenDeliverableId(share.id)
       const hashSuffix = initialTab === 'comments' ? ':comments' : ''
       window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#doc-file:${share.documentId}${hashSuffix}`)
-      const showDetailsHeader = () => {
-        rightPane.setTitle(share.docId ?? share.documentName)
-        rightPane.setHeaderSubtitle(displayFolderName(share.documentName))
-        rightPane.setHeaderIcon(<DeliverableIcon />)
-        rightPane.setIconTooltip('Deliverable')
-      }
-      showDetailsHeader()
-      rightPane.setPaneSize('medium')
-      const panePreview = createPanePreview(rightPane, showDetailsHeader)
-      rightPane.setContent(
-        <DeliverableDetailPanel
-          documentId={share.documentId}
-          projectId={projectId}
-          docId={share.docId ?? null}
-          fileName={share.documentName}
-          activityStatus={share.activity?.status ?? 'to_do'}
-          dueDate={share.dueDate ?? null}
-          canManage={canManage ?? false}
-          readOnly={readOnly}
-          isExternalViewer={isExternalViewer}
-          isExternalCollaborator={restrictToSharedOnly && !isExternalViewer}
-          roleSlug={roleSlug}
-          orgSlug={orgSlug}
-          deeplinkBase={deeplinkBase}
-          initialTab={initialTab}
-          onOpenSubtaskDocument={(doc) => {
-            void handleSecureOpen({
-              documentId: doc.documentId,
-              externalId: doc.externalId ?? doc.documentId,
-              fileName: doc.fileName,
-              mimeType: doc.mimeType ?? undefined,
-              projectId,
-            }, doc.documentId)
-          }}
-          panePreview={panePreview}
-          openLabel={storageOpenLabel}
-          onStatusChange={(newStatus) => {
-            setShares((prev) =>
-              prev.map((s) =>
-                s.id === share.id
-                  ? { ...s, activity: { ...(s.activity ?? { updatedAt: new Date().toISOString() }), status: newStatus } }
-                  : s
-              )
+      // The same pane the Files row's Details opens for a deliverable folder.
+      openDeliverableDetailPane(rightPane, {
+        documentId: share.documentId,
+        projectId,
+        docId: share.docId ?? null,
+        fileName: share.documentName,
+        activityStatus: share.activity?.status ?? 'to_do',
+        dueDate: share.dueDate ?? null,
+        canManage: canManage ?? false,
+        readOnly,
+        isExternalViewer,
+        isExternalCollaborator: restrictToSharedOnly && !isExternalViewer,
+        roleSlug,
+        orgSlug,
+        deeplinkBase,
+        initialTab,
+        onOpenSubtaskDocument: (doc) => {
+          void handleSecureOpen({
+            documentId: doc.documentId,
+            externalId: doc.externalId ?? doc.documentId,
+            fileName: doc.fileName,
+            mimeType: doc.mimeType ?? undefined,
+            projectId,
+          }, doc.documentId)
+        },
+        openLabel: storageOpenLabel,
+        onStatusChange: (newStatus) => {
+          setShares((prev) =>
+            prev.map((s) =>
+              s.id === share.id
+                ? { ...s, activity: { ...(s.activity ?? { updatedAt: new Date().toISOString() }), status: newStatus } }
+                : s
             )
-          }}
-          onSubtaskStatusChange={(total, approved) => {
-            setShares((prev) =>
-              prev.map((s) =>
-                s.id === share.id
-                  ? { ...s, subtaskCount: total, approvedSubtaskCount: approved }
-                  : s
-              )
+          )
+        },
+        onSubtaskStatusChange: (total, approved) => {
+          setShares((prev) =>
+            prev.map((s) =>
+              s.id === share.id
+                ? { ...s, subtaskCount: total, approvedSubtaskCount: approved }
+                : s
             )
-          }}
-          externalStatusRef={panelStatusSetterRef}
-          onClose={() => { setOpenDeliverableId(null); rightPane.clearPane(); window.history.replaceState(null, '', window.location.pathname + window.location.search) }}
-        />
-      )
-      // After setContent, which clears any guard: with a preview open, × goes back to the details.
-      rightPane.setBeforeClose(() => !panePreview.close())
+          )
+        },
+        externalStatusRef: panelStatusSetterRef,
+        onClose: () => { setOpenDeliverableId(null); rightPane.clearPane(); window.history.replaceState(null, '', window.location.pathname + window.location.search) },
+      })
     },
     [rightPane, projectId, canManage, readOnly, isExternalViewer, orgSlug, roleSlug, restrictToSharedOnly, handleSecureOpen, deeplinkBase, storageOpenLabel]
   )

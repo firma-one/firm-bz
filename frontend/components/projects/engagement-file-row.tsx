@@ -24,6 +24,7 @@ import { SharedFolderIcon } from '@/components/ui/folder-shared-icon'
 import { DeliverableIcon } from '@/components/ui/deliverable-icon'
 import { DocumentActionMenu } from '@/components/ui/document-action-menu'
 import { openAssetDetailsPane } from '@/components/files/asset-details-pane'
+import type { ActivityStatus } from '@/lib/sharing-settings'
 import { useRightPane } from '@/lib/right-pane-context'
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
 import type { EngagementRoleSlug } from '@/lib/deliverable-stage-roles'
@@ -277,9 +278,39 @@ function EngagementFileRowInner({
     const isIndexing = !isFolder && !!file.projectDocumentId && file.indexingStatus === 'PROCESSING'
     // Row tools appear on hover or keyboard focus, and stay while the row is in use.
     const toolsPinned = isActionMenuOpen || isSelected || isIndexing || isPreviewPaneOpen || isHighlighted
+    // A deliverable folder's Details is the Board's own pane for it; any other folder has none on the row.
+    const isDeliverableFolder = isFolder && !!file.isDeliverable && !!file.projectDocumentId
     // Details, from the row icon and the ⋮ menu alike: Info edits what this row's own cells may.
     const openDetails = () => {
         onOpenInfoPane(file.id)
+        if (isDeliverableFolder) {
+            // Loaded when opened: the Board's pane module sets up its own storage client on import,
+            // which a row (and its tests) shouldn't need until Details is pressed.
+            void import('@/components/projects/shares/deliverable-detail-panel').then(({ openDeliverableDetailPane }) => openDeliverableDetailPane(rightPane, {
+                documentId: file.projectDocumentId!,
+                projectId,
+                docId: file.docId ?? null,
+                fileName: file.name ?? '',
+                activityStatus: ((file as { deliverableStatus?: ActivityStatus }).deliverableStatus ?? 'to_do'),
+                dueDate: savedDue,
+                canManage: isProjectLead,
+                readOnly,
+                isExternalViewer: isGuest,
+                isExternalCollaborator: isEC,
+                roleSlug: roleSlug ?? undefined,
+                orgSlug,
+                deeplinkBase: typeof window !== 'undefined' ? window.location.href.replace(/#.*$/, '') : '',
+                onOpenSubtaskDocument: (doc) => onOpenDocument(
+                    { id: doc.externalId ?? doc.documentId, name: doc.fileName, mimeType: doc.mimeType ?? undefined } as DriveFile,
+                    file,
+                ),
+                openLabel,
+                // The row's Status and Due follow what changes in the pane.
+                onStatusChange: () => onShareSaved?.(),
+                onClose: () => rightPane.clearPane(),
+            }))
+            return
+        }
         openAssetDetailsPane(rightPane, {
             document: file,
             projectId,
@@ -565,7 +596,7 @@ function EngagementFileRowInner({
                         ⋮ menu) gives way when the table is at its narrowest. */}
                     <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
 
-                        {!isFolder && file.documentType !== 'LINK' && (
+                        {(!isFolder || isDeliverableFolder) && file.documentType !== 'LINK' && (
                             <Tooltip>
                                 <TooltipTrigger asChild>
                                     <button

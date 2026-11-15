@@ -8,7 +8,9 @@ import { useToast } from '@/components/ui/toast'
 import { supabase } from '@/lib/supabase'
 import { DocumentDocCommentsPane } from '@/components/projects/document-doc-comments-pane'
 import { folderPathLabels } from '@/lib/files/engagement-root'
-import { LocatedDocumentPreview, usePanePreview, type PanePreview } from './pane-preview'
+import { createPanePreview, LocatedDocumentPreview, usePanePreview, type PanePreview } from './pane-preview'
+import { DeliverableIcon } from '@/components/ui/deliverable-icon'
+import { displayFolderName } from '@/lib/display-names'
 import { PrivateMark } from '@/components/files/private-mark'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { useRightPane } from '@/lib/right-pane-context'
@@ -1316,4 +1318,32 @@ export function DeliverableDetailPanel({
       {dueDialog}
     </div>
   )
+}
+
+/**
+ * Opens a deliverable's panel in the right pane, the same from the Board's card and the Files row's
+ * Details: its doc ID as the title, its name beneath by the deliverable icon, half the width. With a
+ * document's preview open over it, × goes back to the details first.
+ */
+export function openDeliverableDetailPane(
+  rightPane: ReturnType<typeof useRightPane>,
+  props: Omit<DeliverableDetailPanelProps, 'panePreview'>,
+) {
+  const showDetailsHeader = () => {
+    rightPane.setTitle(props.docId ?? props.fileName)
+    rightPane.setHeaderSubtitle(displayFolderName(props.fileName))
+    rightPane.setHeaderIcon(<DeliverableIcon />)
+    rightPane.setIconTooltip('Deliverable')
+  }
+  showDetailsHeader()
+  rightPane.setPaneSize('medium')
+  const panePreview = createPanePreview(rightPane, showDetailsHeader)
+  rightPane.setContent(<DeliverableDetailPanel {...props} panePreview={panePreview} />)
+  // After setContent, which clears any guard: with a preview open, × goes back to the details.
+  rightPane.setBeforeClose(() => !panePreview.close())
+}
+
+/** Whether the right pane holds a deliverable's panel, for a list that marks the row it belongs to. */
+export function isDeliverableDetailPaneContent(content: React.ReactNode): boolean {
+  return React.isValidElement(content) && content.type === DeliverableDetailPanel
 }
