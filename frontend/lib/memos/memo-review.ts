@@ -2,30 +2,31 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { isAiConfigured } from '@/lib/ai/client'
 import { AiCreditLimitError } from '@/lib/ai/guarded-client'
-import { MAX_MEMO_CHARS, findNotesActions, loadNotesDeliverables, resolveToday } from '@/lib/ai/notes-proposals'
+import { MAX_MEMO_CHARS, loadNotesDeliverables } from '@/lib/ai/notes-proposals'
 import { engagementPath } from '@/lib/navigation/firm-paths'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 import { runMemoRaidCheck } from '@/lib/raid/raid-check'
 import { logger } from '@/lib/logger'
 import { readMemoText, writeMemoReview } from './memo-store'
-import { memoReviewOf } from './memo-shared'
+import { memoReadReview } from './memo-shared'
+import { sealMinutes, writeMemoMinutes } from './memo-minutes'
 import { vaultForEngagement } from '@/lib/ai/known-entities'
 
 /**
- * A memo reviewed in one place (.claude/plans/brio-features-round-2.md, §13). When a memo is added, Brio
- * identifies its action items and suggests its RAID entries, and both wait on the memo: action items
- * for someone to apply, RAID suggestions for someone to accept. Nothing here applies anything: it writes
- * the memo's review (proposals, quotes as anchors only) and SUGGESTED RAID rows, never a reminder, a due
- * date or an accepted entry.
+ * A memo reviewed in one place (.claude/plans/raid-actions-memo-minutes.md). When a memo is added, Brio
+ * reads it once and writes two things that wait on the memo: its minutes, to copy into an email, and its
+ * RAID suggestions (Risks, Actions, Issues and Decisions, every commitment an Action), for someone to
+ * accept. Nothing here accepts anything: it writes the memo's review (the minutes sealed, skipped lines as
+ * anchors only) and SUGGESTED RAID rows, never an accepted entry.
  *
  * Runs after the memos route has answered (Next's `after()`), so saving stays quick. It never throws: a
  * memo it couldn't review is left as it was, and the sparkle runs it by hand.
  *
- * One credit, charged to the firm (no person pressed anything, so no per-person limit): the action items
- * (`notesProposals`, 1); the RAID pass is `memoRaid`, at 0.
+ * Two credits, charged to the firm (no person pressed anything, so no per-person limit): the RAID read
+ * (`memoRaid`, 1) and the minutes (`memoMinutes`, 1). Every AI call is one credit (Deepak, 2026-11-15).
  */
 
-/** The firm's switch, on by default: Settings › Brio › "Identify action items when a memo is added". */
+/** The firm's switch, on by default: Settings › Brio › "Summarize memos and suggest RAID items when they're added". */
 export async function memoReviewEnabled(firmId: string): Promise<boolean> {
     const firm = await prisma.firm.findUnique({ where: { id: firmId }, select: { settings: true } })
     const brio = (firm?.settings as { brio?: { memoReview?: unknown } } | null)?.brio
@@ -60,7 +61,7 @@ const WHEN: Record<MemoReadTrigger, string> = { added: 'when it was added', edit
 /**
  * The audit trail's record that Brio read a memo (its words went to the model): who set it off and what
  * it found, never the memo's words. Firm only, as every memo event is (lib/audit-event-types.ts).
- * `actionItems` null: nothing usable came back.
+ * `raidSuggested` null and no minutes: nothing usable came back.
  */
 export function auditMemoRead(params: {
     firmId: string
@@ -70,12 +71,14 @@ export function auditMemoRead(params: {
     fileName: string
     actorUserId: string | null
     trigger: MemoReadTrigger
-    actionItems: number | null
-    raidSuggested?: number
+    minutes: boolean
+    raidSuggested: number | null
 }): void {
-    const found = params.actionItems === null
-        ? 'nothing usable came back'
-        : [plural(params.actionItems, 'action item'), ...(params.raidSuggested ? [plural(params.raidSuggested, 'RAID suggestion')] : [])].join(' · ')
+    const parts = [
+        ...(params.minutes ? ['Minutes'] : []),
+        ...(params.raidSuggested !== null ? [plural(params.raidSuggested, 'RAID suggestion')] : []),
+    ]
+    const found = parts.length > 0 ? parts.join(' · ') : 'nothing usable came back'
     audit(AUDIT_EVENT.DOCUMENT_AI_REVIEWED)
         .firm(params.firmId).client(params.clientId ?? undefined).engagement(params.engagementId).document(params.memoId)
         .actor(params.actorUserId).scope(AUDIT_SCOPE.DOCUMENT)
@@ -84,22 +87,75 @@ export function auditMemoRead(params: {
             memo: true,
             agent: 'Brio',
             trigger: params.trigger,
-            actionItems: params.actionItems,
-            ...(params.raidSuggested !== undefined ? { raidSuggested: params.raidSuggested } : {}),
+            minutes: params.minutes,
+            ...(params.raidSuggested !== null ? { raidSuggested: params.raidSuggested } : {}),
             summary: `${found} · ${WHEN[params.trigger]}`,
         })
         .fireAndForget()
 }
 
+export type MemoReadOutcome =
+    | { status: 'reviewed'; minutes: boolean; raidSuggested: number }
+    /** The group's credits or the person's limits ran out before either call: the error says which. */
+    | { status: 'over_limit'; error: AiCreditLimitError }
+    | { status: 'unconfigured' }
+    | { status: 'no_answer' }
+
+/**
+ * Brio's read of one memo's text: its RAID suggestions (saved as SUGGESTED rows) and its minutes, in
+ * parallel, then the memo's review written with the minutes sealed and the skipped lines anchored. Each
+ * call stands alone: a RAID read that fails still leaves the minutes, and the other way round. Shared by
+ * the memo's own add and edit (reviewMemoOnAdd) and the sparkle's route. Throws only what the caller's
+ * own reads throw; the model calls' failures are answered.
+ */
+export async function readMemoWithBrio(params: {
+    engagementId: string
+    firmId: string
+    memo: { id: string; title: string; date: string; text: string }
+    /** The person who pressed the sparkle; null when the memo was added or edited. */
+    userId: string | null
+    by: 'auto' | 'person'
+    now: Date
+}): Promise<MemoReadOutcome> {
+    const vault = await vaultForEngagement(params.engagementId, params.firmId)
+    const deliverables = await loadNotesDeliverables(params.engagementId)
+    let overLimit: AiCreditLimitError | null = null
+    const quiet = (what: string) => (error: unknown) => {
+        if (error instanceof AiCreditLimitError) overLimit = error
+        else logger.error(`[memo-review] the memo's ${what} failed`, error as Error)
+        return null
+    }
+    const [raid, minutes] = await Promise.all([
+        runMemoRaidCheck({ engagementId: params.engagementId, firmId: params.firmId, memo: params.memo, now: params.now, userId: params.userId, deliverables, vault })
+            .catch(quiet('RAID read')),
+        writeMemoMinutes({ engagementId: params.engagementId, firmId: params.firmId, memo: params.memo, userId: params.userId, vault })
+            .catch(quiet('minutes')),
+    ])
+    const raidOk = raid?.ok ? raid : null
+    const minutesOk = minutes?.ok ? minutes.minutes : null
+    if (!raidOk && !minutesOk) {
+        if (overLimit) return { status: 'over_limit', error: overLimit }
+        if ((raid && !raid.ok && raid.reason === 'unconfigured') || (minutes && !minutes.ok && minutes.reason === 'unconfigured')) return { status: 'unconfigured' }
+        return { status: 'no_answer' }
+    }
+    await writeMemoReview(params.engagementId, params.memo.id, memoReadReview(
+        { skipped: raidOk?.skipped ?? [], dropped: raidOk?.dropped ?? 0, minutes: minutesOk ? sealMinutes(minutesOk) : null },
+        params.memo.text,
+        params.by,
+        params.now,
+    ))
+    return { status: 'reviewed', minutes: !!minutesOk, raidSuggested: raidOk?.suggested ?? 0 }
+}
+
 export type MemoReviewOnAddOutcome =
-    | { status: 'reviewed'; actionItems: number; raidSuggested: number }
+    | { status: 'reviewed'; minutes: boolean; raidSuggested: number }
     | { status: 'off' | 'unconfigured' | 'unread' | 'empty' | 'too_long' | 'over_limit' | 'no_answer' | 'failed' }
 
 /**
  * Reviews a memo that was just added, or whose notes were just edited. Never throws.
  *
- * `requested`: a person asked for it, ticking "Identify action items in the new notes" when editing a memo
- * (§14.3), so the firm's switch for new memos doesn't apply. Still one credit, from the firm.
+ * `requested`: a person asked for it, ticking the box to read the new notes when editing a memo (§14.3),
+ * so the firm's switch for new memos doesn't apply. Still two credits, from the firm.
  */
 export async function reviewMemoOnAdd(params: {
     engagementId: string
@@ -117,7 +173,7 @@ export async function reviewMemoOnAdd(params: {
         if (!isAiConfigured()) return { status: 'unconfigured' }
         if (!params.requested && !(await memoReviewEnabled(params.firmId))) return { status: 'off' }
 
-        // Read for these calls only, as Find actions reads it; never stored.
+        // Read for these calls only; never stored in the clear.
         const memo = await readMemoText(params.engagementId, params.memoId)
         if (!memo.ok) {
             logger.warn('[memo-review] the memo could not be read', { engagementId: params.engagementId, memoId: params.memoId, status: memo.status })
@@ -127,29 +183,14 @@ export async function reviewMemoOnAdd(params: {
         if (!text) return { status: 'empty' }
         if (text.length > MAX_MEMO_CHARS) return { status: 'too_long' }
 
-        // The memo's RAID suggestions are read at the same time as its action items, and saved first: the
-        // pane reloads what waits on the memo when the action items land, so both must be there by then.
-        // Its own failure never costs the action items.
-        const raidRead = runMemoRaidCheck({
+        const outcome = await readMemoWithBrio({
             engagementId: params.engagementId,
             firmId: params.firmId,
             memo: { id: params.memoId, title: memo.memo.title, date: memo.memo.date, text },
+            userId: null,
+            by: 'auto',
             now,
-        }).catch((error) => {
-            if (!(error instanceof AiCreditLimitError)) logger.error('[memo-review] the memo RAID pass failed', error as Error)
-            return null
         })
-        const [found, raid] = await Promise.all([
-            findNotesActions({
-                notes: text,
-                deliverables: await loadNotesDeliverables(params.engagementId),
-                today: resolveToday(undefined, now),
-                scope: { firmId: params.firmId, userId: null, feature: 'notesProposals' },
-                vault: await vaultForEngagement(params.engagementId, params.firmId),
-            }),
-            raidRead,
-        ])
-        const raidSuggested = raid?.ok ? raid.suggested : 0
         const read = {
             firmId: params.firmId,
             clientId: params.clientId,
@@ -159,14 +200,12 @@ export async function reviewMemoOnAdd(params: {
             actorUserId: params.actorUserId ?? null,
             trigger: params.trigger ?? 'added',
         }
-        if (!found.ok) {
-            if (found.reason === 'unconfigured') return { status: 'unconfigured' }
-            auditMemoRead({ ...read, actionItems: null })
-            return { status: 'no_answer' }
+        if (outcome.status !== 'reviewed') {
+            if (outcome.status === 'no_answer') auditMemoRead({ ...read, minutes: false, raidSuggested: null })
+            return { status: outcome.status === 'over_limit' ? 'over_limit' : outcome.status }
         }
-        await writeMemoReview(params.engagementId, params.memoId, memoReviewOf(found, text, 'auto', now))
-        auditMemoRead({ ...read, actionItems: found.proposals.length, raidSuggested })
-        return { status: 'reviewed', actionItems: found.proposals.length, raidSuggested }
+        auditMemoRead({ ...read, minutes: outcome.minutes, raidSuggested: outcome.raidSuggested })
+        return outcome
     } catch (error) {
         if (error instanceof AiCreditLimitError) return { status: 'over_limit' }
         logger.error('[memo-review] reviewing a new memo failed', error as Error)

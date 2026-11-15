@@ -675,7 +675,9 @@ export async function editMemo(input: EditMemoInput): Promise<EditMemoResult> {
     const settings = (row?.settings ?? {}) as Record<string, unknown>
     const metadata = (row?.metadata ?? {}) as Record<string, unknown>
     const prior = found.memo.review
-    const review: MemoReview | null = !prior ? null : notesChanged ? { ...prior, dismissed: true } : reanchorReview(prior, oldText, markdown)
+    // New notes: what Brio found no longer stands, the minutes with it (they're the old notes' words). A
+    // new title or day keeps both, each quote found again where it now sits.
+    const review: MemoReview | null = !prior ? null : notesChanged ? { ...withoutMinutes(prior), dismissed: true } : reanchorReview(prior, oldText, markdown)
     const source: MemoSource = notesChanged ? (input.source ?? found.memo.source) : found.memo.source
     // Written over the row's own `memo`, so the applied lines stay as stored (encrypted).
     const memo: Record<string, unknown> = {
@@ -768,6 +770,13 @@ export async function recordMemoApplied(engagementId: string, documentId: unknow
 // ── Action items waiting on a memo (§13) ──────────────────────────────────────────────────────
 
 /** Keeps what Brio identified in a memo, quotes as anchors only (memoReviewOf), in place of the last. */
+/** A review without its minutes: kept when the notes they summarized are replaced. */
+function withoutMinutes(review: MemoReview): MemoReview {
+    const rest = { ...review }
+    delete rest.minutes
+    return rest
+}
+
 export async function writeMemoReview(engagementId: string, documentId: unknown, review: MemoReview): Promise<boolean> {
     const found = await findMemo(engagementId, documentId)
     if (!found) return false

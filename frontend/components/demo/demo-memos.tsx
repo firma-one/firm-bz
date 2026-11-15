@@ -10,8 +10,6 @@ import type { DemoEngagement } from '@/lib/demo/static-demo-data'
 import { getDemoDeliverables } from '@/lib/demo/demo-deliverables'
 import { prettyName } from '@/lib/demo/demo-summary'
 import {
-    alreadyAppliedIds,
-    alreadyAppliedOn,
     appliedLabelOf,
     appliedStoredIds,
     appliedStoredOn,
@@ -22,22 +20,33 @@ import {
     anchorQuote,
     memoMarkdown,
     memoMatchText,
-    memoReviewOf,
+    memoReadReview,
     reanchorReview,
     waitingActionItems,
+    type MemoAcceptedAction,
     type MemoAppliedAction,
     type MemoListItem,
+    type MemoMinutes,
     type MemoRaidSuggestion,
     type MemoReview,
     type MemoReviewPayload,
 } from '@/lib/memos/memo-shared'
+import type { MemoSuggestionChanges } from '@/components/projects/memo-brio-panel'
 
 /*
- * Internal memos on /tour: three canned calls of the sample engagement, kept in memory. Find actions
- * answers with canned proposals grounded in the memo's own lines, Apply marks the memo, and a memo
- * added here joins the list. Nothing is sent. Discussions › Memos shows them (DemoMemosTab, the app's
- * own MemosView); the Overview card that showed them before (demo-internal-memos.tsx) reads them here too.
+ * Internal memos on /tour: three canned calls of the sample engagement, kept in memory. Brio's read
+ * answers with canned minutes and RAID suggestions grounded in the memo's own lines (every commitment
+ * an Action, .claude/plans/raid-actions-memo-minutes.md), Accept takes them off the memo, and a memo added
+ * here joins the list. Nothing is sent. Discussions › Memos shows them (DemoMemosTab, the app's own
+ * MemosView); the Overview card that showed them before (demo-internal-memos.tsx) reads them here too.
  */
+
+/** What Brio's read of a tour memo gives: its minutes, its RAID suggestions and the lines it left. */
+export interface DemoMemoRead {
+    minutes: MemoMinutes
+    raid: MemoRaidSuggestion[]
+    skipped: { quote: string; reason: string }[]
+}
 
 export interface DemoMemo extends MemoListItem {
     body: string
@@ -47,6 +56,12 @@ export interface DemoMemo extends MemoListItem {
     /** What waits on it (§13), as the app keeps it: quotes as anchors only. */
     review: MemoReview | null
     raid: MemoRaidSuggestion[]
+    /** Its minutes, once Brio has read it (the app keeps them sealed with the review). */
+    minutes: MemoMinutes | null
+    /** Actions accepted from it, for the minutes. */
+    acceptedActions: MemoAcceptedAction[]
+    /** Brio's read of it, canned; null for a memo read before minutes and RAID Actions. */
+    read: ((today: Date) => DemoMemoRead) | null
     /** When its notes last changed here (§14.3), as the app keeps it. */
     notesChangedAt: string | null
 }
@@ -93,6 +108,7 @@ export function demoMemo(params: {
     body: string
     applied?: MemoAppliedAction[]
     found: (today: Date) => MemoFound
+    read?: (today: Date) => DemoMemoRead
 }): DemoMemo {
     return {
         id: params.id,
@@ -113,11 +129,47 @@ export function demoMemo(params: {
         applied: params.applied ?? [],
         review: null,
         raid: [],
+        minutes: null,
+        acceptedActions: [],
+        read: params.read ?? null,
         createdAt: `${params.date}T17:00:00.000Z`,
         body: params.body,
         found: params.found,
     }
 }
+
+/** A tour memo as Brio's read leaves it: the minutes and suggestions waiting, the review noting the read. */
+function afterRead(m: DemoMemo, at: Date): DemoMemo {
+    if (!m.read) return m
+    const read = m.read(at)
+    return {
+        ...m,
+        minutes: read.minutes,
+        raid: read.raid,
+        review: memoReadReview({ skipped: read.skipped, dropped: 0, minutes: null }, demoMemoText(m), 'auto', at),
+    }
+}
+
+/** One canned suggestion: its line's place in the memo, as the app stores it. */
+function suggestion(text: string, p: Omit<MemoRaidSuggestion, 'quoteAt' | 'dueDate' | 'followUp' | 'priority'> & {
+    quote: string
+    priority?: MemoRaidSuggestion['priority']
+    dueDate?: string | null
+    followUp?: MemoRaidSuggestion['followUp']
+}): MemoRaidSuggestion {
+    return {
+        id: p.id,
+        type: p.type,
+        title: p.title,
+        priority: p.priority ?? null,
+        quoteAt: anchorQuote(memoMatchText(text), p.quote),
+        dueDate: p.dueDate ?? null,
+        followUp: p.followUp ?? null,
+    }
+}
+
+/** "Mar 4, 2026": the day in a tour memo's minutes subject. */
+const subjectDay = (day: string) => new Date(`${day}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
 
 export function cannedMemos(engagement: DemoEngagement, now: Date): DemoMemo[] {
     const nextMonday = localDay(mondayOf(1, now))
@@ -142,14 +194,47 @@ export function cannedMemos(engagement: DemoEngagement, now: Date): DemoMemo[] {
         contact: 'Main contact is Dana; billing questions go to her office',
     }
 
+    const fridayNext = (() => { const d = mondayOf(1, now); d.setDate(d.getDate() + 4); return localDay(d) })()
+    const weeklyMeta = { title: 'Weekly check-in', date: daysAgo(2, now), authorName: 'Alex Jordan' }
+    const weeklyBody = [weekly.figures, weekly.due, weekly.scope, weekly.chase, weekly.later].filter(Boolean).map((l) => `- ${l}`).join('\n')
+    const weeklyText = demoMemoText({ ...weeklyMeta, body: weeklyBody })
+    const kickoffMeta = { title: 'Kickoff call', date: daysAgo(9, now), authorName: 'Sam Rivera' }
+    const kickoffBody = [
+        'Alex Jordan: Thanks for making the time. We will walk through scope, then timing.',
+        kickoff.access,
+        kickoff.owner,
+        'Dana Whitfield: Perfect. Send the agenda for next time and we will review it with the team.',
+    ].join('\n\n')
+    const kickoffText = demoMemoText({ ...kickoffMeta, body: kickoffBody })
+
     return [
         demoMemo({
             id: 'tour-memo-weekly',
-            date: daysAgo(2, now),
-            title: 'Weekly check-in',
-            authorName: 'Alex Jordan',
+            ...weeklyMeta,
             source: 'notes',
-            body: [weekly.figures, weekly.due, weekly.scope, weekly.chase, weekly.later].filter(Boolean).map((l) => `- ${l}`).join('\n'),
+            body: weeklyBody,
+            read: () => ({
+                minutes: {
+                    subject: `Minutes · ${engagement.name} weekly check-in · ${subjectDay(weeklyMeta.date)}`,
+                    attendees: ['Alex Jordan', 'Dana Whitfield'],
+                    summary: `The latest figures are due by the end of next week${targetName ? `, and the ${targetName} is wanted sooner` : ''}. Dana asked whether a board summary could be added, and the signed change order is still outstanding.`,
+                    discussed: ['Latest figures', ...(targetName ? [`Timing of the ${targetName}`] : []), 'A possible board summary', 'The signed change order'],
+                    decisions: [],
+                    openQuestions: ['Whether a board summary is in scope.'],
+                    nextMeeting: 'After the holidays',
+                },
+                raid: [
+                    suggestion(weeklyText, { id: 'tour-raid-weekly-figures', type: 'ACTION', title: 'Dana to send the latest figures', quote: weekly.figures, dueDate: fridayNext }),
+                    ...(target && weekly.due ? [suggestion(weeklyText, {
+                        id: 'tour-raid-weekly-due', type: 'ACTION' as const, title: `Move the ${targetName} due date earlier`, quote: weekly.due, dueDate: nextMonday,
+                    })] : []),
+                    suggestion(weeklyText, { id: 'tour-raid-weekly-board', type: 'ACTION', title: 'Set up the Board Summary deliverable', quote: weekly.scope, dueDate: nextMonday, followUp: 'DELIVERABLE' }),
+                    suggestion(weeklyText, { id: 'tour-raid-weekly-chase', type: 'ACTION', title: 'Chase the signed change order', quote: weekly.chase, dueDate: nextMonday }),
+                    // The same entry the RAID tab's line to this memo names (demo-raid.tsx).
+                    suggestion(weeklyText, { id: 'tour-raid-weekly-1', type: 'RISK', title: 'The signed change order may hold up the launch', quote: weekly.chase, priority: 'MEDIUM' }),
+                ],
+                skipped: [{ quote: weekly.later, reason: 'the next check-in, not a commitment' }],
+            }),
             found: () => ({
                 proposals: [
                     { kind: 'reminder', id: 'reminder-1', title: 'Check the figures arrived', date: mondayAfter, quote: weekly.figures },
@@ -166,17 +251,26 @@ export function cannedMemos(engagement: DemoEngagement, now: Date): DemoMemo[] {
         }),
         demoMemo({
             id: 'tour-memo-kickoff',
-            date: daysAgo(9, now),
-            title: 'Kickoff call',
-            authorName: 'Sam Rivera',
+            ...kickoffMeta,
             source: 'transcript',
             durationMinutes: 38,
-            body: [
-                'Alex Jordan: Thanks for making the time. We will walk through scope, then timing.',
-                kickoff.access,
-                kickoff.owner,
-                'Dana Whitfield: Perfect. Send the agenda for next time and we will review it with the team.',
-            ].join('\n\n'),
+            body: kickoffBody,
+            read: () => ({
+                minutes: {
+                    subject: `Minutes · ${engagement.name} kickoff · ${subjectDay(kickoffMeta.date)}`,
+                    attendees: ['Alex Jordan', 'Dana Whitfield'],
+                    summary: 'The call walked through scope, then timing. Dana is opening the shared finance folder, and Alex will write the weekly status note.',
+                    discussed: ['Scope', 'Timing', 'Access to the shared finance folder', 'The weekly status note'],
+                    decisions: ['Alex writes the weekly status note.'],
+                    openQuestions: [],
+                    nextMeeting: null,
+                },
+                raid: [
+                    suggestion(kickoffText, { id: 'tour-raid-kickoff-access', type: 'ACTION', title: 'Dana to give access to the shared finance folder', quote: kickoff.access, dueDate: nextMonday }),
+                    suggestion(kickoffText, { id: 'tour-raid-kickoff-agenda', type: 'ACTION', title: 'Send Dana the agenda for the next call', quote: 'Send the agenda for next time', dueDate: nextMonday }),
+                ],
+                skipped: [],
+            }),
             found: () => ({
                 proposals: [
                     { kind: 'reminder', id: 'reminder-1', title: 'Check finance folder access', date: nextMonday, quote: kickoff.access },
@@ -203,18 +297,42 @@ export function cannedMemos(engagement: DemoEngagement, now: Date): DemoMemo[] {
                 dropped: 0,
             }),
         }),
-    ].map((m) => withCounts(m.id === 'tour-memo-weekly'
-        // The newest call arrived with its action items, and a RAID suggestion, already waiting (§13).
-        ? {
-            ...m,
-            review: memoReviewOf(m.found(now), demoMemoText(m), 'auto', new Date(m.createdAt)),
-            // Its line's place in the memo, as the app stores it: the pane shows the words from the memo.
-            raid: [{
-                id: 'tour-raid-weekly-1', type: 'RISK', title: 'The signed change order may hold up the launch', priority: 'MEDIUM',
-                quoteAt: anchorQuote(memoMatchText(demoMemoText(m)), 'I need to chase the signed change order, still missing'),
-            }],
+    ].map((m) => {
+        // The newest call arrived with its minutes and RAID suggestions already waiting.
+        if (m.id === 'tour-memo-weekly') return withCounts(afterRead(m, new Date(m.createdAt)))
+        // The kickoff was read and its Actions accepted: the minutes list them, nothing waits.
+        if (m.id === 'tour-memo-kickoff') {
+            const read = afterRead(m, new Date(m.createdAt))
+            return withCounts({
+                ...read,
+                raid: [],
+                acceptedActions: read.raid.map((r) => ({ id: r.id, title: r.title, dueDate: r.dueDate, followUp: r.followUp })),
+            })
         }
-        : m))
+        // The scoping call was read before minutes and RAID Actions: its action item was applied then.
+        return withCounts(m)
+    })
+}
+
+/** A memo added on the tour: Brio's read finds a follow-up on its first line, and writes short minutes. */
+function addedMemoRead(m: Pick<DemoMemo, 'title' | 'date' | 'authorName' | 'body'>, now: Date): DemoMemoRead {
+    const first = m.body.split('\n').map((l) => l.replace(/^\s*(?:#{1,6}\s+|[-*+]\s+|>\s*)/, '').trim()).find((l) => l.length >= 4)
+    const text = demoMemoText(m)
+    return {
+        minutes: {
+            subject: `Minutes · ${m.title} · ${subjectDay(m.date)}`,
+            attendees: [m.authorName],
+            summary: first ? `The call covered: ${first.length > 160 ? `${first.slice(0, 160)}…` : first}` : 'A short call.',
+            discussed: first ? [first.length > 80 ? `${first.slice(0, 80)}…` : first] : [],
+            decisions: [],
+            openQuestions: [],
+            nextMeeting: null,
+        },
+        raid: first ? [suggestion(text, {
+            id: `tour-raid-added-${Date.now()}`, type: 'ACTION', title: 'Follow up on this call', quote: first.length > 200 ? first.slice(0, 200) : first, dueDate: localDay(mondayOf(1, now)),
+        })] : [],
+        skipped: [],
+    }
 }
 
 /** A memo added on the tour: Brio "finds" a follow-up on its first line, a week out. */
@@ -251,12 +369,15 @@ export function useDemoMemos(engagement: DemoEngagement, today: Date | null) {
         signal?.addEventListener('abort', () => { clearTimeout(t); reject(new AiAbortedError()) })
     }), [])
 
-    const findActions = useCallback(async (memo: MemoListItem, signal: AbortSignal): Promise<MemoFound> => {
-        const demo = memosRef.current?.find((m) => m.id === memo.id)
-        const found = demo ? demo.found(new Date()) : { proposals: [], skipped: [], dropped: 0 }
-        const applied = demo?.applied ?? []
-        return wait(900, { ...found, alreadyApplied: alreadyAppliedIds(found.proposals, applied), appliedOn: alreadyAppliedOn(found.proposals, applied) }, signal)
-    }, [wait])
+    const update = useCallback((id: string, change: (m: DemoMemo) => DemoMemo) => {
+        setMemos((list) => (list ?? []).map((m) => (m.id === id ? withCounts(change(m)) : m)))
+    }, [])
+
+    /** The sparkle, as the app's: Brio reads the memo again, and its minutes and suggestions wait on it. */
+    const readMemo = useCallback(async (memo: MemoListItem, signal: AbortSignal): Promise<void> => {
+        await wait(1_400, null, signal)
+        update(memo.id, (m) => afterRead({ ...m, read: m.read ?? ((day: Date) => addedMemoRead(m, day)) }, new Date()))
+    }, [wait, update])
 
     const apply = useCallback(async (memo: MemoListItem, _found: MemoFound, p: ApplicableProposal, original?: ApplicableProposal) => {
         await wait(400, null)
@@ -289,21 +410,31 @@ export function useDemoMemos(engagement: DemoEngagement, today: Date | null) {
             applied: (demo?.applied ?? []).map((a) => ({ label: a.label, at: a.at })),
             engagement: { id: engagement.slug, name: engagement.name, firmId: 'tour', ctaUrl: null },
             raid: demo?.raid ?? [],
+            minutes: demo?.minutes ?? null,
+            acceptedActions: demo?.acceptedActions ?? [],
         }, signal)
     }, [wait, engagement.slug, engagement.name])
 
-    const update = useCallback((id: string, change: (m: DemoMemo) => DemoMemo) => {
-        setMemos((list) => (list ?? []).map((m) => (m.id === id ? withCounts(change(m)) : m)))
-    }, [])
-
+    /** Dismiss all, as the app: the waiting suggestions go; the minutes stay. */
     const dismissReview = useCallback(async (memo: MemoListItem) => {
         await wait(200, null)
-        update(memo.id, (m) => (m.review ? { ...m, review: { ...m.review, dismissed: true } } : m))
+        update(memo.id, (m) => ({ ...m, raid: [], review: m.review ? { ...m.review, dismissed: true } : m.review }))
     }, [wait, update])
 
-    const actOnRaid = useCallback(async (memo: MemoListItem, itemId: string) => {
+    /** Accepts or dismisses one suggestion; an accepted Action joins the minutes' action items. */
+    const actOnRaid = useCallback(async (memo: MemoListItem, itemId: string, action: 'accept' | 'dismiss', changes: MemoSuggestionChanges = {}) => {
         await wait(300, null)
-        update(memo.id, (m) => ({ ...m, raid: m.raid.filter((r) => r.id !== itemId) }))
+        update(memo.id, (m) => {
+            const item = m.raid.find((r) => r.id === itemId)
+            const type = changes.type ?? item?.type
+            return {
+                ...m,
+                raid: m.raid.filter((r) => r.id !== itemId),
+                acceptedActions: item && action === 'accept' && type === 'ACTION'
+                    ? [...m.acceptedActions, { id: item.id, title: changes.title ?? item.title, dueDate: changes.dueDate ?? item.dueDate, followUp: item.followUp }]
+                    : m.acceptedActions,
+            }
+        })
     }, [wait, update])
 
     // A memo added here: Brio "identifies" its action items a moment after it's saved, as the app does.
@@ -322,13 +453,14 @@ export function useDemoMemos(engagement: DemoEngagement, today: Date | null) {
             durationMinutes: input.durationMinutes ?? undefined,
             body: input.body,
             found: (day) => addedMemoFound(input.body, day),
+            read: (day) => addedMemoRead({ title: input.title, date: input.date, authorName: 'Alex Jordan', body: input.body }, day),
         })
         memo.fileName = memoFileName(input.date, input.title, list.map((m) => m.fileName))
         memo.createdAt = now.toISOString()
         setMemos([memo, ...list].sort(byNewestMemo))
         setIdentifyingIds((ids) => [...ids, memo.id])
         timers.current.push(setTimeout(() => {
-            update(memo.id, (m) => ({ ...m, review: memoReviewOf(m.found(new Date()), demoMemoText(m), 'auto') }))
+            update(memo.id, (m) => afterRead(m, new Date()))
             setIdentifyingIds((ids) => ids.filter((id) => id !== memo.id))
         }, IDENTIFY_MS))
         return { ok: true, memo, fileName: memo.fileName }
@@ -362,7 +494,10 @@ export function useDemoMemos(engagement: DemoEngagement, today: Date | null) {
                     durationMinutes: input.source === 'transcript' ? input.durationMinutes : null,
                     review: current.review ? { ...current.review, dismissed: true } : null,
                     raid: [],
+                    // New notes: the minutes were the old notes' words.
+                    minutes: null,
                     found: (day: Date) => addedMemoFound(body, day),
+                    read: (day: Date) => addedMemoRead({ title, date: input.date, authorName: current.authorName, body }, day),
                 }
                 : { review: current.review ? reanchorReview(current.review, oldText, demoMemoText({ ...current, title, date: input.date })) : null }),
         })
@@ -370,14 +505,14 @@ export function useDemoMemos(engagement: DemoEngagement, today: Date | null) {
         if (notesChanged && input.identify) {
             setIdentifyingIds((ids) => [...ids.filter((id) => id !== memo.id), memo.id])
             timers.current.push(setTimeout(() => {
-                update(memo.id, (m) => ({ ...m, review: memoReviewOf(m.found(new Date()), demoMemoText(m), 'auto') }))
+                update(memo.id, (m) => afterRead(m, new Date()))
                 setIdentifyingIds((ids) => ids.filter((id) => id !== memo.id))
             }, IDENTIFY_MS))
         }
         return { ok: true, memo: next, fileName }
     }, [wait, update])
 
-    return { memos, findActions, apply, loadContent, save, edit, loadReview, dismissReview, actOnRaid, identifyingIds }
+    return { memos, readMemo, apply, loadContent, save, edit, loadReview, dismissReview, actOnRaid, identifyingIds }
 }
 
 export type DemoMemosController = ReturnType<typeof useDemoMemos>
@@ -421,7 +556,7 @@ export function DemoMemosTab({ memos: c, selectedId, onSelect }: {
                 onSelect={onSelect}
                 loadContent={c.loadContent}
                 openUnavailable="Not available in this demo"
-                findActions={c.findActions}
+                readMemo={c.readMemo}
                 apply={c.apply}
                 loadReview={c.loadReview}
                 dismissReview={c.dismissReview}

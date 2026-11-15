@@ -276,8 +276,20 @@ export interface NotesProposalsReviewProps {
      * press accepts everything chosen on the memo.
      */
     alsoSelected?: { count: number; accept: () => Promise<void> }
+    /**
+     * Leaves Dismiss and Accept to the caller's own foot, as a memo's Brio panel does under its RAID
+     * suggestions, so the panel shows one "Accept N selected" (Deepak, 2026-11-15): what's selected here
+     * is told as it changes, with how to accept it, and null once the list is gone.
+     */
+    onSelectedChange?: (selected: AcceptSelected | null) => void
     /** In place of "Edit any of them…" under the heading, as after a memo was edited and read again. */
     caption?: string
+}
+
+/** What's selected in a list, and accepting it, for a foot that sits outside the list. */
+export interface AcceptSelected {
+    count: number
+    accept: () => Promise<void>
 }
 
 /** What a proposal applied from this memo before shows instead of Apply. */
@@ -291,7 +303,7 @@ function appliedBeforeNote(at: string | undefined): string {
     return `Accepted on ${day.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} from this memo, so it isn't added twice.`
 }
 
-export function NotesProposalsReview({ found, apply, onDismiss, readOnly = false, footnote, layout = 'card', extra, alsoSelected, caption }: NotesProposalsReviewProps) {
+export function NotesProposalsReview({ found, apply, onDismiss, readOnly = false, footnote, layout = 'card', extra, alsoSelected, onSelectedChange, caption }: NotesProposalsReviewProps) {
     const { proposals, skipped, dropped } = found
     const appliedBefore = new Set(found.alreadyApplied ?? [])
     // Reminders and due dates start selected, unless applied before; a new deliverable never is.
@@ -350,6 +362,16 @@ export function NotesProposalsReview({ found, apply, onDismiss, readOnly = false
             setApplyingAll(false)
         }
     }
+
+    // A foot outside the list: it's told the count as the selection changes, and accepts with what's
+    // selected and edited when it's pressed (the ref holds the latest, so a stale edit is never sent).
+    const acceptRef = useRef(acceptSelected)
+    useEffect(() => { acceptRef.current = acceptSelected })
+    const acceptFromFoot = useCallback(() => acceptRef.current(), [])
+    useEffect(() => {
+        onSelectedChange?.({ count: pending.length, accept: acceptFromFoot })
+    }, [onSelectedChange, pending.length, acceptFromFoot])
+    useEffect(() => () => onSelectedChange?.(null), [onSelectedChange])
 
     const count = proposals.length
     const headingId = useId()
@@ -468,19 +490,21 @@ export function NotesProposalsReview({ found, apply, onDismiss, readOnly = false
                 </div>
             )}
 
-            <div className={cn(
-                'flex flex-wrap items-center justify-end gap-2 border-t border-line py-3',
-                column ? 'sticky bottom-0 mt-auto bg-surface px-4' : 'px-3.5',
-            )}>
-                <Button type="button" variant="ghost" size="sm" onClick={onDismiss} disabled={applyingAll}>
-                    {count === 0 ? 'Dismiss' : 'Dismiss all'}
-                </Button>
-                {(proposals.length > 0 || (alsoSelected?.count ?? 0) > 0) && (
-                    <Button type="button" variant="greenCta" size="sm" disabled={readOnly || selectedTotal === 0 || applyingAll} onClick={acceptSelected}>
-                        {applyingAll ? 'Accepting…' : `Accept ${selectedTotal} selected`}
+            {!onSelectedChange && (
+                <div className={cn(
+                    'flex flex-wrap items-center justify-end gap-2 border-t border-line py-3',
+                    column ? 'sticky bottom-0 mt-auto bg-surface px-4' : 'px-3.5',
+                )}>
+                    <Button type="button" variant="ghost" size="sm" onClick={onDismiss} disabled={applyingAll}>
+                        {count === 0 ? 'Dismiss' : 'Dismiss all'}
                     </Button>
-                )}
-            </div>
+                    {(proposals.length > 0 || (alsoSelected?.count ?? 0) > 0) && (
+                        <Button type="button" variant="greenCta" size="sm" disabled={readOnly || selectedTotal === 0 || applyingAll} onClick={acceptSelected}>
+                            {applyingAll ? 'Accepting…' : `Accept ${selectedTotal} selected`}
+                        </Button>
+                    )}
+                </div>
+            )}
         </section>
     )
 }

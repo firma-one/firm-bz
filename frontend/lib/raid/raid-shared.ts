@@ -1,7 +1,8 @@
 /**
- * The RAID log (.claude/plans/brio-features-round-2.md, §9): Risks, Assumptions, Issues and Decisions
- * for one engagement, internal only. What the tab, the Overview card and /tour share: the shapes the
- * route answers, the words for each type, status and source, and the pure helpers that filter and count.
+ * The RAID log (.claude/plans/brio-features-round-2.md, §9): Risks, Actions, Issues and Decisions for one
+ * engagement, internal only (Actions replaced Assumptions on 2026-11-15, .claude/plans/raid-actions-memo-minutes.md).
+ * What the tab, the Overview card and /tour share: the shapes the route answers, the words for each type,
+ * status and source, and the pure helpers that filter and count.
  *
  * Safe to import from client components: no database, no SDK.
  */
@@ -10,25 +11,50 @@ import type { StatusStage } from '@/lib/ui/status'
 
 /** What RAID stands for, in one line: the Overview card's hint and the website's RAID info tip. */
 export const RAID_MEANING =
-    'Risks, Assumptions, Issues and Decisions: what could go wrong, what the plan relies on, what has gone wrong, and what people agreed.'
+    'Risks, Actions, Issues and Decisions: what could go wrong, what someone has to do, what has gone wrong, and what people agreed.'
 
-export type RaidType = 'RISK' | 'ASSUMPTION' | 'ISSUE' | 'DECISION'
+/**
+ * ASSUMPTION is only read: entries saved before 2026-11-15 keep it, and show with the Decisions under an
+ * "Assumption" label (displayTypeOf). Nothing new is created with it, by a person or by Brio.
+ */
+export type RaidType = 'RISK' | 'ACTION' | 'ISSUE' | 'DECISION' | 'ASSUMPTION'
+/** The four a person or Brio chooses from: R, A, I, D. */
+export type RaidKind = Exclude<RaidType, 'ASSUMPTION'>
 export type RaidStatus = 'SUGGESTED' | 'OPEN' | 'CLOSED' | 'RECORDED' | 'DISMISSED'
+/**
+ * An Action Brio added for the firm itself, not promised in the meeting: setting up a new deliverable
+ * people agreed on, or preparing for a review point they agreed. A memo's minutes leave these out.
+ */
+export type RaidFollowUp = 'DELIVERABLE' | 'PREPARE'
+
+export function parseFollowUp(raw: unknown): RaidFollowUp | null {
+    return raw === 'DELIVERABLE' || raw === 'PREPARE' ? raw : null
+}
 export type RaidSourceKind = 'STATUS' | 'HEALTH' | 'BOARD' | 'THREAD' | 'MEMO' | 'MANUAL'
 
-export const RAID_TYPES: readonly RaidType[] = ['RISK', 'ASSUMPTION', 'ISSUE', 'DECISION']
+export const RAID_TYPES: readonly RaidKind[] = ['RISK', 'ACTION', 'ISSUE', 'DECISION']
 
-export const RAID_TYPE_LETTER: Record<RaidType, string> = { RISK: 'R', ASSUMPTION: 'A', ISSUE: 'I', DECISION: 'D' }
+/** How an entry's type shows: an Assumption saved before Actions shows as a Decision, labelled. */
+export function displayTypeOf(type: RaidType): RaidKind {
+    return type === 'ASSUMPTION' ? 'DECISION' : type
+}
+
+/** An entry saved as an Assumption, before Actions: shown with the Decisions under an "Assumption" label. */
+export function isLegacyAssumption(item: { type: RaidType }): boolean {
+    return item.type === 'ASSUMPTION'
+}
+
+export const RAID_TYPE_LETTER: Record<RaidType, string> = { RISK: 'R', ACTION: 'A', ISSUE: 'I', DECISION: 'D', ASSUMPTION: 'D' }
 
 /**
  * Each type's color, from the Board's own stages (lib/ui/status.ts), so the log uses the colors the app
  * already uses for state and adds none (Deepak, 2026-11-14): a risk might happen (waiting, amber), an
- * assumption is held for now (underway, blue), an issue is happening (problem, red), a decision is
- * settled (done, green).
+ * action is under way (underway, blue), an issue is happening (problem, red), a decision is settled
+ * (done, green). An old Assumption takes the Decisions' color it's listed with.
  */
-export const RAID_TYPE_STAGE: Record<RaidType, StatusStage> = { RISK: 'waiting', ASSUMPTION: 'underway', ISSUE: 'problem', DECISION: 'done' }
-export const RAID_TYPE_LABEL: Record<RaidType, string> = { RISK: 'Risk', ASSUMPTION: 'Assumption', ISSUE: 'Issue', DECISION: 'Decision' }
-export const RAID_TYPE_PLURAL: Record<RaidType, string> = { RISK: 'Risks', ASSUMPTION: 'Assumptions', ISSUE: 'Issues', DECISION: 'Decisions' }
+export const RAID_TYPE_STAGE: Record<RaidType, StatusStage> = { RISK: 'waiting', ACTION: 'underway', ISSUE: 'problem', DECISION: 'done', ASSUMPTION: 'done' }
+export const RAID_TYPE_LABEL: Record<RaidType, string> = { RISK: 'Risk', ACTION: 'Action', ISSUE: 'Issue', DECISION: 'Decision', ASSUMPTION: 'Assumption' }
+export const RAID_TYPE_PLURAL: Record<RaidType, string> = { RISK: 'Risks', ACTION: 'Actions', ISSUE: 'Issues', DECISION: 'Decisions', ASSUMPTION: 'Assumptions' }
 
 export const RAID_STATUS_LABEL: Record<RaidStatus, string> = {
     SUGGESTED: 'Suggested',
@@ -36,6 +62,50 @@ export const RAID_STATUS_LABEL: Record<RaidStatus, string> = {
     CLOSED: 'Closed',
     RECORDED: 'Recorded',
     DISMISSED: 'Dismissed',
+}
+
+/** An entry's status in words: a closed Action is "Done"; the rest as RAID_STATUS_LABEL says. */
+export function raidStatusLabel(item: { type: RaidType; status: RaidStatus }): string {
+    return item.type === 'ACTION' && item.status === 'CLOSED' ? 'Done' : RAID_STATUS_LABEL[item.status]
+}
+
+// ── Due dates (Actions) ───────────────────────────────────────────────────────────────────────
+
+/** A YYYY-MM-DD day from a request or the model, or null. */
+export function parseDueDate(raw: unknown): string | null {
+    if (typeof raw !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null
+    const d = new Date(`${raw}T00:00:00Z`)
+    return Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== raw ? null : raw
+}
+
+/** Today as YYYY-MM-DD, in UTC: what a due date is compared with. */
+export function todayDay(now: Date = new Date()): string {
+    return now.toISOString().slice(0, 10)
+}
+
+/** An open Action past its due date. */
+export function isActionOverdue(item: { type: RaidType; status: RaidStatus; dueDate?: string | null }, today: string = todayDay()): boolean {
+    return item.type === 'ACTION' && item.status === 'OPEN' && !!item.dueDate && item.dueDate < today
+}
+
+/**
+ * The first working day of next week (a Monday): when an Action with no date said is due. The same rule
+ * Brio's memo read uses (lib/raid/raid-check.ts), and what the memo panel sets when a suggestion is
+ * turned into an Action.
+ */
+export function nextWeekStart(today: string = todayDay()): string {
+    const d = new Date(`${today}T00:00:00Z`)
+    const dow = d.getUTCDay() // 0 = Sunday
+    d.setUTCDate(d.getUTCDate() + (dow === 0 ? 1 : 8 - dow))
+    return d.toISOString().slice(0, 10)
+}
+
+/** "Fri, Mar 6": a due date as the log and the memo panel show it. */
+export function dueDay(day: string | null | undefined): string {
+    if (!day) return ''
+    const d = new Date(`${day}T00:00:00Z`)
+    if (Number.isNaN(d.getTime())) return ''
+    return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })
 }
 
 /** Kept current from the engagement's own signals, free: no person or model wrote them. */
@@ -51,8 +121,9 @@ export function liveStatusFor(type: RaidType): 'OPEN' | 'RECORDED' {
 // ── Priority ──────────────────────────────────────────────────────────────────────────────────
 
 /**
- * How much a Risk or an Issue matters (Deepak, 2026-11-14), shown as gray signal bars. Assumptions and
- * Decisions have none. Sorted on wherever the log is listed: the RAID tab and both Overviews.
+ * How much a Risk or an Issue matters (Deepak, 2026-11-14), shown as gray signal bars. Actions and
+ * Decisions have none (an Action's due date does that job). Sorted on wherever the log is listed: the
+ * RAID tab and both Overviews.
  */
 export type RaidPriority = 'HIGH' | 'MEDIUM' | 'LOW'
 export const RAID_PRIORITIES: readonly RaidPriority[] = ['HIGH', 'MEDIUM', 'LOW']
@@ -86,12 +157,12 @@ export function priorityForPoints(points: number): RaidPriority {
 }
 
 const PRIORITY_RANK: Record<RaidPriority, number> = { HIGH: 0, MEDIUM: 1, LOW: 2 }
-/** Issues before risks before assumptions before decisions: what a reader acts on first. */
-const TYPE_RANK: Record<RaidType, number> = { ISSUE: 0, RISK: 1, ASSUMPTION: 2, DECISION: 3 }
+/** Issues before risks before actions before decisions: what a reader acts on first. */
+const TYPE_RANK: Record<RaidType, number> = { ISSUE: 0, RISK: 1, ACTION: 2, DECISION: 3, ASSUMPTION: 3 }
 
 /**
  * The one order the log is read in, everywhere: High, Medium, Low (none last); within each, issues before
- * risks before assumptions before decisions; then newest first.
+ * risks before actions before decisions; then newest first.
  */
 export function compareRaid(
     a: { type: RaidType; priority?: RaidPriority | null; raisedAt: string },
@@ -191,10 +262,14 @@ export interface RaidItemView {
     internalSource: boolean
     /** For entries the sync keeps: "From status · closes itself when approved". */
     autoLine: string | null
-    /** An Issue about a deliverable past its due date: shown in the danger tone. */
+    /** An Issue about a deliverable past its due date, or an open Action past its own: shown in the danger tone. */
     overdue: boolean
-    /** Risks and Issues: High, Medium or Low (priorityOf). Null for Assumptions and Decisions. */
+    /** Risks and Issues: High, Medium or Low (priorityOf). Null for Actions and Decisions. */
     priority: RaidPriority | null
+    /** Actions only: YYYY-MM-DD, or null. */
+    dueDate: string | null
+    /** Actions only: one Brio added for the firm itself (RaidFollowUp), left out of a memo's minutes. */
+    followUp: RaidFollowUp | null
     /** A person chose the priority: the sync leaves it as they set it. */
     prioritySetByPerson: boolean
     /** A suggestion that adds to an entry already in the log. */
@@ -252,45 +327,45 @@ export function raidOpenCount(items: readonly Pick<RaidItemView, 'status'>[]): n
 
 export type RaidTone = 'late' | 'open' | 'closed' | 'recorded' | 'suggested'
 
-/** The status pill's tone: waiting for open, danger for an overdue issue, done for closed, neutral blue for a decision. */
+/** The status pill's tone: waiting for open, danger for an overdue issue or action, done for closed, neutral blue for a decision. */
 export function raidTone(item: Pick<RaidItemView, 'status' | 'type' | 'overdue'>): RaidTone {
     if (item.status === 'CLOSED' || item.status === 'DISMISSED') return 'closed'
     if (item.status === 'RECORDED') return 'recorded'
     if (item.status === 'SUGGESTED') return 'suggested'
-    return item.type === 'ISSUE' && item.overdue ? 'late' : 'open'
+    return (item.type === 'ISSUE' || item.type === 'ACTION') && item.overdue ? 'late' : 'open'
 }
 
-export type RaidTypeFilter = RaidType | 'ALL'
+export type RaidTypeFilter = RaidKind | 'ALL'
 export type RaidStateFilter = 'open' | 'closed'
 
 function inState(item: Pick<RaidItemView, 'status'>, state: RaidStateFilter): boolean {
     return state === 'open' ? isLive(item) : item.status === 'CLOSED'
 }
 
-/** The table's rows for a type and Open or Closed, newest first. */
+/** The table's rows for a type and Open or Closed, newest first. An old Assumption is listed with the Decisions. */
 export function filterRaidItems<T extends Pick<RaidItemView, 'status' | 'type' | 'raisedAt'> & { priority?: RaidPriority | null }>(
     items: readonly T[],
     type: RaidTypeFilter,
     state: RaidStateFilter,
 ): T[] {
     return items
-        .filter((i) => inState(i, state) && (type === 'ALL' || i.type === type))
+        .filter((i) => inState(i, state) && (type === 'ALL' || displayTypeOf(i.type) === type))
         .sort(compareRaid)
 }
 
 /** The counts beside each type filter, for Open or Closed. */
 export function raidCountsByType(items: readonly Pick<RaidItemView, 'status' | 'type'>[], state: RaidStateFilter): Record<RaidTypeFilter, number> {
-    const counts: Record<RaidTypeFilter, number> = { ALL: 0, RISK: 0, ASSUMPTION: 0, ISSUE: 0, DECISION: 0 }
+    const counts: Record<RaidTypeFilter, number> = { ALL: 0, RISK: 0, ACTION: 0, ISSUE: 0, DECISION: 0 }
     for (const i of items) {
         if (!inState(i, state)) continue
         counts.ALL += 1
-        counts[i.type] += 1
+        counts[displayTypeOf(i.type)] += 1
     }
     return counts
 }
 
 export interface RaidOverview {
-    counts: { openRisks: number; assumptions: number; openIssues: number; decisions: number }
+    counts: { openRisks: number; openActions: number; openIssues: number; decisions: number }
     /** The top open entries, from every source. */
     open: RaidItemView[]
     /** How many open entries there are in all, shown or not: "and 2 more". */
@@ -310,16 +385,18 @@ export function raidOverviewOf(log: Pick<RaidLogPayload, 'items' | 'suggestions'
     const latestDecision = live
         .filter((i) => i.type === 'DECISION' && !isAutoSource(i.sourceKind))
         .sort((a, b) => b.raisedAt.localeCompare(a.raisedAt))[0] ?? null
+    // An old Assumption is listed with the Decisions, so it's never among the open rows.
     const raised = live
-        .filter((i) => i.status === 'OPEN' && i.type !== 'DECISION')
+        .filter((i) => i.status === 'OPEN' && displayTypeOf(i.type) !== 'DECISION')
         .sort(compareRaid)
     const open = raised.slice(0, Math.max(0, maxRows - (latestDecision ? 1 : 0)))
     return {
         counts: {
             openRisks: live.filter((i) => i.type === 'RISK' && i.status === 'OPEN').length,
-            assumptions: live.filter((i) => i.type === 'ASSUMPTION' && i.status === 'OPEN').length,
+            openActions: live.filter((i) => i.type === 'ACTION' && i.status === 'OPEN').length,
             openIssues: live.filter((i) => i.type === 'ISSUE' && i.status === 'OPEN').length,
-            decisions: live.filter((i) => i.type === 'DECISION').length,
+            // An old Assumption is counted with the Decisions it's listed with.
+            decisions: live.filter((i) => displayTypeOf(i.type) === 'DECISION').length,
         },
         open,
         openTotal: raised.length,

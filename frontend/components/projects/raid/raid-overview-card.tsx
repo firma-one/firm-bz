@@ -10,6 +10,7 @@ import {
     raidLogHref,
     raidOverviewOf,
     shortDay,
+    dueDay,
     type RaidItemView,
     type RaidLogPayload,
 } from '@/lib/raid/raid-shared'
@@ -68,7 +69,7 @@ export function RaidOverviewView({ log, engagementBase, loadError, onRetry }: {
                                 parts={[
                                     { type: 'ISSUE', count: overview.counts.openIssues, one: 'open issue', many: 'open issues' },
                                     { type: 'RISK', count: overview.counts.openRisks, one: 'open risk', many: 'open risks' },
-                                    { type: 'ASSUMPTION', count: overview.counts.assumptions, one: 'assumption', many: 'assumptions' },
+                                    { type: 'ACTION', count: overview.counts.openActions, one: 'open action', many: 'open actions' },
                                     { type: 'DECISION', count: overview.counts.decisions, one: 'decision', many: 'decisions' },
                                 ]}
                             />
@@ -120,7 +121,10 @@ export function RaidOverviewView({ log, engagementBase, loadError, onRetry }: {
                                 title={item.title}
                                 context={whereRaised(item)}
                                 owner={firstNameOf(item.ownerName)}
-                                day={shortDay(item.raisedAt)}
+                                // An Action shows when it's due; everything else when it was raised.
+                                {...(item.type === 'ACTION' && item.dueDate
+                                    ? { day: dueDay(item.dueDate), dayLabel: 'Due', late: item.overdue }
+                                    : { day: shortDay(item.raisedAt) })}
                                 href={href}
                                 testId={`raid-card-row-${item.id}`}
                             />

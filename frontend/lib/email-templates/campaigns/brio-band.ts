@@ -30,9 +30,9 @@ function cardHead(ctx: CampaignContext, title?: string): string {
 /** Small gray print inside a card. */
 const muted = (html: string) => `<span style="font-size:12.5px;color:#6B6964;">${html}</span>`
 
-/** A draft Brio wrote, in its pale green box. */
-const draft = (html: string) =>
-  `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#F2FAF6" style="background-color:#F2FAF6;border:1px solid #CFEADC;border-radius:8px;margin:8px 0 0;"><tr><td style="padding:9px 11px;font-family:${F.FONT};font-size:13.5px;line-height:1.5;color:#37352F;"><strong style="display:block;font-size:12px;font-weight:600;color:#009669;">Brio draft</strong>${html}</td></tr></table>`
+/** Something Brio wrote (a draft, or a memo's minutes), in its pale green box. */
+const draft = (html: string, label = 'Brio draft') =>
+  `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#F2FAF6" style="background-color:#F2FAF6;border:1px solid #CFEADC;border-radius:8px;margin:8px 0 0;"><tr><td style="padding:9px 11px;font-family:${F.FONT};font-size:13.5px;line-height:1.5;color:#37352F;"><strong style="display:block;font-size:12px;font-weight:600;color:#009669;">${escHtml(label)}</strong>${html}</td></tr></table>`
 
 /** A blank in a draft, for the lead to fill before sending. */
 const blank = (text: string) => `<span style="background-color:#FFF1C2;color:#5C4300;border-radius:3px;padding:0 3px;">${escHtml(text)}</span>`
@@ -62,12 +62,13 @@ function moments(ctx: CampaignContext): string {
       foot: 'You · fill the blanks, then send',
     }),
     timelineMoment({
-      label: '1:00 PM · Call notes into action items',
-      card: `${cardHead(ctx, '3 action items')}<strong style="font-weight:600;">Call with Dana</strong> ${muted('Internal only')}<br />
-        ${tick('Reminder: send Dana the revised launch timeline')}<br />
-        ${tick('Due date: Post-Launch Retrospective Report moved')}<br />
-        ${muted('&#9675; New deliverable: Media list refresh, skipped')}`,
-      foot: 'You · keep what’s right, skip the rest',
+      label: '1:00 PM · Call notes into minutes and RAID',
+      card: `${cardHead(ctx, 'Minutes and RAID')}<strong style="font-weight:600;">Call with Dana</strong> ${muted('Internal only')}
+        ${draft('The launch date holds. The revised timeline goes to Dana by Thursday, and Dana sends the final brand photos by Friday.', 'Minutes')}
+        <p style="margin:8px 0 0;">${badge('A')} Send Dana the revised launch timeline ${muted('· You · Thu')}<br />
+        ${badge('D')} The launch date holds</p>
+        <p style="margin:8px 0 0;">${muted('Copy subject · Copy summary, to paste into an email')}</p>`,
+      foot: 'You · accept, then send the minutes',
     }),
     timelineMoment({
       label: '2:00 PM · The client update',
@@ -84,9 +85,9 @@ function moments(ctx: CampaignContext): string {
     }),
     timelineMoment({
       label: '5:00 PM · The RAID log',
-      card: `${cardHead(ctx, 'RAID check')}${muted('Risks, Assumptions, Issues and Decisions, suggested from new messages and memos')}<br />
+      card: `${cardHead(ctx, 'RAID check')}${muted('Risks, Actions, Issues and Decisions, suggested from new messages and memos')}<br />
         ${badge('R')} Landing page pricing may change before launch ${muted('· Dana’s thread')}<br />
-        ${badge('A')} Dana sends the final brand photos this week ${muted('· the call memo')}`,
+        ${badge('A')} Dana to send the final brand photos ${muted('· Fri · the call memo')}`,
       foot: 'You · accept what’s real, dismiss the rest',
     }),
     timelineMoment({
@@ -104,19 +105,19 @@ export function meetBrioBand(ctx: CampaignContext, imageFolder: string): string 
     <img src="${emailAsset(ctx, `${imageFolder}/brio-lockup.png`)}" width="130" height="32" alt="Brio AI" style="display:block;width:130px;height:32px;margin:0 0 10px;font-family:${F.DISPLAY};font-size:24px;font-weight:700;color:#FFFFFF;" />
     ${para(`The executive assistant for client delivery, built into ${escHtml(BRAND_NAME)}`, { color: '#B5C9C1', size: 14, margin: '0 0 22px' })}
     ${displayH2(`<span style="color:${C.ELECTRIC};">Meet Brio.</span> It already knows where every engagement stands.`, '#FFFFFF')}
-    ${para(`Brio reads the delivery data in your workspace (deliverables, due dates, statuses, who’s involved) and turns it into the brief you’d write yourself if you had the time. It tells you each morning what needs you, drafts the client update, the reply and the nudge, keeps the RAID log (Risks, Assumptions, Issues and Decisions) and turns call notes into action items, and it always waits for you before anything changes.`, { color: '#B5C9C1', margin: '0 0 30px' })}
+    ${para(`Brio reads the delivery data in your workspace (deliverables, due dates, statuses, who’s involved) and turns it into the brief you’d write yourself if you had the time. It tells you each morning what needs you, drafts the client update, the reply and the nudge, keeps the RAID log (Risks, Actions, Issues and Decisions) and turns call notes into minutes and Actions, and it always waits for you before anything changes.`, { color: '#B5C9C1', margin: '0 0 30px' })}
     <h3 style="margin:0 0 4px;font-family:${F.DISPLAY};font-size:22px;font-weight:700;letter-spacing:-0.015em;line-height:27px;color:#FFFFFF;">A day with Brio</h3>
     ${para('Eight moments from our demo firm. You make every call.', { color: '#B5C9C1', size: 14, margin: '0 0 18px' })}
     ${moments(ctx)}
     <div style="height:26px;line-height:26px;font-size:0;">&nbsp;</div>
     ${bandPanel(`
       ${eyebrow('How Brio is kept in its lane')}
-      ${checkLine('Never opens the files you deliver. Reads comments and internal memos only to draft a reply, log a risk or identify action items.')}
+      ${checkLine('Never opens the files you deliver. Reads comments and internal memos only to draft a reply, write a call’s minutes or suggest RAID entries.')}
       ${checkLine('Never changes anything without your consent.')}
       ${checkLine('Nothing reaches a client until a person on your team sends or publishes it.')}
       ${checkLine('Your clients get answers only from what they can already see, never your internal notes.')}
       ${checkLine('Leaves Mitigation and Next Steps to the engagement lead, by design.')}
     `)}
-    ${para('25 Brio credits a month on the free plan, 500 on Standard. One credit is one answer, summary or draft. Brio’s morning rundown of what needs you is free, and your clients can ask Brio only once you turn that on.', { color: '#B5C9C1', size: 13, margin: '18px 0 0' })}
+    ${para('25 Brio credits a month on the free plan, 500 on Standard. One credit is one answer, summary, draft or morning brief, and reading a call memo for its minutes and RAID is two. Your clients can ask Brio only once you turn that on.', { color: '#B5C9C1', size: 13, margin: '18px 0 0' })}
   `)
 }

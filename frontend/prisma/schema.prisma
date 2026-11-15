@@ -1008,12 +1008,15 @@ model DocCommentReminderDone {
   @@schema("platform")
 }
 
-/// What a RAID log entry is (.claude/plans/brio-features-round-2.md, section 9).
+/// What a RAID log entry is (.claude/plans/brio-features-round-2.md, section 9): Risks, Actions, Issues
+/// and Decisions since 2026-11-15 (.claude/plans/raid-actions-memo-minutes.md). ASSUMPTION is no longer
+/// created; entries saved before then keep it and show with the Decisions under an "Assumption" label.
 enum RaidItemType {
   RISK
   ASSUMPTION
   ISSUE
   DECISION
+  ACTION
 
   @@schema("platform")
 }
@@ -1026,6 +1029,14 @@ enum RaidPriority {
   HIGH
   MEDIUM
   LOW
+
+  @@schema("platform")
+}
+
+/// An Action Brio added for the firm itself (EngagementRaidItem.followUp).
+enum RaidFollowUp {
+  DELIVERABLE
+  PREPARE
 
   @@schema("platform")
 }
@@ -1054,7 +1065,7 @@ enum RaidSourceKind {
   @@schema("platform")
 }
 
-/// One entry in an engagement's RAID log: Risks, Assumptions, Issues and Decisions. Internal only:
+/// One entry in an engagement's RAID log: Risks, Actions, Issues and Decisions. Internal only:
 /// Leads and Contributors · Full Access read and change it; Reviewers and Limited Access contributors
 /// never see it (lib/raid/raid-access.ts).
 ///
@@ -1084,6 +1095,13 @@ model EngagementRaidItem {
   priority       RaidPriority?
   /// Who chose the priority. Set once a person does: the sync never changes it after that.
   prioritySetBy  String?        @db.Uuid
+  /// Actions only: the day it's due. An open Action with an owner and a due date is a reminder for its
+  /// owner (lib/raid/raid-action-reminders.ts), so it shows on their Home and Inbox.
+  dueDate        DateTime?      @db.Date
+  /// Actions only: one Brio added for the firm itself, not something promised in the meeting: setting up
+  /// a new deliverable people agreed on (DELIVERABLE), or preparing for an agreed review point (PREPARE).
+  /// Null for a commitment someone made. The memo's minutes leave these out.
+  followUp       RaidFollowUp?
 
   sourceKind     RaidSourceKind
   /// The signal key (STATUS, HEALTH, BOARD), the comment message id (THREAD) or the memo's

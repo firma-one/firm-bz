@@ -1,33 +1,29 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { AlertCircle, Plus, Search, Sparkles } from 'lucide-react'
-import { RaidInfo } from './raid/raid-info'
-import { RaidPriorityPicker } from './raid/raid-priority'
-import { RaidTypeBadge } from './raid/raid-tab'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react'
+import { Plus, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Checkbox } from '@/components/ui/checkbox'
 import { InternalOnlyTag } from '@/components/ui/internal-only-tag'
-import { Brio } from '@/components/ui/brio'
-import { ThinkingDots } from '@/components/brio/brio-typing'
-import { Hint } from '@/components/ui/tooltip'
+import { Hint, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { WindowGlyph } from '@/components/ui/window-glyph'
 import { LoadFailed } from '@/components/ui/load-failed'
 import { ChatMarkdown } from '@/components/ui/chat-markdown'
 import { useToast } from '@/components/ui/toast'
 import {
     NotesProposalsReview,
     proposalsFailureMessage,
-    requestNotesProposals,
     useApplyNotesProposal,
+    type AcceptSelected,
     type ApplyOutcome,
     type NotesEngagementRef,
     type NotesProposalsFound,
 } from '@/components/projects/notes-proposals-panel'
+import { MemoBrioPanel, type MemoSuggestionChanges } from '@/components/projects/memo-brio-panel'
+import { BRIO_PROPOSALS_FAILED } from '@/lib/ai/brio-failure'
 import { AddMemoSheet, type AddMemoInput, type AddMemoOutcome, type EditMemoContext, type MemoEditInput } from '@/components/projects/add-memo-sheet'
 import { DiscussionsBarPortal } from '@/components/projects/discussions-switch'
-import { AiAbortedError } from '@/lib/ai/fetch-timeout'
-import { ASSISTANT, BRIO_GREEN } from '@/lib/ai/assistant'
+import { AiAbortedError, fetchWithTimeout } from '@/lib/ai/fetch-timeout'
 import { failureFrom, failureReason } from '@/lib/files/action-failure'
 import { cn } from '@/lib/utils'
 import {
@@ -36,16 +32,13 @@ import {
     boldSpeakers,
     byNewestMemo,
     memoBodyHash,
-    memoMatchText,
     memoMetaLine,
-    quoteFromAnchor,
     resolveMemoReview,
     splitMemoMarkdown,
     type MemoListItem,
     type MemoRaidSuggestion,
     type MemoReviewPayload,
 } from '@/lib/memos/memo-shared'
-import { RAID_TITLE_MAX, RAID_TYPE_LABEL, type RaidPriority } from '@/lib/raid/raid-shared'
 import type { DeliverableProposal, NotesProposal } from '@/lib/ai/notes-proposals'
 import { LoadingAnnouncement, ShimmerBar, ShimmerBlock } from '@/components/ui/shimmer'
 
@@ -209,9 +202,21 @@ export function useEngagementMemos(projectId: string) {
         }
     }, [projectId])
 
-    const findActions = useCallback(async (memo: MemoListItem, signal: AbortSignal): Promise<MemoFound> => {
+    /**
+     * Reads a memo with Brio by hand (the sparkle): its minutes and RAID suggestions, which then wait on it
+     * (2 credits, the person's). Throws an error carrying the words to show (or an AiAbortedError).
+     */
+    const readMemo = useCallback(async (memo: MemoListItem, signal: AbortSignal): Promise<void> => {
         try {
-            return await requestNotesProposals(projectId, { memoDocumentId: memo.id }, signal)
+            const res = await fetchWithTimeout(`/api/projects/${projectId}/ai-notes-proposals`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ memoDocumentId: memo.id }),
+            }, MEMO_READ_TIMEOUT_MS, signal)
+            const body = await res.json().catch(() => null) as { data?: unknown; error?: string } | null
+            if (!res.ok || !body?.data) throw new Error(body?.error || BRIO_PROPOSALS_FAILED)
+            // What waits on the memo changed with it.
+            setTick((t) => t + 1)
         } catch (e) {
             if (e instanceof AiAbortedError) throw e
             throw new Error(proposalsFailureMessage(e))
@@ -256,12 +261,15 @@ export function useEngagementMemos(projectId: string) {
         setTick((t) => t + 1)
     }, [projectId])
 
-    /** Accepts or dismisses one of the memo's RAID suggestions, through the RAID log's own route. */
-    const actOnRaid = useCallback(async (_memo: MemoListItem, itemId: string, action: 'accept' | 'dismiss', priority?: RaidPriority, title?: string): Promise<void> => {
+    /**
+     * Accepts or dismisses one of the memo's RAID suggestions, through the RAID log's own route: accepted
+     * with what the person changed on it (its type, title, due date or priority).
+     */
+    const actOnRaid = useCallback(async (_memo: MemoListItem, itemId: string, action: 'accept' | 'dismiss', changes: MemoSuggestionChanges = {}): Promise<void> => {
         const res = await fetch(`/api/projects/${projectId}/raid/${itemId}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action, ...(action === 'accept' && priority ? { priority } : {}), ...(action === 'accept' && title ? { title } : {}) }),
+            body: JSON.stringify({ action, ...(action === 'accept' ? changes : {}) }),
         })
         if (!res.ok) throw await failureFrom(res)
         setTick((t) => t + 1)
@@ -270,10 +278,13 @@ export function useEngagementMemos(projectId: string) {
     const identifyingIds = useMemo(() => awaiting.map((w) => w.id), [awaiting])
 
     return {
-        memos, readOnly, storage, loadError, reload, save, edit, findActions, apply, dueDialog,
+        memos, readOnly, storage, loadError, reload, save, edit, readMemo, apply, dueDialog,
         loadReview, dismissReview, actOnRaid, identifyingIds,
     }
 }
+
+/** A memo's read waits for two model calls side by side, inside the route's 90 seconds. */
+const MEMO_READ_TIMEOUT_MS = 88_000
 
 /** How often, and how many times, the list is read again for a new memo's action items (§13). */
 const REVIEW_POLL_MS = 5_000
@@ -359,7 +370,7 @@ export function EngagementMemosTab({
                 onSelect={onSelect}
                 loadContent={loadContent}
                 filesHref={filesHref}
-                findActions={m.findActions}
+                readMemo={m.readMemo}
                 apply={m.apply}
                 loadReview={m.loadReview}
                 dismissReview={m.dismissReview}
@@ -403,21 +414,25 @@ export interface MemosViewProps {
     filesHref?: (memo: MemoListItem) => string | undefined
     /** Why Open is off when there's no link at all (/tour). */
     openUnavailable?: string
-    /** Brio's proposals from one memo. Throws an error carrying the words to show (or an AiAbortedError). */
-    findActions: (memo: MemoListItem, signal: AbortSignal) => Promise<MemoFound>
+    /**
+     * Reads one memo with Brio (the sparkle): its minutes and RAID suggestions, which then wait on it.
+     * Throws an error carrying the words to show (or an AiAbortedError).
+     */
+    readMemo: (memo: MemoListItem, signal: AbortSignal) => Promise<void>
     /**
      * Applies one reminder or due date found in `memo`: `proposal` as the person edited it, `original`
      * as Brio found it (what the memo records as applied).
      */
     apply: (memo: MemoListItem, found: MemoFound, proposal: ApplicableProposal, original?: ApplicableProposal) => Promise<ApplyOutcome>
-    /** What waits on a memo (§13): its action items and RAID suggestions. Absent: nothing waits. */
+    /** What waits on a memo: its minutes and RAID suggestions (and older action items). Absent: nothing waits. */
     loadReview?: (memo: MemoListItem, signal: AbortSignal) => Promise<MemoReviewPayload>
-    /** Dismiss all: the memo's action items no longer wait. Throws an error carrying the words to show. */
+    /** Dismiss all: the memo's suggestions no longer wait. Throws an error carrying the words to show. */
     dismissReview?: (memo: MemoListItem) => Promise<void>
-    /** Accepts or dismisses one of the memo's RAID suggestions. Throws an error carrying the words to show. */
-    /** `priority`: the one chosen on the card, when it differs from Brio's. */
-    /** `priority` and `title`: as changed on the card before accepting, if they were. */
-    actOnRaid?: (memo: MemoListItem, itemId: string, action: 'accept' | 'dismiss', priority?: RaidPriority, title?: string) => Promise<void>
+    /**
+     * Accepts or dismisses one of the memo's RAID suggestions, accepted with what the person changed on it.
+     * Throws an error carrying the words to show.
+     */
+    actOnRaid?: (memo: MemoListItem, itemId: string, action: 'accept' | 'dismiss', changes?: MemoSuggestionChanges) => Promise<void>
     /** Memos whose action items are being identified right now (just added, or edited). */
     identifyingIds?: readonly string[]
     /**
@@ -431,26 +446,37 @@ export interface MemosViewProps {
 export type MemoEditOpening = Omit<EditMemoContext, 'onSave'>
 
 /**
- * The list, the memo and Action items. From 1040 px wide (the view, not the window): three columns of
- * one short, fixed height, each scrolling on its own, so a 30-minute transcript scrolls inside the memo
- * while the list and the action items stay beside it. Narrower, they stack, and the memo keeps the same
- * short height. Deepak asked for the memo to be "quite short" (2026-11-14); one number to tune.
+ * The list, the memo and Brio's panel. From 1040 px wide (the view, not the window): three columns as tall
+ * as the window has room for below the page's header (Deepak, 2026-11-15; they were a fixed 480 px), each
+ * scrolling on its own, so a 30-minute transcript scrolls inside the memo while the list and the panel
+ * stay beside it. Narrower, they stack, and the memo keeps a short height.
+ *
+ * While someone works in Brio's panel, the list folds to a rail of date blocks (`collapsed`), and the
+ * panel takes the room: 440 to 560 px instead of 300 to 360. The columns slide between the two, rather
+ * than jump (Deepak, 2026-11-15).
  */
 // Written out whole: Tailwind only builds classes it can read in the source.
-const MEMO_COLUMNS_HEIGHT = '@[1040px]:h-[480px]'
+const MEMO_COLUMNS_HEIGHT = '@[1040px]:h-[calc(100dvh-17rem)] @[1040px]:min-h-[480px]'
 const MEMO_STACKED_MAX_HEIGHT = 'max-h-[480px]'
+/** The fold's pace, the sidebar's own (demo-shell.tsx): the titles fading as the list narrows. */
+const FOLD_EASE = 'duration-ui-base ease-ui-out motion-reduce:transition-none'
 
-function MemosColumns({ withActions, children }: { withActions: boolean; children: ReactNode }) {
+function MemosColumns({ withActions, collapsed = false, children }: { withActions: boolean; collapsed?: boolean; children: ReactNode }) {
     return (
         <div className="@container">
             <div
+                data-collapsed={collapsed ? 'true' : undefined}
                 className={cn(
                     // The bottom edge closes the columns, so their dividers don't just stop.
                     'flex flex-wrap border-b border-line @[1040px]:grid',
+                    // In the same container query as the grid: an unscoped pace loses to the transition's default.
+                    '@[1040px]:transition-[grid-template-columns] @[1040px]:duration-ui-base @[1040px]:ease-ui-out @[1040px]:motion-reduce:transition-none',
                     MEMO_COLUMNS_HEIGHT,
-                    withActions
-                        ? '@[1040px]:grid-cols-[260px_minmax(0,1fr)_minmax(300px,360px)]'
-                        : '@[1040px]:grid-cols-[260px_minmax(0,1fr)]',
+                    !withActions
+                        ? '@[1040px]:grid-cols-[260px_minmax(0,1fr)]'
+                        : collapsed
+                            ? '@[1040px]:grid-cols-[64px_minmax(0,1fr)_minmax(440px,560px)]'
+                            : '@[1040px]:grid-cols-[260px_minmax(0,1fr)_minmax(300px,360px)]',
                 )}
             >
                 {children}
@@ -472,7 +498,7 @@ export function MemosView({
     loadContent,
     filesHref,
     openUnavailable,
-    findActions,
+    readMemo,
     apply,
     loadReview,
     dismissReview,
@@ -481,6 +507,10 @@ export function MemosView({
     onEdit,
 }: MemosViewProps) {
     const [query, setQuery] = useState('')
+    // While someone works in Brio's panel, the list folds to a rail of date blocks and the panel takes the room.
+    // Once they fold or open it themselves, it stays as they left it.
+    const [collapsed, setCollapsed] = useState(false)
+    const [foldChosen, setFoldChosen] = useState(false)
     // Files read this visit, so going back to a memo doesn't read it again. Never stored anywhere else.
     // Kept by the memo and its last edit: an edited memo is read afresh.
     const [contents, setContents] = useState<Record<string, MemoContent>>({})
@@ -538,52 +568,17 @@ export function MemosView({
                         {readOnly ? 'No memos were added to this engagement.' : 'No memos yet. Add one after your next call.'}
                     </p>
                 ) : (
-                    <MemosColumns withActions={!readOnly}>
-                        <section
-                            aria-label="Memos"
-                            className="min-w-0 flex-[1_1_320px] border-line sm:max-w-[420px] sm:border-r @[1040px]:min-h-0 @[1040px]:max-w-none @[1040px]:overflow-y-auto"
-                        >
-                            {shown.length === 0 ? (
-                                <p className="border-b border-line px-4 py-3 text-small text-fg-muted">No memos match “{query.trim()}”.</p>
-                            ) : (
-                                <ul>
-                                    {shown.map((memo) => {
-                                        const isSelected = selected?.id === memo.id
-                                        return (
-                                            <li key={memo.id}>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => onSelect(memo.id)}
-                                                    aria-current={isSelected ? 'true' : undefined}
-                                                    data-testid={`memo-row-${memo.id}`}
-                                                    className={cn(
-                                                        'flex w-full items-start gap-3 border-b border-line px-4 py-3 text-left transition-colors',
-                                                        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-action/30',
-                                                        isSelected ? 'bg-surface-selected' : 'hover:bg-surface-hover',
-                                                    )}
-                                                >
-                                                    <MemoDateBlock date={memo.date} />
-                                                    <span className="min-w-0 flex-1">
-                                                        <span className="block truncate text-ui font-semibold text-fg">{memo.title}</span>
-                                                        <span className="block text-small text-fg-muted">{memoMetaLine(memo)}{memo.edited ? ' · edited' : ''}</span>
-                                                        {memo.toReview > 0 ? (
-                                                            <span className="mt-0.5 block text-caption font-medium text-fg">{memo.toReview} to review</span>
-                                                        ) : memo.appliedCount > 0 && (
-                                                            <span className="mt-0.5 block text-caption font-normal text-fg-muted">{appliedLine(memo.appliedCount)}</span>
-                                                        )}
-                                                    </span>
-                                                </button>
-                                            </li>
-                                        )
-                                    })}
-                                </ul>
-                            )}
-                            {storage && (
-                                <p className="px-4 py-3 text-small text-fg-muted">
-                                    Each memo is a Markdown file in “Internal Memos” in your {storage}.
-                                </p>
-                            )}
-                        </section>
+                    <MemosColumns withActions={!readOnly} collapsed={collapsed && !readOnly}>
+                        <MemoList
+                            memos={shown}
+                            query={query}
+                            selectedId={selected?.id ?? null}
+                            onSelect={onSelect}
+                            storage={storage}
+                            foldable={!readOnly}
+                            collapsed={collapsed && !readOnly}
+                            onFold={() => { setFoldChosen(true); setCollapsed((c) => !c) }}
+                        />
                         {selected && (
                             <MemoPane
                                 key={memoContentKey(selected)}
@@ -595,19 +590,155 @@ export function MemosView({
                                 loadContent={loadContent}
                                 filesHref={filesHref}
                                 openUnavailable={openUnavailable}
-                                findActions={findActions}
+                                readMemo={readMemo}
                                 apply={apply}
                                 loadReview={loadReview}
                                 dismissReview={dismissReview}
                                 actOnRaid={actOnRaid}
                                 identifying={!!identifyingIds?.includes(selected.id)}
                                 onEdit={onEdit ? (context) => onEdit(selected, { ...context, storage, canIdentify: true }) : undefined}
+                                onEngage={() => { if (!foldChosen) setCollapsed(true) }}
                             />
                         )}
                     </MemosColumns>
                 )}
             </div>
         </>
+    )
+}
+
+/**
+ * The memo list, one column at every width of the fold (Deepak, 2026-11-15). Open, each row is a memo's
+ * date block, title, author and what waits on it. Folded, while someone works in Brio's panel, it narrows
+ * to a rail of date blocks: the titles fade and slide under the edge as the column narrows, rather than
+ * one list swapping for another, and a small count shows what waits; the title shows on hover.
+ *
+ * The button in its header folds and opens it, with the window glyph the sidebar uses for the same
+ * (filled while the list shows, its edge only once folded). Wide views only: narrower, the list stacks
+ * above the memo and doesn't fold.
+ */
+function MemoList({ memos, query, selectedId, onSelect, storage, foldable, collapsed, onFold }: {
+    memos: MemoListItem[]
+    query: string
+    selectedId: string | null
+    onSelect: (memoId: string) => void
+    storage: MemoStorageName | null
+    /** There's a Brio panel to make room for: a completed engagement's list never folds. */
+    foldable: boolean
+    collapsed: boolean
+    onFold: () => void
+}) {
+    const foldLabel = collapsed ? 'Expand memo list' : 'Collapse memo list'
+    // What the rail hides fades as the column narrows; wide views only.
+    const fades = cn('transition-opacity', FOLD_EASE, collapsed && '@[1040px]:opacity-0')
+    return (
+        <section
+            aria-label="Memos"
+            data-testid="memo-list"
+            data-collapsed={collapsed ? 'true' : undefined}
+            className="flex min-w-0 flex-[1_1_320px] flex-col border-line sm:max-w-[420px] sm:border-r @[1040px]:min-h-0 @[1040px]:max-w-none @[1040px]:overflow-hidden"
+        >
+            {foldable && (
+                // As tall as the memo's header beside it (py-3 round a 28 px button), so the three columns
+                // share one header line. The button keeps 18 px from the right: centered on the rail.
+                <div className="relative hidden flex-none items-center justify-end overflow-hidden border-b border-line py-3 pr-[18px] @[1040px]:flex">
+                    <span aria-hidden className={cn('pointer-events-none absolute left-3 whitespace-nowrap text-small text-fg-muted', fades)}>
+                        {memos.length} memo{memos.length === 1 ? '' : 's'}
+                    </span>
+                    <Hint label={foldLabel} side="bottom">
+                        <button
+                            type="button"
+                            onClick={onFold}
+                            aria-label={foldLabel}
+                            aria-expanded={!collapsed}
+                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-control text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action/30"
+                        >
+                            <WindowGlyph variant="left" filled={!collapsed} />
+                        </button>
+                    </Hint>
+                </div>
+            )}
+            <div className="@[1040px]:min-h-0 @[1040px]:flex-1 @[1040px]:overflow-y-auto @[1040px]:overflow-x-hidden">
+                {memos.length === 0 ? (
+                    <p className={cn('border-b border-line px-4 py-3 text-small text-fg-muted @[1040px]:w-[259px] @[1040px]:px-3', fades)}>
+                        No memos match “{query.trim()}”.
+                    </p>
+                ) : (
+                    <ul>
+                        {memos.map((memo) => {
+                            const isSelected = memo.id === selectedId
+                            const hint = [memo.title, memoMetaLine(memo), memo.toReview > 0 ? `${memo.toReview} to review` : null].filter(Boolean).join(' · ')
+                            return (
+                                <li key={memo.id}>
+                                    <FoldedHint label={hint} active={collapsed}>
+                                        <button
+                                            type="button"
+                                            onClick={() => onSelect(memo.id)}
+                                            aria-current={isSelected ? 'true' : undefined}
+                                            data-testid={`memo-row-${memo.id}`}
+                                            className={cn(
+                                                // 12 px each side on wide views: the 40 px date block sits centered on the 64 px rail.
+                                                'flex w-full items-start gap-3 border-b border-line px-4 py-3 text-left transition-colors @[1040px]:px-3',
+                                                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-action/30',
+                                                isSelected ? 'bg-surface-selected' : 'hover:bg-surface-hover',
+                                            )}
+                                        >
+                                            <span className="relative flex-none">
+                                                <MemoDateBlock date={memo.date} />
+                                                {foldable && memo.toReview > 0 && (
+                                                    // Out of the flow, under the date block, so folding never moves a row.
+                                                    <span
+                                                        aria-hidden
+                                                        className={cn(
+                                                            'absolute left-1/2 top-full mt-1 hidden h-4 min-w-4 -translate-x-1/2 items-center justify-center rounded-full bg-fg px-1 text-[10px] font-semibold tabular-nums leading-none text-surface @[1040px]:inline-flex',
+                                                            'transition-opacity', FOLD_EASE,
+                                                            collapsed ? 'opacity-100' : 'opacity-0',
+                                                        )}
+                                                    >
+                                                        {memo.toReview}
+                                                    </span>
+                                                )}
+                                            </span>
+                                            {/* A fixed width on wide views (the 260 px column less its border, padding and date block): the words slide under the edge instead of rewrapping. */}
+                                            <span className={cn('min-w-0 flex-1 @[1040px]:w-[183px] @[1040px]:flex-none', fades)}>
+                                                <span className="block truncate text-ui font-semibold text-fg">{memo.title}</span>
+                                                <span className="block truncate text-small text-fg-muted">{memoMetaLine(memo)}{memo.edited ? ' · edited' : ''}</span>
+                                                {memo.toReview > 0 ? (
+                                                    <span className="mt-0.5 block text-caption font-medium text-fg">{memo.toReview} to review</span>
+                                                ) : memo.appliedCount > 0 && (
+                                                    <span className="mt-0.5 block text-caption font-normal text-fg-muted">{appliedLine(memo.appliedCount)}</span>
+                                                )}
+                                            </span>
+                                        </button>
+                                    </FoldedHint>
+                                </li>
+                            )
+                        })}
+                    </ul>
+                )}
+                {storage && (
+                    <p className={cn('px-4 py-3 text-small text-fg-muted @[1040px]:w-[259px] @[1040px]:px-3', fades)}>
+                        Each memo is a Markdown file in “Internal Memos” in your {storage}.
+                    </p>
+                )}
+            </div>
+        </section>
+    )
+}
+
+/**
+ * A rail row's title on hover, only while the list is folded. Always the same tooltip, opened or not,
+ * so folding never remounts the row (a remount would skip the fade).
+ */
+function FoldedHint({ label, active, children }: { label: string; active: boolean; children: ReactElement }) {
+    const [open, setOpen] = useState(false)
+    return (
+        <TooltipProvider delayDuration={300}>
+            <Tooltip open={active && open} onOpenChange={setOpen}>
+                <TooltipTrigger asChild>{children}</TooltipTrigger>
+                <TooltipContent side="right">{label}</TooltipContent>
+            </Tooltip>
+        </TooltipProvider>
     )
 }
 
@@ -630,9 +761,9 @@ const MEMO_BODY_CLASS = cn(
 )
 
 /**
- * The open memo and its Actions, two sections side by side in the view's columns: the memo's header row
- * (Internal only, the file, Open) over its notes, which scroll on their own; then Actions, with Brio's
- * sparkle at the heading's right (Identify action items) and the proposals, editable, under it.
+ * The open memo and Brio's panel, two sections side by side in the view's columns: the memo's header row
+ * (Internal only, the file, Open) over its notes, which scroll on their own; then Brio's panel
+ * (components/projects/memo-brio-panel.tsx), its Summary and RAID tabs with the sparkle at their right.
  */
 function MemoPane({
     memo,
@@ -643,13 +774,14 @@ function MemoPane({
     loadContent,
     filesHref,
     openUnavailable,
-    findActions,
+    readMemo,
     apply,
     loadReview,
     dismissReview,
     actOnRaid,
     identifying,
     onEdit,
+    onEngage,
 }: {
     memo: MemoListItem
     storage: MemoStorageName | null
@@ -659,13 +791,15 @@ function MemoPane({
     loadContent: MemosViewProps['loadContent']
     filesHref?: MemosViewProps['filesHref']
     openUnavailable?: string
-    findActions: MemosViewProps['findActions']
+    readMemo: MemosViewProps['readMemo']
     apply: MemosViewProps['apply']
     loadReview?: MemosViewProps['loadReview']
     dismissReview?: MemosViewProps['dismissReview']
     actOnRaid?: MemosViewProps['actOnRaid']
     identifying: boolean
     onEdit?: (context: Omit<EditMemoContext, 'onSave' | 'storage' | 'canIdentify'>) => void
+    /** Someone is working in Brio's panel: the memo list makes room. */
+    onEngage?: () => void
 }) {
     const [content, setContent] = useState<PaneContent>(() => (cached ? { status: 'ready', content: cached } : { status: 'loading' }))
     const [attempt, setAttempt] = useState(0)
@@ -689,10 +823,8 @@ function MemoPane({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [attempt])
 
-    // Identify action items: one round at a time, in the Action items column.
-    const [round, setRound] = useState(0)
+    // Read the memo with Brio (the sparkle): one read at a time; what it writes then waits on the memo.
     const [busy, setBusy] = useState(false)
-    const [found, setFound] = useState<MemoFound | null>(null)
     const [findError, setFindError] = useState<string | null>(null)
     const ctrlRef = useRef<AbortController | null>(null)
     useEffect(() => () => ctrlRef.current?.abort(), [])
@@ -701,17 +833,12 @@ function MemoPane({
         ctrlRef.current?.abort()
         const ctrl = new AbortController()
         ctrlRef.current = ctrl
-        setRound((r) => r + 1)
         setBusy(true)
-        setFound(null)
         setFindError(null)
+        onEngage?.()
         try {
-            const result = await findActions(memo, ctrl.signal)
-            if (ctrlRef.current === ctrl) {
-                setFound(result)
-                // Read again, the memo's RAID suggestions were read again too: show what waits now.
-                setReviewTick((t) => t + 1)
-            }
+            await readMemo(memo, ctrl.signal)
+            if (ctrlRef.current === ctrl) setReviewTick((t) => t + 1)
         } catch (e) {
             if (e instanceof AiAbortedError || ctrl.signal.aborted) return
             setFindError(e instanceof Error && e.message ? e.message : failureReason(e))
@@ -744,27 +871,33 @@ function MemoPane({
 
     const dismiss = () => {
         ctrlRef.current?.abort()
-        setFound(null)
         setFindError(null)
         setBusy(false)
         setActionError(null)
-        // What waits on the memo goes too, whether Brio found it on its own or by hand.
-        setWaitingPayload((p) => (p ? { ...p, review: null } : p))
+        // What waits on the memo goes: its suggestions, and any older action items. The minutes stay.
+        setWaitingPayload((p) => (p ? { ...p, review: p.review ? { ...p.review, dismissed: true } : null, raid: [] } : p))
         dismissReview?.(memo).catch((e: unknown) => {
             setActionError(e instanceof Error && e.message ? e.message : failureReason(e))
             setReviewTick((t) => t + 1)
         })
     }
 
-    const actRaid = async (item: MemoRaidSuggestion, action: 'accept' | 'dismiss', priority?: RaidPriority, title?: string) => {
+    /** Accepts one suggestion with what the person changed; it leaves the list, and an Action joins the minutes. */
+    const acceptSuggestion = async (item: MemoRaidSuggestion, changes: MemoSuggestionChanges) => {
         if (!actOnRaid) return
         setActionError(null)
-        try {
-            await actOnRaid(memo, item.id, action, priority, title)
-            setWaitingPayload((p) => (p ? { ...p, raid: p.raid.filter((r) => r.id !== item.id) } : p))
-        } catch (e) {
-            setActionError(e instanceof Error && e.message ? e.message : failureReason(e))
-        }
+        await actOnRaid(memo, item.id, 'accept', changes)
+        setWaitingPayload((p) => {
+            if (!p) return p
+            const type = changes.type ?? item.type
+            return {
+                ...p,
+                raid: p.raid.filter((r) => r.id !== item.id),
+                acceptedActions: type === 'ACTION'
+                    ? [...(p.acceptedActions ?? []), { id: item.id, title: changes.title ?? item.title, dueDate: changes.dueDate ?? item.dueDate, followUp: item.followUp }]
+                    : p.acceptedActions,
+            }
+        })
     }
 
     const webUrl = content.status === 'ready' ? content.content.webUrl : null
@@ -789,25 +922,23 @@ function MemoPane({
     const parts = content.status === 'ready' ? splitMemoMarkdown(content.content.text) : null
     const body = parts ? (memo.source === 'transcript' ? boldSpeakers(parts.body) : parts.body) : ''
 
-    const actionsHeadingId = `memo-actions-${memo.id}`
     // What waits on the memo, its quotes filled in from the memo itself (only anchors are stored).
     const memoText = content.status === 'ready' ? content.content.text : null
-    const waiting: MemoFound | null = waitingPayload?.review && memoText !== null
+    const review = waitingPayload?.review ?? null
+    // Action items from a read before minutes and RAID Actions (2026-11-15), still waiting on an older memo.
+    const legacy: MemoFound | null = review && review.proposals.length > 0 && memoText !== null
         ? {
-            ...resolveMemoReview(waitingPayload.review, memoText),
-            alreadyApplied: waitingPayload.alreadyApplied,
-            appliedOn: waitingPayload.appliedOn,
-            engagement: waitingPayload.engagement,
+            ...resolveMemoReview(review, memoText),
+            alreadyApplied: waitingPayload!.alreadyApplied,
+            appliedOn: waitingPayload!.appliedOn,
+            engagement: waitingPayload!.engagement,
         }
         : null
+    // What's selected among them, for the panel's one "Accept N selected".
+    const [legacySelected, setLegacySelected] = useState<AcceptSelected | null>(null)
     // Its notes changed since Brio read them: edited here (and not read again), or in storage.
-    const review = waitingPayload?.review ?? null
     const changedInStorage = !!review?.bodyHash && memoText !== null && memoBodyHash(memoText) !== review.bodyHash
-    const changedSinceRead = (memo.changedSinceRead || changedInStorage) && !found && !busy && !identifying
-    // Read again after an edit: the heading says so.
-    const caption = !found && review && memo.edited && review.at > memo.edited.at
-        ? `Read again after the edit on ${editDay(memo.edited.at)}. Edit any of them. Nothing changes until you apply it.`
-        : undefined
+    const changedSinceRead = (memo.changedSinceRead || changedInStorage) && !busy && !identifying
 
     const openEdit = () => {
         if (!onEdit || memoText === null) return
@@ -818,16 +949,11 @@ function MemoPane({
             waiting: {
                 actionItems: review ? review.proposals.filter((p) => !appliedIds.has(p.id)).length : 0,
                 raid: waitingPayload?.raid.length ?? 0,
+                minutes: !!waitingPayload?.minutes,
             },
             applied: waitingPayload?.applied ?? [],
         })
     }
-    const shown = found ?? waiting
-    const shownKey = found ? `run-${round}` : `waiting-${waitingPayload?.review?.at ?? ''}`
-    const raidItems = waitingPayload?.raid ?? []
-    const raidChoices = useMemoRaidChoices(raidItems, actRaid)
-    // Within the action items, each selectable for their "Accept N selected"; alone, each with its own Accept.
-    const raidSection = (selectable: boolean) => (raidItems.length > 0 ? <MemoRaidSuggestions choices={raidChoices} memoText={memoText} selectable={selectable} /> : null)
 
     return (
         <>
@@ -870,228 +996,41 @@ function MemoPane({
             </section>
 
             {!readOnly && (
-                <section
-                    aria-labelledby={actionsHeadingId}
-                    className="flex min-w-0 basis-full flex-col border-t border-line @[1040px]:min-h-0 @[1040px]:border-t-0"
-                >
-                    <div className="flex flex-none items-center gap-2 border-b border-line px-4 py-2.5">
-                        <h3 id={actionsHeadingId} className="text-ui font-semibold text-fg">Action items</h3>
-                        <span className="text-small text-fg-muted">from this memo</span>
-                        <span className="flex-1" />
-                        <Hint
-                            label={
-                                <span className="flex flex-col gap-0.5">
-                                    <span>Identify action items with <Brio /></span>
-                                    <span className="opacity-70">1 credit · reads this memo</span>
-                                </span>
-                            }
-                        >
-                            {/* aria-disabled, not disabled, while Brio reads: a disabled button shows no tooltip. */}
-                            <button
-                                type="button"
-                                onClick={() => { if (!busy) void find() }}
-                                aria-disabled={busy}
-                                aria-label={`Identify action items in ${memo.title}`}
-                                className={cn(ICON_BUTTON, busy && 'cursor-default hover:bg-transparent')}
-                            >
-                                <Sparkles className={cn('h-4 w-4', busy && 'animate-pulse')} style={{ color: BRIO_GREEN }} aria-hidden />
-                            </button>
-                        </Hint>
-                    </div>
-
-                    <div className="@[1040px]:min-h-0 @[1040px]:flex-1 @[1040px]:overflow-y-auto">
-                        {changedSinceRead && (
-                            <p className="flex items-start gap-1.5 border-b border-line px-4 py-2.5 text-small text-fg-muted" data-testid="memo-changed-since-read">
-                                <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
-                                <span>Changed since <Brio /> read it. The sparkle reads it again.</span>
-                            </p>
-                        )}
-                        {busy ? (
-                            // Brio's dots while it reads, as it waits everywhere (components/brio/brio-typing.tsx).
-                            <div className="flex items-center gap-2 px-4 py-4 text-small text-fg-subtle" aria-busy="true">
-                                <LoadingAnnouncement label={`${ASSISTANT.name} is reading the memo`} />
-                                <ThinkingDots />
-                                <span aria-hidden><Brio /> is reading the memo…</span>
-                            </div>
-                        ) : findError ? (
-                            <div className="flex flex-wrap items-center gap-2 px-4 py-4">
-                                <p className="flex items-start gap-1 text-small text-danger" role="alert">
-                                    <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
-                                    {findError}
-                                </p>
-                                <Button type="button" variant="ghost" size="sm" onClick={dismiss}>Dismiss</Button>
-                            </div>
-                        ) : shown ? (
+                <MemoBrioPanel
+                    memo={memo}
+                    memoText={memoText}
+                    payload={waitingPayload}
+                    readOnly={readOnly}
+                    reading={busy ? 'sparkle' : identifying ? 'added' : null}
+                    readError={findError}
+                    actionError={actionError}
+                    changedSinceRead={changedSinceRead}
+                    onRead={() => void find()}
+                    onAccept={acceptSuggestion}
+                    onDismissAll={dismiss}
+                    onEngage={onEngage}
+                    legacySelected={legacy ? legacySelected : null}
+                    legacy={legacy ? (
+                        <div className="border-t border-line">
+                            <p className="px-5 pt-4 text-caption font-medium text-fg-muted">Action items from an earlier read</p>
                             <NotesProposalsReview
-                                key={shownKey}
-                                found={shown}
-                                apply={(p, original) => apply(memo, shown, p, original)}
+                                key={`legacy-${review?.at ?? ''}`}
+                                found={legacy}
+                                apply={(p, original) => apply(memo, legacy, p, original)}
                                 onDismiss={dismiss}
                                 readOnly={readOnly}
                                 footnote={MEMO_PROPOSALS_FOOTNOTE}
                                 layout="column"
-                                extra={raidSection(true)}
-                                alsoSelected={raidItems.length > 0 ? raidChoices.alsoSelected : undefined}
-                                caption={found ? undefined : caption}
+                                onSelectedChange={setLegacySelected}
                             />
-                        ) : raidItems.length > 0 ? (
-                            raidSection(false)
-                        ) : identifying ? (
-                            <div className="flex items-start gap-2 px-4 py-4" aria-busy="true">
-                                <LoadingAnnouncement label={`${ASSISTANT.name} is identifying the action items`} />
-                                <ThinkingDots className="shrink-0" />
-                                <p className="text-small text-fg-muted">
-                                    <Brio /> is identifying this memo&apos;s action items. They&apos;ll appear here in a moment.
-                                </p>
-                            </div>
-                        ) : (
-                            <div className="px-4 py-5 @[1040px]:pt-16">
-                                <p className="text-ui text-fg-muted">
-                                    <Brio /> reads this memo and suggests reminders, due-date moves and new deliverables.
-                                </p>
-                                <p className="mt-2 text-small text-fg-muted">
-                                    You can edit each one before it&apos;s applied, and nothing changes until you apply it.
-                                </p>
-                            </div>
-                        )}
-                        {actionError && (
-                            <p className="flex items-start gap-1 px-4 py-2 text-small text-danger" role="alert">
-                                <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
-                                {actionError}
-                            </p>
-                        )}
-                    </div>
-                </section>
+                        </div>
+                    ) : undefined}
+                />
             )}
         </>
     )
 }
 
-/**
- * A memo's RAID suggestions (§13), under its action items: each accepted into the RAID log or dismissed
- * here, through the log's own route. Nothing of the memo's text is kept with them.
- */
-type RaidAct = (item: MemoRaidSuggestion, action: 'accept' | 'dismiss', priority?: RaidPriority, title?: string) => Promise<void>
-
-/**
- * A memo's RAID suggestions chosen as its action items are: each starts selected, its title and priority
- * can be changed before accepting, and the foot's "Accept N selected" takes the selected ones together
- * with the selected action items (`alsoSelected`).
- */
-function useMemoRaidChoices(items: MemoRaidSuggestion[], onAct: RaidAct) {
-    const [unselected, setUnselected] = useState<Set<string>>(() => new Set())
-    const [titles, setTitles] = useState<Record<string, string>>({})
-    const [chosen, setChosen] = useState<Record<string, RaidPriority>>({})
-    const [acting, setActing] = useState<Set<string>>(() => new Set())
-    const titleOf = (item: MemoRaidSuggestion) => titles[item.id] ?? item.title
-    const isSelected = (item: MemoRaidSuggestion) => !unselected.has(item.id)
-    const act = async (item: MemoRaidSuggestion, action: 'accept' | 'dismiss') => {
-        setActing((a) => new Set(a).add(item.id))
-        try {
-            const picked = chosen[item.id]
-            const title = titleOf(item).trim()
-            await onAct(item, action, picked && picked !== item.priority ? picked : undefined, title && title !== item.title ? title : undefined)
-        } finally {
-            setActing((a) => { const next = new Set(a); next.delete(item.id); return next })
-        }
-    }
-    const ready = items.filter((i) => isSelected(i) && titleOf(i).trim() && !acting.has(i.id))
-    return {
-        items,
-        titleOf,
-        setTitle: (id: string, value: string) => setTitles((t) => ({ ...t, [id]: value })),
-        priorityOf: (item: MemoRaidSuggestion) => chosen[item.id] ?? item.priority,
-        setPriority: (id: string, value: RaidPriority) => setChosen((c) => ({ ...c, [id]: value })),
-        isSelected,
-        setSelected: (id: string, on: boolean) => setUnselected((u) => { const next = new Set(u); if (on) next.delete(id); else next.add(id); return next }),
-        isActing: (item: MemoRaidSuggestion) => acting.has(item.id),
-        act,
-        alsoSelected: {
-            count: ready.length,
-            accept: async () => { for (const item of ready) await act(item, 'accept') },
-        },
-    }
-}
-
-function MemoRaidSuggestions({ choices, memoText, selectable }: {
-    choices: ReturnType<typeof useMemoRaidChoices>
-    /** The memo as the pane has it, to show each suggestion's line from (its place is all that's stored). */
-    memoText: string | null
-    /** Inside the action items' list, whose foot accepts what's selected: each row gets a checkbox. */
-    selectable: boolean
-}) {
-    const matchText = memoText !== null ? memoMatchText(memoText) : null
-    const quoteOf = (item: MemoRaidSuggestion) => (matchText !== null ? quoteFromAnchor(matchText, item.quoteAt) : null)
-    const c = choices
-    return (
-        <section aria-label="RAID suggestions" className="border-t border-line px-4 py-3">
-            <h4 className="flex items-center gap-1 text-ui font-semibold text-fg">RAID suggestions <RaidInfo /></h4>
-            <p className="text-caption font-normal text-fg-muted">
-                Risks, Assumptions, Issues and Decisions from this memo. What you accept goes into the RAID log.
-            </p>
-            <ul className="mt-2 flex flex-col">
-                {c.items.map((item) => {
-                    const busy = c.isActing(item)
-                    const priority = c.priorityOf(item)
-                    return (
-                        <li key={item.id} className="flex items-start gap-2.5 border-t border-line py-2.5 first:border-t-0">
-                            {selectable && (
-                                <Checkbox
-                                    className="mt-1.5"
-                                    checked={c.isSelected(item)}
-                                    disabled={busy}
-                                    onCheckedChange={(v) => c.setSelected(item.id, v === true)}
-                                    aria-label={`Select: ${RAID_TYPE_LABEL[item.type].toLowerCase()} · ${c.titleOf(item)}`}
-                                />
-                            )}
-                            <RaidTypeBadge type={item.type} />
-                            <div className="min-w-0 flex-1">
-                                <Input
-                                    value={c.titleOf(item)}
-                                    onChange={(e) => c.setTitle(item.id, e.target.value)}
-                                    disabled={busy}
-                                    maxLength={RAID_TITLE_MAX}
-                                    aria-label={`${RAID_TYPE_LABEL[item.type]}: what the entry says`}
-                                    className="h-8 text-small"
-                                />
-                                {/* The line it came from, as an action item cites its own. */}
-                                {quoteOf(item) && (
-                                    <p className="mt-1.5 border-l-2 border-line-strong pl-2 text-small italic text-fg-muted">
-                                        “{quoteOf(item)}”
-                                    </p>
-                                )}
-                                {priority && (
-                                    <div className="mt-0.5 flex items-center gap-1.5 text-caption text-fg-muted">
-                                        <span>Priority</span>
-                                        <RaidPriorityPicker
-                                            value={priority}
-                                            onChange={(p) => c.setPriority(item.id, p)}
-                                            label={`Priority of ${item.title}`}
-                                            disabled={busy}
-                                            className="mx-0 h-6"
-                                        />
-                                        <span className="text-fg-subtle">· {ASSISTANT.name}&apos;s suggestion</span>
-                                    </div>
-                                )}
-                                <div className="mt-1.5 flex justify-end gap-1.5">
-                                    <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={() => void c.act(item, 'dismiss')}>
-                                        Dismiss
-                                    </Button>
-                                    <Button type="button" variant="outline" size="sm" disabled={busy || !c.titleOf(item).trim()} onClick={() => void c.act(item, 'accept')}>
-                                        Accept
-                                    </Button>
-                                </div>
-                            </div>
-                        </li>
-                    )
-                })}
-            </ul>
-        </section>
-    )
-}
-
-/** Brio's sparkle as an icon button, as on Your brief and the RAID log. */
-const ICON_BUTTON = 'inline-flex h-7 w-7 items-center justify-center rounded-control text-fg-muted transition-colors duration-ui-fast hover:bg-surface-hover hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action/30'
 
 /**
  * A memo's text while it's read from Drive or OneDrive, the slow part of opening one: the heading, the

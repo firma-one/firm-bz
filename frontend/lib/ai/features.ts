@@ -21,6 +21,7 @@ export const AI_FEATURES = [
     'dayBriefRewrite',
     'raidCheck',
     'memoRaid',
+    'memoMinutes',
 ] as const
 
 export type AiFeature = (typeof AI_FEATURES)[number]
@@ -28,10 +29,9 @@ export type AiFeature = (typeof AI_FEATURES)[number]
 /**
  * Credits charged per action.
  *
- * Derived by the standard anchoring rule (one credit = the cheapest action sold) applied to
- * measured costs. The actions span only ~2.7x, so whole-number weights stay honest without a
- * token-conversion formula users could not reason about. Search interpretation is weighted below 1
- * because it is genuinely cheaper (~0.37x a chat answer) and the highest-frequency action.
+ * Every AI call costs one credit (Deepak, 2026-11-15): nothing is free and nothing is a fraction, so
+ * counting stays simple. A feature that makes two calls costs two. This replaced a free Your brief and
+ * memo RAID pass and a half-credit search interpretation.
  *
  * Recorded per row at call time, so re-weighting later does not retroactively change history.
  */
@@ -39,7 +39,7 @@ export const CREDIT_WEIGHTS: Record<AiFeature, number> = {
     brief: 1,
     summary: 1,
     chat: 1,
-    searchInterpret: 0.5,
+    searchInterpret: 1,
     // The first feature whose cost is NOT one row per user action: an agent run records one row
     // per model turn, so a single review may write several. Weighted at 1 so the unit stays "a
     // credit is an answer" rather than introducing a second pricing concept — the run's total is
@@ -52,12 +52,10 @@ export const CREDIT_WEIGHTS: Record<AiFeature, number> = {
     notesProposals: 1,
     // Charged to the firm whose engagement it is, and capped per person per day in the route.
     reviewerChat: 1,
-    // Free, decided 2026-11-12. Brio writes it unasked, once per person per day, so charging it
-    // would drain a group's shared allowance without anyone choosing to spend: 2 users on the
-    // 25-credit Sandbox plan would use it all on this alone. Still recorded, so its token cost
-    // stays visible in the ledger. A free action skips the credit windows, so its guard is the
-    // per-person limit below (AI_PERSON_LIMITS): at most twice a day.
-    dayBrief: 0,
+    // Brio writes it unasked, once per person per day. Free from 2026-11-12 to 2026-11-15, then 1 like
+    // every call (Deepak). It counts against the group's allowance like any action, and stops when the
+    // allowance is spent; the per-person limit below still holds it to twice a day.
+    dayBrief: 1,
     // Rewrite is a person's choice, so it costs what any other Brio action costs (Deepak,
     // 2026-11-13). Only when their items changed: an unchanged day answers without a model call.
     dayBriefRewrite: 1,
@@ -66,10 +64,11 @@ export const CREDIT_WEIGHTS: Record<AiFeature, number> = {
     // engagement per active day (the daily check runs only where there is something new since the
     // last one), plus each Check now a person presses. The log's status, health and Board entries are free.
     raidCheck: 1,
-    // A memo's RAID suggestions, read when the memo is added (§13), beside its action items. Free:
-    // the memo's one credit is its action items (notesProposals), as agreed with Deepak 2026-11-14.
-    // Still recorded, so its token cost stays visible in the ledger.
-    memoRaid: 0,
+    // A memo's RAID suggestions, read when the memo is added (§13): its Risks, Actions, Issues and
+    // Decisions, every commitment an Action (.claude/plans/raid-actions-memo-minutes.md).
+    memoRaid: 1,
+    // A memo's minutes, written in the same read as its RAID suggestions: a memo read is 2 credits.
+    memoMinutes: 1,
 }
 
 /**

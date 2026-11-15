@@ -45,7 +45,7 @@ export interface MemoEditInput {
     source: MemoSource
     durationMinutes: number | null
     speakers: number | null
-    /** New notes, and Brio to read them: "Identify action items in the new notes". */
+    /** New notes, and Brio to read them: "Summarize the new notes and suggest RAID items". */
     identify: boolean
 }
 
@@ -57,7 +57,8 @@ export interface EditMemoContext {
     /** Where it's kept: "Google Drive" or "OneDrive". */
     storage: string | null
     /** What waits on the memo now, which new notes stop. */
-    waiting: { actionItems: number; raid: number }
+    /** What Brio found that's waiting on it; `minutes`: it has minutes, which new notes replace. */
+    waiting: { actionItems: number; raid: number; minutes?: boolean }
     /** What was applied from it, as the card names it: kept, whatever changes. */
     applied: { label: string; at: string }[]
     /** Brio is there to read new notes. */
@@ -90,6 +91,7 @@ export function editSummary(params: {
     const parts = [
         ...(edit.waiting.actionItems > 0 ? [plural(edit.waiting.actionItems, 'action item')] : []),
         ...(edit.waiting.raid > 0 ? [plural(edit.waiting.raid, 'RAID suggestion')] : []),
+        ...(edit.waiting.minutes ? ['the minutes'] : []),
     ]
     const applied = edit.applied.length
     return {
@@ -379,7 +381,7 @@ export function AddMemoSheet({
                                     )}
                                     {summary.headingChanged && !summary.notesChanged && (
                                         <SaveLine icon={<Check className="h-3.5 w-3.5" aria-hidden />}>
-                                            Action items stay as they are. Only new notes are read again; a new title or date costs nothing.
+                                            The minutes and RAID suggestions stay as they are. Only new notes are read again; a new title or date costs nothing.
                                         </SaveLine>
                                     )}
                                     {summary.stops && (
@@ -396,7 +398,7 @@ export function AddMemoSheet({
                                         <li className="py-2">
                                             <label className="flex cursor-pointer items-start gap-2.5 text-small text-fg">
                                                 <Checkbox className="mt-0.5" checked={identify} onCheckedChange={(v) => setIdentify(v === true)} disabled={saving} />
-                                                <span>Identify action items in the new notes <span className="text-fg-muted">· 1 credit</span></span>
+                                                <span>Summarize the new notes and suggest RAID items <span className="text-fg-muted">· 2 credits</span></span>
                                             </label>
                                         </li>
                                     )}

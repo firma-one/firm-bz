@@ -9,8 +9,9 @@ import { useToast } from '@/components/ui/toast'
 import { InternalMemosView } from '@/components/projects/internal-memos-card'
 import { AddMemoSheet, type AddMemoInput, type AddMemoOutcome } from '@/components/projects/add-memo-sheet'
 import type { DemoEngagement } from '@/lib/demo/static-demo-data'
-import { memoDayLine } from '@/lib/memos/memo-shared'
+import { alreadyAppliedIds, alreadyAppliedOn, memoDayLine, type MemoListItem } from '@/lib/memos/memo-shared'
 import { useDemoMemos, type DemoMemo } from '@/components/demo/demo-memos'
+import type { MemoFound } from '@/components/projects/engagement-memos'
 
 /**
  * The Overview's "Internal memos" card on /tour: the app's own card (InternalMemosView) and Add sheet
@@ -27,6 +28,13 @@ export function DemoInternalMemos({ engagement, today }: { engagement: DemoEngag
     const memos = c.memos ?? []
     const [adding, setAdding] = useState(false)
     const [opened, setOpened] = useState<DemoMemo | null>(null)
+    // The card's own Find actions, over the canned proposals: the memo page reads memos for minutes and RAID now.
+    const findActions = async (memo: MemoListItem): Promise<MemoFound> => {
+        const demo = memos.find((m) => m.id === memo.id)
+        const found = demo ? demo.found(new Date()) : { proposals: [], skipped: [], dropped: 0 }
+        const applied = demo?.applied ?? []
+        return { ...found, alreadyApplied: alreadyAppliedIds(found.proposals, applied), appliedOn: alreadyAppliedOn(found.proposals, applied) }
+    }
 
     const save = async (input: AddMemoInput): Promise<AddMemoOutcome> => {
         const out = await c.save(input)
@@ -42,7 +50,7 @@ export function DemoInternalMemos({ engagement, today }: { engagement: DemoEngag
                 storagePhrase="your Drive"
                 onAdd={() => setAdding(true)}
                 onOpen={(memo) => setOpened(memos.find((m) => m.id === memo.id) ?? null)}
-                findActions={c.findActions}
+                findActions={findActions}
                 apply={c.apply}
             />
             <AddMemoSheet open={adding} onOpenChange={setAdding} onSave={save} />

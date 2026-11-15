@@ -21,8 +21,9 @@ export const dynamic = 'force-dynamic'
  *
  * POST /api/projects/[projectId]/raid
  *
- * Adds a person's entry. Body: { type: "RISK" | "ASSUMPTION" | "ISSUE" | "DECISION", title, notes?, ownerUserId?, priority? }.
- * A Risk or an Issue is Medium unless priority says HIGH or LOW.
+ * Adds a person's entry. Body: { type: "RISK" | "ACTION" | "ISSUE" | "DECISION", title, notes?, ownerUserId?, priority?, dueDate? }.
+ * A Risk or an Issue is Medium unless priority says HIGH or LOW. An Action is the adder's unless
+ * ownerUserId gives it to someone else, and is due dueDate (YYYY-MM-DD) or the start of next week.
  *
  * Both: a Lead or a Contributor · Full Access (lib/raid/raid-access.ts); Reviewers and Limited Access
  * contributors are refused. A completed engagement refuses the write.
@@ -80,6 +81,7 @@ export async function POST(
             notes: body?.notes,
             ownerUserId: body?.ownerUserId,
             priority: body?.priority,
+            dueDate: body?.dueDate,
         })
         return NextResponse.json({ data: created }, { status: 201 })
     } catch (error) {

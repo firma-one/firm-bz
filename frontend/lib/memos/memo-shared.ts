@@ -250,7 +250,113 @@ function reviewOf(raw: unknown): MemoReview | null {
         dropped: countOf(r.dropped) ?? 0,
         dismissed: r.dismissed === true,
         ...(typeof r.bodyHash === 'string' ? { bodyHash: r.bodyHash } : {}),
+        ...(typeof r.minutes === 'string' && r.minutes ? { minutes: r.minutes } : {}),
     }
+}
+
+// ── Minutes ───────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * A memo's minutes (.claude/plans/raid-actions-memo-minutes.md): the meeting's minutes for the people who
+ * were there, written by Brio from the memo. Their action items aren't here: the panel adds them from the
+ * memo's Actions (minutesActionItems).
+ */
+export interface MemoMinutes {
+    /** "Minutes · Northwind brand refresh · Mar 4, 2026". */
+    subject: string
+    attendees: string[]
+    summary: string
+    discussed: string[]
+    decisions: string[]
+    openQuestions: string[]
+    /** As the memo says it, or null. */
+    nextMeeting: string | null
+}
+
+/** One line of the model's words: no control characters, no em dashes, capped. */
+function minutesLine(raw: unknown, max: number): string | null {
+    if (typeof raw !== 'string') return null
+    const s = raw.replace(/[\u0000-\u001F\u007F]/g, ' ').replace(/\s*—\s*/g, ', ').replace(/\s+/g, ' ').trim()
+    if (!s) return null
+    return s.length > max ? `${s.slice(0, max - 1).trimEnd()}…` : s
+}
+
+function minutesLines(raw: unknown, maxItems: number, maxLength: number): string[] {
+    return (Array.isArray(raw) ? raw : [])
+        .map((v) => minutesLine(v, maxLength))
+        .filter((v): v is string => !!v)
+        .slice(0, maxItems)
+}
+
+/** Minutes from the model or from storage, checked and capped; null without a subject and a summary. */
+export function parseMinutes(raw: unknown): MemoMinutes | null {
+    const r = recordOf(raw)
+    const subject = minutesLine(r.subject, 160)
+    const summary = minutesLine(r.summary, 900)
+    if (!subject || !summary) return null
+    return {
+        subject,
+        attendees: minutesLines(r.attendees, 30, 80),
+        summary,
+        discussed: minutesLines(r.discussed, 12, 200),
+        decisions: minutesLines(r.decisions, 12, 240),
+        openQuestions: minutesLines(r.openQuestions, 12, 240),
+        nextMeeting: minutesLine(r.nextMeeting, 160),
+    }
+}
+
+/**
+ * The minutes' action items: the memo's Actions, as the panel holds them (edited titles and dates, waiting
+ * or accepted), never dismissed ones and never the firm's own follow-ups (setting up a deliverable,
+ * preparing for a review), which weren't promised in the meeting.
+ */
+export function minutesActionItems(actions: readonly { title: string; dueDate: string | null; followUp: string | null }[]): { title: string; dueDate: string | null }[] {
+    return actions.filter((a) => !a.followUp).map((a) => ({ title: a.title, dueDate: a.dueDate }))
+}
+
+/** "Fri, Mar 6": an action item's day in the minutes. */
+function minutesDay(day: string): string {
+    const d = new Date(`${day}T00:00:00Z`)
+    return Number.isNaN(d.getTime()) ? day : d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })
+}
+
+/** "Wednesday, March 4, 2026": the meeting's date in the minutes. */
+export function minutesDate(day: string): string {
+    const d = new Date(`${day}T00:00:00Z`)
+    return Number.isNaN(d.getTime()) ? day : d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
+}
+
+/** The sections of the minutes in order, as both copies (plain and formatted) write them. */
+function minutesSections(minutes: MemoMinutes, meetingDate: string, actions: readonly { title: string; dueDate: string | null }[]): { heading: string; lines: string[]; list: boolean }[] {
+    const sections = [
+        { heading: 'Date', lines: [minutesDate(meetingDate)], list: false },
+        ...(minutes.attendees.length > 0 ? [{ heading: 'Attendees', lines: [minutes.attendees.join(', ')], list: false }] : []),
+        { heading: 'Summary', lines: [minutes.summary], list: false },
+        ...(minutes.discussed.length > 0 ? [{ heading: 'Discussed', lines: minutes.discussed, list: true }] : []),
+        ...(minutes.decisions.length > 0 ? [{ heading: 'Decisions', lines: minutes.decisions, list: true }] : []),
+        ...(actions.length > 0 ? [{ heading: 'Action items', lines: actions.map((a) => (a.dueDate ? `${a.title} · ${minutesDay(a.dueDate)}` : a.title)), list: true }] : []),
+        ...(minutes.openQuestions.length > 0 ? [{ heading: 'Open questions', lines: minutes.openQuestions, list: true }] : []),
+        ...(minutes.nextMeeting ? [{ heading: 'Next meeting', lines: [minutes.nextMeeting], list: false }] : []),
+    ]
+    return sections
+}
+
+/** The minutes as plain text, for Copy summary: what any email client takes. */
+export function minutesPlainText(minutes: MemoMinutes, meetingDate: string, actions: readonly { title: string; dueDate: string | null }[]): string {
+    return minutesSections(minutes, meetingDate, actions)
+        .map((s) => (s.list ? `${s.heading}\n${s.lines.map((l) => `- ${l}`).join('\n')}` : `${s.heading}\n${s.lines.join('\n')}`))
+        .join('\n\n')
+}
+
+const escapeHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+
+/** The minutes as simple HTML, for Copy summary: headings and bullets an email client keeps. */
+export function minutesHtml(minutes: MemoMinutes, meetingDate: string, actions: readonly { title: string; dueDate: string | null }[]): string {
+    return minutesSections(minutes, meetingDate, actions)
+        .map((s) => (s.list
+            ? `<p><strong>${escapeHtml(s.heading)}</strong></p><ul>${s.lines.map((l) => `<li>${escapeHtml(l)}</li>`).join('')}</ul>`
+            : `<p><strong>${escapeHtml(s.heading)}</strong><br>${s.lines.map(escapeHtml).join('<br>')}</p>`))
+        .join('')
 }
 
 /** A memo file's `settings.memo`, or null when the row isn't a memo. */
@@ -468,6 +574,11 @@ export interface MemoReview {
      * so. Absent on reviews from before it was kept.
      */
     bodyHash?: string
+    /**
+     * The meeting's minutes (MemoMinutes), sealed (lib/memos/memo-minutes.ts): no memo text is stored in
+     * the clear. Absent on reviews from before minutes, and when they couldn't be written.
+     */
+    minutes?: string
 }
 
 /** A stored anchor read back, or null when it isn't one (an older row, or none). */
@@ -538,6 +649,30 @@ export function memoReviewOf(
         dropped: found.dropped,
         dismissed: false,
         bodyHash: memoBodyHash(memoText),
+    }
+}
+
+/**
+ * A memo's review from Brio's read since 2026-11-15 (.claude/plans/raid-actions-memo-minutes.md): its RAID
+ * suggestions are rows of their own, so the review holds the lines not suggested (quotes as anchors only)
+ * and the sealed minutes. No action items: every commitment is an Action among the RAID suggestions.
+ */
+export function memoReadReview(
+    found: { skipped: readonly { quote: string; reason: string }[]; dropped: number; minutes: string | null },
+    memoText: string,
+    by: MemoReview['by'],
+    at: Date = new Date(),
+): MemoReview {
+    const matchText = memoMatchText(memoText)
+    return {
+        at: at.toISOString(),
+        by,
+        proposals: [],
+        skipped: found.skipped.map((k) => ({ reason: k.reason, quoteAt: anchorQuote(matchText, k.quote) })),
+        dropped: found.dropped,
+        dismissed: false,
+        bodyHash: memoBodyHash(memoText),
+        ...(found.minutes ? { minutes: found.minutes } : {}),
     }
 }
 
@@ -620,15 +755,27 @@ export function waitingActionItems(memo: Pick<MemoSettings, 'review' | 'applied'
     return review.proposals.filter((p) => !isStoredApplied(p, memo.applied)).length
 }
 
-/** A RAID suggestion from a memo, as its Action items column shows it. */
+/** A RAID suggestion from a memo, as its RAID tab shows it. */
 export interface MemoRaidSuggestion {
     id: string
-    type: 'RISK' | 'ASSUMPTION' | 'ISSUE' | 'DECISION'
+    type: 'RISK' | 'ACTION' | 'ISSUE' | 'DECISION' | 'ASSUMPTION'
     title: string
     /** Risks and Issues: Brio's priority, to keep or change before accepting. Null otherwise. */
     priority: 'HIGH' | 'MEDIUM' | 'LOW' | null
     /** Where the line it came from sits in the memo, never its words: the pane fills them in. Null on older ones. */
     quoteAt: QuoteAnchor | null
+    /** Actions: YYYY-MM-DD, to keep or change before accepting. Null otherwise. */
+    dueDate: string | null
+    /** Actions: one Brio added for the firm itself, left out of the minutes ('DELIVERABLE' shows "New deliverable"). */
+    followUp: 'DELIVERABLE' | 'PREPARE' | null
+}
+
+/** An Action accepted from the memo, for the minutes' action items. */
+export interface MemoAcceptedAction {
+    id: string
+    title: string
+    dueDate: string | null
+    followUp: 'DELIVERABLE' | 'PREPARE' | null
 }
 
 /** What GET …/memos/[documentId]/review answers: what waits on the memo, quotes still anchors. */
@@ -643,5 +790,9 @@ export interface MemoReviewPayload {
     /** What a reminder needs to point back to its engagement. */
     engagement: { id: string; name: string; firmId: string; ctaUrl: string | null }
     raid: MemoRaidSuggestion[]
+    /** The meeting's minutes, opened; null when there are none (never read, or written before minutes). */
+    minutes?: MemoMinutes | null
+    /** Actions already accepted from this memo, still in the log: the minutes list them with the waiting ones. */
+    acceptedActions?: MemoAcceptedAction[]
 }
 

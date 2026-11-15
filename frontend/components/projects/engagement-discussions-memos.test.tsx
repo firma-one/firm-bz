@@ -4,8 +4,9 @@ import { render, screen, fireEvent, waitFor, within, act, cleanup } from '@testi
 
 /**
  * Discussions › Threads | Memos | RAID (.claude/plans/brio-features-round-2.md §8): who gets the switch,
- * the sub-tab and memo kept in the URL, the memo pane, and Identify action items in it. fetch is stubbed:
- * nothing reaches the server, Brio, Google Drive or OneDrive.
+ * the sub-tab and memo kept in the URL, the memo pane, and Brio's panel beside it (its Summary and RAID
+ * tabs, .claude/plans/raid-actions-memo-minutes.md). fetch is stubbed: nothing reaches the server, Brio,
+ * Google Drive or OneDrive.
  */
 
 const h = vi.hoisted(() => ({
@@ -72,6 +73,20 @@ let listing: { memos: MemoListItem[]; readOnly: boolean; storage: string | null 
 let content: { status: number; body: unknown }
 const NOTHING_WAITING: MemoReviewPayload = { review: null, alreadyApplied: [], appliedOn: {}, applied: [], engagement: { id: 'p1', name: '2025 Individual Return', firmId: 'f1', ctaUrl: null }, raid: [] }
 let waiting: MemoReviewPayload = NOTHING_WAITING
+/** What the review answers once Brio has read the memo with the sparkle. */
+let afterRead: MemoReviewPayload = NOTHING_WAITING
+const MINUTES = {
+    subject: 'Minutes · 2025 Individual Return · Nov 12, 2026',
+    attendees: ['Dana Whitfield', 'Alex Jordan'],
+    summary: 'Dana is sending the K-1s by the end of next week.',
+    discussed: ['The K-1s'],
+    decisions: [],
+    openQuestions: [],
+    nextMeeting: null,
+}
+const K1_LINE = 'We will send the K-1s by end of next week.'
+const ACTION = { id: 'raid-a', type: 'ACTION' as const, title: 'Dana to send the K-1s', priority: null, quoteAt: anchorQuote(memoMatchText(TEXT), K1_LINE), dueDate: '2026-11-20', followUp: null }
+const RISK = { id: 'raid-1', type: 'RISK' as const, title: 'The K-1s may arrive late', priority: 'MEDIUM' as const, quoteAt: anchorQuote(memoMatchText(TEXT), K1_LINE), dueDate: null, followUp: null }
 
 function stubFetch() {
     calls = []
@@ -82,7 +97,11 @@ function stubFetch() {
         if (url === '/api/projects/p1/memos' && method === 'GET') return json({ data: listing })
         if (url === `/api/projects/p1/memos/${MEMO.id}/content`) return json(content.body, content.status)
         if (url === `/api/projects/p1/memos/${OLDER.id}/content`) return json({ data: { text: OLDER_TEXT, webUrl: null } })
-        if (url === '/api/projects/p1/ai-notes-proposals') return json({ data: FOUND })
+        if (url === '/api/projects/p1/ai-notes-proposals') {
+            // The read writes what waits on the memo; the panel reads it again from the review.
+            waiting = afterRead
+            return json({ data: { memoRead: { minutes: true, raidSuggested: afterRead.raid.length } } })
+        }
         if (url.endsWith('/applied')) return json({ data: { appliedCount: 2 } })
         if (url.endsWith('/review') && method === 'GET') return json({ data: waiting })
         if (url.endsWith('/review') && method === 'DELETE') return json({ data: { dismissed: true } })
@@ -105,6 +124,7 @@ beforeEach(() => {
     listing = { memos: [MEMO, OLDER], readOnly: false, storage: 'OneDrive' }
     content = { status: 200, body: { data: { text: TEXT, webUrl: 'https://contoso-my.sharepoint.com/memo.md' } } }
     waiting = NOTHING_WAITING
+    afterRead = NOTHING_WAITING
     stubFetch()
     h.addToast.mockReset()
     h.clearPane.mockReset()
@@ -282,79 +302,115 @@ describe('Memos', () => {
         expect(screen.queryByLabelText('Search memos by title or who wrote it')).toBeNull()
     })
 
-    it('Find actions shows Brio\'s proposals under the memo, applied ones marked, and notes an apply on the memo', async () => {
+    it("the sparkle reads the memo for its minutes and RAID suggestions, which then wait on it", async () => {
+        afterRead = { ...NOTHING_WAITING, raid: [ACTION], minutes: MINUTES }
         await openMemos()
         const pane = screen.getByRole('region', { name: 'Memo' })
         await within(pane).findByRole('heading', { name: 'Call with Dana' })
-        // The action items have their own column beside the memo.
-        const actions = screen.getByRole('region', { name: 'Action items' })
-        fireEvent.click(within(actions).getByRole('button', { name: 'Identify action items in Call with Dana' }))
-        expect(await within(actions).findByText('Accepted earlier from this memo')).toBeTruthy()
-        expect(within(actions).getByText('Accepted action items note this memo, so identifying them again shows them as done.')).toBeTruthy()
-        expect(calls.find((c) => c.url.endsWith('/ai-notes-proposals'))?.body).toEqual(expect.objectContaining({ memoDocumentId: MEMO.id }))
-
-        fireEvent.click(within(actions).getByRole('button', { name: 'Accept 1 selected' }))
-        await waitFor(() => expect(within(screen.getByTestId(`memo-row-${MEMO.id}`)).getByText('2 action items accepted')).toBeTruthy())
-        expect(h.createManualReminder).toHaveBeenCalledWith(expect.objectContaining({
-            action: 'Chase the 1099-B', note: 'From the memo “Call with Dana”: “I still need the brokerage 1099-B”',
-        }))
-        expect(calls.some((c) => c.url === `/api/projects/p1/memos/${MEMO.id}/applied` && c.method === 'POST')).toBe(true)
+        // Brio's panel has its own column beside the memo, with Summary and RAID tabs.
+        const brio = screen.getByRole('region', { name: 'Brio on this memo' })
+        expect(within(brio).getByRole('tab', { name: 'Summary' })).toBeTruthy()
+        expect(within(brio).getByText(/reads this memo for the meeting/)).toBeTruthy()
+        fireEvent.click(within(brio).getByRole('button', { name: 'Read Call with Dana with Brio' }))
+        expect(await within(brio).findByText('Dana to send the K-1s')).toBeTruthy()
+        expect(calls.find((c) => c.url.endsWith('/ai-notes-proposals'))?.body).toEqual({ memoDocumentId: MEMO.id })
+        // No reminder is made by reading: only accepting changes anything.
+        expect(h.createManualReminder).not.toHaveBeenCalled()
     })
 
-    it('a memo added earlier shows its action items and RAID suggestions waiting, without a click (§13)', async () => {
-        const stored = memoReviewOf({ proposals: [FOUND.proposals[0]] as never, skipped: [], dropped: 0 }, TEXT, 'auto')
-        waiting = {
-            ...NOTHING_WAITING,
-            review: stored,
-            // Its line's place only, as stored: the pane fills the words in from the memo it read.
-            raid: [{ id: 'raid-1', type: 'RISK', title: 'The K-1s may arrive late', priority: 'MEDIUM', quoteAt: anchorQuote(memoMatchText(TEXT), 'We will send the K-1s by end of next week.') }],
-        }
-        listing.memos = [{ ...MEMO, toReview: 2, reviewedAt: stored.at }, OLDER]
+    it('a memo added earlier shows its minutes and RAID suggestions waiting, without a click', async () => {
+        waiting = { ...NOTHING_WAITING, raid: [ACTION, RISK], minutes: MINUTES }
+        listing.memos = [{ ...MEMO, toReview: 2, reviewedAt: '2026-11-12T18:00:00.000Z' }, OLDER]
         await openMemos()
         expect(within(screen.getByTestId(`memo-row-${MEMO.id}`)).getByText('2 to review')).toBeTruthy()
 
-        const actions = screen.getByRole('region', { name: 'Action items' })
-        expect(await within(actions).findByText(/identified 1 action item/)).toBeTruthy()
-        // Its quote, filled in from the memo the pane read: only its place was stored. The RAID suggestion
-        // below came from the same line, so it cites it too.
-        expect(within(actions).getAllByText('“We will send the K-1s by end of next week.”')).toHaveLength(2)
+        const brio = screen.getByRole('region', { name: 'Brio on this memo' })
+        // The RAID tab opens first while suggestions wait.
+        expect(await within(brio).findByText(/suggests 2 for RAID/)).toBeTruthy()
         expect(calls.some((c) => c.url.endsWith('/ai-notes-proposals'))).toBe(false)
+        // Each quote, filled in from the memo the pane read: only its place was stored.
+        expect(within(brio).getAllByText(`“${K1_LINE}”`)).toHaveLength(2)
+        // The Action's due date, and the Risk's priority, to keep or change before accepting.
+        expect(within(brio).getByRole('button', { name: /Due date of Dana to send the K-1s: Fri, Nov 20/ })).toBeTruthy()
+        expect(within(brio).getByRole('combobox', { name: /Priority of The K-1s may arrive late/ }).textContent).toContain('Medium')
 
-        const raid = within(actions).getByRole('region', { name: 'RAID suggestions' })
-        // Chosen with the action items: it starts selected, and the foot counts it with them.
-        expect(within(actions).getByRole('button', { name: 'Accept 2 selected' })).toBeTruthy()
-        fireEvent.click(within(raid).getByRole('checkbox', { name: /Select: risk/ }))
-        expect(within(actions).getByRole('button', { name: 'Accept 1 selected' })).toBeTruthy()
-        fireEvent.click(within(raid).getByRole('checkbox', { name: /Select: risk/ }))
-        expect(within(actions).getByRole('button', { name: 'Accept 2 selected' })).toBeTruthy()
-        // Its title, editable before accepting, as an action item's fields are.
-        const title = within(raid).getByDisplayValue('The K-1s may arrive late')
-        // The line it came from, as an action item cites its own.
-        expect(within(raid).getByText('“We will send the K-1s by end of next week.”')).toBeTruthy()
-        // Brio's priority, to keep or change before accepting; kept as it is, nothing more is sent.
-        expect(within(raid).getByRole('combobox', { name: 'Priority of The K-1s may arrive late' }).textContent).toContain('Medium')
-        fireEvent.change(title, { target: { value: 'K-1s from the Garcias may arrive after the Nov 20 filing prep' } })
-        fireEvent.click(within(raid).getByRole('button', { name: 'Accept' }))
+        // Both start selected; unticking one leaves the other.
+        expect(within(brio).getByRole('button', { name: 'Accept 2 selected' })).toBeTruthy()
+        fireEvent.click(within(brio).getByRole('checkbox', { name: /Select: risk/ }))
+        expect(within(brio).getByRole('button', { name: 'Accept 1 selected' })).toBeTruthy()
+        fireEvent.click(within(brio).getByRole('checkbox', { name: /Select: risk/ }))
+
+        // A title changed in place goes with the accept; nothing else changed, nothing else is sent.
+        fireEvent.click(within(brio).getByRole('button', { name: /^Risk: what it says: The K-1s may arrive late\. Edit$/ }))
+        const field = within(brio).getByDisplayValue('The K-1s may arrive late')
+        fireEvent.change(field, { target: { value: 'K-1s from the Garcias may arrive after the Nov 20 filing prep' } })
+        fireEvent.blur(field)
+        expect(within(brio).getByText('Edited ·')).toBeTruthy()
+        fireEvent.click(within(brio).getByRole('button', { name: 'Accept K-1s from the Garcias may arrive after the Nov 20 filing prep' }))
         await waitFor(() => expect(calls.find((c) => c.url === '/api/projects/p1/raid/raid-1' && c.method === 'PATCH')?.body)
             .toEqual({ action: 'accept', title: 'K-1s from the Garcias may arrive after the Nov 20 filing prep' }))
-        await waitFor(() => expect(within(actions).queryByRole('region', { name: 'RAID suggestions' })).toBeNull())
+        await waitFor(() => expect(within(brio).queryByText('K-1s from the Garcias may arrive after the Nov 20 filing prep')).toBeNull())
 
-        fireEvent.click(within(actions).getByRole('button', { name: 'Dismiss all' }))
+        // The minutes, with the memo's Actions as their action items.
+        fireEvent.click(within(brio).getByRole('tab', { name: 'Summary' }))
+        expect(within(brio).getByText(MINUTES.subject)).toBeTruthy()
+        expect(within(brio).getByText('Dana to send the K-1s · Fri, Nov 20')).toBeTruthy()
+
+        fireEvent.click(within(brio).getByRole('tab', { name: /RAID/ }))
+        fireEvent.click(within(brio).getByRole('button', { name: 'Dismiss all' }))
         await waitFor(() => expect(calls.some((c) => c.url === `/api/projects/p1/memos/${MEMO.id}/review` && c.method === 'DELETE')).toBe(true))
     })
 
-    it('"Accept N selected" accepts the selected action items and RAID suggestions together', async () => {
+    it('choosing a tab folds the memo list to a rail; its button opens and folds it, and then it stays as left', async () => {
+        waiting = { ...NOTHING_WAITING, raid: [ACTION], minutes: MINUTES }
+        listing.memos = [{ ...MEMO, toReview: 1 }, OLDER]
+        await openMemos()
+        const brio = screen.getByRole('region', { name: 'Brio on this memo' })
+        await within(brio).findByText(/suggests 1 for RAID/)
+        const list = screen.getByTestId('memo-list')
+        expect(list.getAttribute('data-collapsed')).toBeNull()
+        expect(screen.getByRole('button', { name: 'Collapse memo list' }).getAttribute('aria-expanded')).toBe('true')
+
+        fireEvent.click(within(brio).getByRole('tab', { name: 'Summary' }))
+        expect(list.getAttribute('data-collapsed')).toBe('true')
+        // Folded, it's still the same list: its rows still open their memos.
+        expect(screen.getByTestId(`memo-row-${OLDER.id}`)).toBeTruthy()
+        const expand = screen.getByRole('button', { name: 'Expand memo list' })
+        expect(expand.getAttribute('aria-expanded')).toBe('false')
+
+        fireEvent.click(expand)
+        expect(list.getAttribute('data-collapsed')).toBeNull()
+        // Opened by hand, working in the panel no longer folds it.
+        fireEvent.click(within(brio).getByRole('tab', { name: /RAID/ }))
+        expect(list.getAttribute('data-collapsed')).toBeNull()
+        fireEvent.click(screen.getByRole('button', { name: 'Collapse memo list' }))
+        expect(list.getAttribute('data-collapsed')).toBe('true')
+    })
+
+    it('older action items and RAID suggestions share one Dismiss all and one "Accept N selected"', async () => {
         const stored = memoReviewOf({ proposals: [FOUND.proposals[0]] as never, skipped: [], dropped: 0 }, TEXT, 'auto')
-        waiting = {
-            ...NOTHING_WAITING,
-            review: stored,
-            raid: [{ id: 'raid-1', type: 'RISK', title: 'The K-1s may arrive late', priority: 'MEDIUM', quoteAt: null }],
-        }
+        waiting = { ...NOTHING_WAITING, review: stored, raid: [ACTION] }
         listing.memos = [{ ...MEMO, toReview: 2, reviewedAt: stored.at }, OLDER]
         await openMemos()
-        const actions = screen.getByRole('region', { name: 'Action items' })
-        fireEvent.click(await within(actions).findByRole('button', { name: 'Accept 2 selected' }))
-        await waitFor(() => expect(calls.some((c) => c.url === `/api/projects/p1/memos/${MEMO.id}/applied` && c.method === 'POST')).toBe(true))
+        const brio = screen.getByRole('region', { name: 'Brio on this memo' })
+        expect(await within(brio).findByText('Action items from an earlier read')).toBeTruthy()
+        const accept = await within(brio).findByRole('button', { name: 'Accept 2 selected' })
+        expect(within(brio).getAllByRole('button', { name: /^Accept \d+ selected$/ })).toHaveLength(1)
+        expect(within(brio).getAllByRole('button', { name: 'Dismiss all' })).toHaveLength(1)
+
+        fireEvent.click(accept)
+        await waitFor(() => expect(calls.find((c) => c.url === '/api/projects/p1/raid/raid-a' && c.method === 'PATCH')?.body).toEqual({ action: 'accept' }))
+        await waitFor(() => expect(h.createManualReminder).toHaveBeenCalledTimes(1))
+        expect(h.createManualReminder.mock.calls[0][0]).toMatchObject({ action: FOUND.proposals[0].title, dateValue: '2026-11-23' })
+    })
+
+    it('"Accept N selected" accepts every selected suggestion', async () => {
+        waiting = { ...NOTHING_WAITING, raid: [ACTION, { ...RISK, quoteAt: null }] }
+        listing.memos = [{ ...MEMO, toReview: 2 }, OLDER]
+        await openMemos()
+        const brio = screen.getByRole('region', { name: 'Brio on this memo' })
+        fireEvent.click(await within(brio).findByRole('button', { name: 'Accept 2 selected' }))
+        await waitFor(() => expect(calls.find((c) => c.url === '/api/projects/p1/raid/raid-a' && c.method === 'PATCH')?.body).toEqual({ action: 'accept' }))
         await waitFor(() => expect(calls.find((c) => c.url === '/api/projects/p1/raid/raid-1' && c.method === 'PATCH')?.body).toEqual({ action: 'accept' }))
     })
 
@@ -392,20 +448,23 @@ describe('Memos', () => {
 
     it('a memo whose notes changed since Brio read them says so, with the sparkle', async () => {
         listing.memos = [{ ...MEMO, changedSinceRead: true, edited: { at: '2026-11-14T09:00:00.000Z', byName: 'Sam Rivera' } }, OLDER]
+        waiting = { ...NOTHING_WAITING, raid: [ACTION] }
         await openMemos()
-        const actions = screen.getByRole('region', { name: 'Action items' })
-        expect((await within(actions).findByTestId('memo-changed-since-read')).textContent).toMatch(/^Changed since Brio(AI)? read it\. The sparkle reads it again\.$/)
+        const brio = screen.getByRole('region', { name: 'Brio on this memo' })
+        expect((await within(brio).findByTestId('memo-changed-since-read')).textContent).toMatch(/^Changed since Brio(AI)? read it\. The sparkle reads it again\.$/)
     })
 
     it('a memo changed in storage since Brio read it says so too, and a moved line is never shown wrong', async () => {
+        // Action items from a read before minutes and RAID Actions still show, under the RAID tab.
         const stored = memoReviewOf({ proposals: [FOUND.proposals[0]] as never, skipped: [], dropped: 0 }, TEXT, 'auto')
         waiting = { ...NOTHING_WAITING, review: stored }
         listing.memos = [{ ...MEMO, toReview: 1, reviewedAt: stored.at }, OLDER]
         content = { status: 200, body: { data: { text: TEXT.replace('We will send the K-1s by end of next week.', 'K-1s are already in.'), webUrl: null } } }
         await openMemos()
-        const actions = screen.getByRole('region', { name: 'Action items' })
-        expect(await within(actions).findByTestId('memo-changed-since-read')).toBeTruthy()
-        expect(within(actions).getByText('“The memo has changed since, so this line isn’t shown.”')).toBeTruthy()
+        const brio = screen.getByRole('region', { name: 'Brio on this memo' })
+        expect(await within(brio).findByTestId('memo-changed-since-read')).toBeTruthy()
+        expect(within(brio).getByText('Action items from an earlier read')).toBeTruthy()
+        expect(within(brio).getByText('“The memo has changed since, so this line isn’t shown.”')).toBeTruthy()
     })
 
     it('a completed engagement reads its memos, and adds and applies nothing', async () => {
@@ -415,8 +474,8 @@ describe('Memos', () => {
         expect(await within(pane).findByRole('heading', { name: 'Call with Dana' })).toBeTruthy()
         expect(screen.queryByRole('button', { name: /Add internal memo/ })).toBeNull()
         expect(screen.getByText('Read only · completed')).toBeTruthy()
-        expect(screen.queryByRole('button', { name: /Identify action items/ })).toBeNull()
-        expect(screen.queryByRole('region', { name: 'Action items' })).toBeNull()
+        expect(screen.queryByRole('button', { name: /with Brio$/ })).toBeNull()
+        expect(screen.queryByRole('region', { name: 'Brio on this memo' })).toBeNull()
     })
 
     it('a memo added is saved, then opened', async () => {

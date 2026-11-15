@@ -64,7 +64,7 @@ describe('AddMemoSheet, editing', () => {
         const onSave = renderEdit()
         fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Call with Dana, pricing' } })
         expect(screen.getByText('2026-11-12-Call-with-Dana,-pricing.md')).toBeTruthy()
-        expect(screen.getByText(/Action items stay as they are/)).toBeTruthy()
+        expect(screen.getByText(/The minutes and RAID suggestions stay as they are/)).toBeTruthy()
         expect(screen.queryByRole('checkbox')).toBeNull()
         fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
         await waitFor(() => expect(onSave).toHaveBeenCalled())

@@ -897,8 +897,8 @@ export function FirmSettingsForm({
                         <h3 className={SETTINGS_SECTION_HEADING_CLASS}><Brio /></h3>
                         <SettingSwitchRow
                             icon={<Sparkles />}
-                            title="Identify action items when a memo is added"
-                            description={withRaidInfo("Brio reads a new internal memo once, and its action items and RAID suggestions wait on it for someone to apply or accept. Nothing changes on its own. 1 credit per memo, from your firm's credits.")}
+                            title="Summarize memos and suggest RAID items when they're added"
+                            description={withRaidInfo("Brio reads a new internal memo once: it writes the meeting's minutes, and suggests RAID entries (every commitment an Action) that wait on the memo for someone to accept. Nothing changes on its own. 2 credits per memo, from your firm's credits.")}
                             checked={brioMemoReview}
                             onChange={(v) => { setBrioMemoReview(v); setAppDirty(true) }}
                             disabled={!loaded}

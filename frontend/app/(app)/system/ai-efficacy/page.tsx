@@ -32,6 +32,7 @@ const FEATURE_LABELS: Record<string, string> = {
     dayBrief: 'Your brief',
     raidCheck: 'RAID check',
     memoRaid: 'RAID from a memo',
+    memoMinutes: 'Minutes from a memo',
 }
 
 /**

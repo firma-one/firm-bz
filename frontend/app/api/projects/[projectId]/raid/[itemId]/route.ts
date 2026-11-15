@@ -16,10 +16,12 @@ export const dynamic = 'force-dynamic'
  * PATCH /api/projects/[projectId]/raid/[itemId]
  *
  * A person's change to one entry of the RAID log. Body: { action, ... }:
- * - "accept": { priority?, title? } a suggestion joins the log (Open, Recorded for a decision), or merges into the entry it adds to.
+ * - "accept": { priority?, title?, type?, dueDate? } a suggestion joins the log (Open, Recorded for a decision), or
+ *   merges into the entry it adds to. On a memo the person may change its type first; an accepted Action is theirs.
  * - "dismiss": a suggestion is turned down.
- * - "edit": { title?, notes?, ownerUserId?, priority? }. Titles only for entries a person or Brio wrote; a priority
- *   (HIGH, MEDIUM, LOW) only on a Risk or an Issue, and the sync keeps it from then on.
+ * - "edit": { title?, notes?, ownerUserId?, priority?, dueDate? }. Titles only for entries a person or Brio wrote; a
+ *   priority (HIGH, MEDIUM, LOW) only on a Risk or an Issue, and the sync keeps it from then on; a due date
+ *   (YYYY-MM-DD, or null to clear) only on an Action.
  * - "close" / "reopen".
  *
  * A Lead or a Contributor · Full Access (lib/raid/raid-access.ts). A completed engagement is read only.
@@ -43,6 +45,8 @@ export async function PATCH(
                 return NextResponse.json({ data: await acceptRaidSuggestion(projectId, actor, itemId, {
                     ...('priority' in body ? { priority: body.priority } : {}),
                     ...('title' in body ? { title: body.title } : {}),
+                    ...('type' in body ? { type: body.type } : {}),
+                    ...('dueDate' in body ? { dueDate: body.dueDate } : {}),
                 }) })
             case 'dismiss':
                 await dismissRaidSuggestion(projectId, actor, itemId)
@@ -53,6 +57,7 @@ export async function PATCH(
                     ...('notes' in body ? { notes: body.notes } : {}),
                     ...('ownerUserId' in body ? { ownerUserId: body.ownerUserId } : {}),
                     ...('priority' in body ? { priority: body.priority } : {}),
+                    ...('dueDate' in body ? { dueDate: body.dueDate } : {}),
                 })
                 return NextResponse.json({ data: { id: itemId } })
             case 'close':

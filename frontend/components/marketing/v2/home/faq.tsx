@@ -25,7 +25,7 @@ const QUESTIONS: { q: ReactNode; a: ReactNode }[] = [
       </>
     ),
     a: withRaidTip(
-      `No. Brio never opens the files you deliver. It works from delivery data: deliverable and file names, statuses, due dates and who is on the engagement. It reads words only where a job needs them: a thread’s comments when you ask for a reply draft, new comments when it checks the RAID log, and a memo’s notes when the memo is added, to identify its action items and RAID entries. A memo stays in your Drive; when you apply an action from it, the line it came from is kept with it, so you can see why.`,
+      `No. Brio never opens the files you deliver. It works from delivery data: deliverable and file names, statuses, due dates and who is on the engagement. It reads words only where a job needs them: a thread’s comments when you ask for a reply draft, new comments when it checks the RAID log, and a memo’s notes when the memo is added, to write the meeting’s minutes and suggest its RAID entries, every commitment an Action. A memo stays in your Drive. Its minutes are stored encrypted, and a RAID entry from a memo points to the place in the memo it came from, so you can see why.`,
     ),
   },
   {
@@ -36,8 +36,8 @@ const QUESTIONS: { q: ReactNode; a: ReactNode }[] = [
     ),
     a: withRaidTip(
       FILES_AGENT_PUBLIC
-        ? 'No. Brio drafts and suggests; a person approves. Replies, nudges and client updates wait for someone on your team to send them, summaries for someone to publish them, and RAID entries and call-note actions for someone to accept them. File renames or moves run only after you preview and approve the batch.'
-        : 'No. Brio drafts and suggests; a person approves. Replies, nudges and client updates wait for someone on your team to send them, summaries for someone to publish them, and RAID entries and call-note actions for someone to accept them.',
+        ? 'No. Brio drafts and suggests; a person approves. Replies, nudges and client updates wait for someone on your team to send them, summaries for someone to publish them, a memo’s minutes for someone to send them, and RAID entries for someone to accept them. File renames or moves run only after you preview and approve the batch.'
+        : 'No. Brio drafts and suggests; a person approves. Replies, nudges and client updates wait for someone on your team to send them, summaries for someone to publish them, a memo’s minutes for someone to send them, and RAID entries for someone to accept them.',
     ),
   },
   {

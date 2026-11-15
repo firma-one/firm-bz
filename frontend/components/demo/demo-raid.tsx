@@ -55,7 +55,9 @@ function item(p: Partial<RaidItemView> & Pick<RaidItemView, 'id' | 'type' | 'tit
         closedReason: null,
         canReopen: false,
         prioritySetByPerson: false,
+        followUp: null,
         ...p,
+        dueDate: p.type === 'ACTION' ? p.dueDate ?? null : null,
         // As the app reads it: Medium for a Risk or an Issue not given one, none for the others.
         priority: priorityOf({ type: p.type, priority: p.priority }),
     }
@@ -114,13 +116,26 @@ export function demoRaidLog(now: Date = new Date()): RaidLogPayload {
         }),
         item({
             id: 'raid-k1',
-            type: 'ASSUMPTION',
-            title: `Partnership K-1s arrive by ${shortDay(day(7, now))}`,
+            type: 'ACTION',
+            title: 'Dana to send the partnership K-1s',
             sourceKind: 'MEMO',
             sources: [chip('MEMO', `Memo · Call with Dana · ${shortDay(day(-1, now))}`)],
             ownerUserId: ME.userId,
-            notes: `Check ${shortDay(day(10, now))} (reminder set)`,
+            dueDate: day(7, now).slice(0, 10),
+            notes: "Chase Dana if they aren't in",
             raisedAt: day(-1, now),
+        }),
+        item({
+            id: 'raid-letter',
+            type: 'ACTION',
+            title: 'Send Dana the revised engagement letter',
+            sourceKind: 'MANUAL',
+            sources: [chip('MANUAL', `Added by ${ME.name.split(' ')[0]}`, { internal: false })],
+            ownerUserId: ME.userId,
+            dueDate: day(-2, now).slice(0, 10),
+            // Past its due date: the danger tone, as the app shows it.
+            overdue: true,
+            raisedAt: day(-8, now),
         }),
         item({
             id: 'raid-approved',
@@ -157,11 +172,12 @@ export function demoRaidLog(now: Date = new Date()): RaidLogPayload {
         }),
         item({
             id: 'raid-suggest-1099',
-            type: 'ASSUMPTION',
-            title: `Dana sends the brokerage 1099-B by ${shortDay(day(17, now))}`,
+            type: 'RISK',
+            priority: 'MEDIUM',
+            title: 'The brokerage 1099-B may not arrive before the end of the month',
             sourceKind: 'THREAD',
             status: 'SUGGESTED',
-            sources: [thread("I'll chase the 1099-B and send it before the end of the month.")],
+            sources: [thread("The brokerage still hasn't issued the 1099-B, and they won't say when.")],
             raisedAt: day(-2, now),
         }),
         item({
@@ -230,6 +246,8 @@ export function DemoRaidTab({ engagementBase = '' }: { engagementBase?: string }
             return null
         },
         onAdd: async (input: RaidNewItem) => {
+            const isAction = input.type === 'ACTION'
+            const owner = isAction ? (input.ownerUserId === undefined ? ME.userId : input.ownerUserId) : null
             const added = item({
                 id: `raid-tour-${Date.now()}`,
                 type: input.type as RaidType,
@@ -239,6 +257,8 @@ export function DemoRaidTab({ engagementBase = '' }: { engagementBase?: string }
                 prioritySetByPerson: !!input.priority,
                 sourceKind: 'MANUAL',
                 sources: [chip('MANUAL', `Added by ${ME.name.split(' ')[0]}`, { internal: false })],
+                ownerUserId: owner,
+                dueDate: isAction ? input.dueDate ?? null : null,
                 raisedAt: new Date().toISOString(),
             })
             update((l) => ({ ...l, items: [added, ...l.items] }))
@@ -250,6 +270,7 @@ export function DemoRaidTab({ engagementBase = '' }: { engagementBase?: string }
                 ...(patch.title !== undefined && patch.title ? { title: patch.title } : {}),
                 ...(patch.notes !== undefined ? { notes: patch.notes } : {}),
                 ...(patch.priority ? { priority: patch.priority, prioritySetByPerson: true } : {}),
+                ...(patch.dueDate !== undefined ? { dueDate: patch.dueDate, overdue: !!patch.dueDate && patch.dueDate < new Date().toISOString().slice(0, 10) } : {}),
                 ...(patch.ownerUserId !== undefined
                     ? { ownerUserId: patch.ownerUserId, ownerName: MEMBERS.find((m) => m.userId === patch.ownerUserId)?.name ?? null }
                     : {}),
@@ -262,7 +283,7 @@ export function DemoRaidTab({ engagementBase = '' }: { engagementBase?: string }
                 ...i,
                 status: 'CLOSED',
                 closedAt: now.toISOString(),
-                closedReason: `Closed by ${ME.name.split(' ')[0]} · ${shortDay(now)}`,
+                closedReason: `${i.type === 'ACTION' ? 'Done' : 'Closed'} by ${ME.name.split(' ')[0]} · ${shortDay(now)}`,
                 canReopen: true,
             }))
             return null
