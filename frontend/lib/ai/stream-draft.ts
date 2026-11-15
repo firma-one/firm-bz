@@ -67,6 +67,21 @@ export async function streamDraft(params: {
         async start(controller) {
             let full = ''
             let stopReason: string | null = null
+            // With our opening, Brio's own greeting would say hello twice ("Hi @Dana Whitfield," then
+            // "Hi Dana,"), whatever the prompt asks. Its first words are held until a greeting can be
+            // told apart, and one is dropped.
+            let held: string | null = params.prefix ? '' : null
+            const emit = (text: string) => {
+                if (!text) return
+                full += text
+                controller.enqueue(line({ type: 'delta', text }))
+            }
+            const release = () => {
+                if (held === null) return
+                const rest = withoutGreeting(held)
+                held = null
+                emit(rest)
+            }
             try {
                 controller.enqueue(line({ type: 'meta' }))
                 if (params.prefix) controller.enqueue(line({ type: 'delta', text: params.prefix }))
@@ -80,13 +95,15 @@ export async function streamDraft(params: {
                         outputTokens = event.usage?.output_tokens ?? 0
                         stopReason = event.delta?.stop_reason ?? stopReason
                     } else if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-                        // After our opening, Brio's words start where it ends, not after spaces of theirs.
-                        const text = params.prefix && !full ? event.delta.text.trimStart() : event.delta.text
-                        if (!text) continue
-                        full += text
-                        controller.enqueue(line({ type: 'delta', text }))
+                        if (held !== null) {
+                            held += event.delta.text
+                            if (greetingDecided(held)) release()
+                            continue
+                        }
+                        emit(event.delta.text)
                     }
                 }
+                release()
                 if (cancelled) return
                 await meter()
 
@@ -117,4 +134,24 @@ export async function streamDraft(params: {
     return new Response(body, {
         headers: { 'Content-Type': 'application/x-ndjson', 'Cache-Control': 'no-store' },
     })
+}
+
+/**
+ * A greeting at the very start, ended by punctuation or a line break: "Hi Dana,", "Hello there!",
+ * "Dear Dana Whitfield,", "Good morning,". Without one ("Hey team — a note") nothing is taken.
+ */
+const LEADING_GREETING = /^\s*(?:hi|hello|hey|dear|greetings|good\s+(?:morning|afternoon|evening))\b(?:[ \t]+(?!\s)[^\s,!.:;\n]+){0,3}[ \t]*(?:[,!.:;]|\n)\s*/i
+
+/** Whether enough of the opening has arrived to tell a greeting from the message itself. */
+function greetingDecided(text: string): boolean {
+    return /[,!.:;\n]/.test(text) || text.length > 60
+}
+
+/**
+ * Brio's opening without a greeting of its own, starting on its first word, capitalized. Text that
+ * doesn't open with a greeting only loses its leading spaces.
+ */
+export function withoutGreeting(text: string): string {
+    const rest = text.replace(LEADING_GREETING, '').trimStart()
+    return rest ? rest.charAt(0).toUpperCase() + rest.slice(1) : rest
 }
