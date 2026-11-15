@@ -127,13 +127,29 @@ export async function reviewMemoOnAdd(params: {
         if (!text) return { status: 'empty' }
         if (text.length > MAX_MEMO_CHARS) return { status: 'too_long' }
 
-        const found = await findNotesActions({
-            notes: text,
-            deliverables: await loadNotesDeliverables(params.engagementId),
-            today: resolveToday(undefined, now),
-            scope: { firmId: params.firmId, userId: null, feature: 'notesProposals' },
-            vault: await vaultForEngagement(params.engagementId, params.firmId),
+        // The memo's RAID suggestions are read at the same time as its action items, and saved first: the
+        // pane reloads what waits on the memo when the action items land, so both must be there by then.
+        // Its own failure never costs the action items.
+        const raidRead = runMemoRaidCheck({
+            engagementId: params.engagementId,
+            firmId: params.firmId,
+            memo: { id: params.memoId, title: memo.memo.title, date: memo.memo.date, text },
+            now,
+        }).catch((error) => {
+            if (!(error instanceof AiCreditLimitError)) logger.error('[memo-review] the memo RAID pass failed', error as Error)
+            return null
         })
+        const [found, raid] = await Promise.all([
+            findNotesActions({
+                notes: text,
+                deliverables: await loadNotesDeliverables(params.engagementId),
+                today: resolveToday(undefined, now),
+                scope: { firmId: params.firmId, userId: null, feature: 'notesProposals' },
+                vault: await vaultForEngagement(params.engagementId, params.firmId),
+            }),
+            raidRead,
+        ])
+        const raidSuggested = raid?.ok ? raid.suggested : 0
         const read = {
             firmId: params.firmId,
             clientId: params.clientId,
@@ -149,20 +165,6 @@ export async function reviewMemoOnAdd(params: {
             return { status: 'no_answer' }
         }
         await writeMemoReview(params.engagementId, params.memoId, memoReviewOf(found, text, 'auto', now))
-
-        // The memo's RAID suggestions, beside its action items. Its own failure doesn't undo them.
-        let raidSuggested = 0
-        try {
-            const raid = await runMemoRaidCheck({
-                engagementId: params.engagementId,
-                firmId: params.firmId,
-                memo: { id: params.memoId, title: memo.memo.title, date: memo.memo.date, text },
-                now,
-            })
-            if (raid.ok) raidSuggested = raid.suggested
-        } catch (error) {
-            if (!(error instanceof AiCreditLimitError)) logger.error('[memo-review] the memo RAID pass failed', error as Error)
-        }
         auditMemoRead({ ...read, actionItems: found.proposals.length, raidSuggested })
         return { status: 'reviewed', actionItems: found.proposals.length, raidSuggested }
     } catch (error) {

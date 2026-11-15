@@ -260,7 +260,7 @@ function ActionsStory({ D, e, live }: { D: DemoDates; e: number; live: boolean }
         </span>
       ))}
       <span className="mk-brio-btn mk-brio-btn--start" style={press(live, e >= 1600)}>
-        Apply 2
+        Accept 2
       </span>
     </>
   );

@@ -377,10 +377,12 @@ export async function addRaidItem(params: {
  * sources instead, and the suggestion row goes. If that entry has since gone, the suggestion joins the
  * log on its own.
  */
-export async function acceptRaidSuggestion(engagementId: string, actor: RaidActor, itemId: unknown, options: { priority?: unknown } = {}): Promise<{ id: string; mergedInto: string | null }> {
+export async function acceptRaidSuggestion(engagementId: string, actor: RaidActor, itemId: unknown, options: { priority?: unknown; title?: unknown } = {}): Promise<{ id: string; mergedInto: string | null }> {
     const item = await findItem(engagementId, itemId)
     if (item.status !== 'SUGGESTED') throw userFacing('This suggestion was already accepted or dismissed. Refresh the log.', 'conflict')
     const chosen = checkedPriority(item.type as RaidType, options.priority)
+    // The title as the person edited it on the card, if they did.
+    const title = options.title === undefined ? null : cleanTitle(options.title)
 
     const target = item.attachedToId
         ? await prisma.engagementRaidItem.findFirst({ where: { id: item.attachedToId, engagementId, status: { in: ['OPEN', 'RECORDED', 'CLOSED'] } } })
@@ -414,6 +416,7 @@ export async function acceptRaidSuggestion(engagementId: string, actor: RaidActo
             status: liveStatusFor(item.type as RaidType),
             attachedToId: null,
             updatedBy: actor.userId,
+            ...(title && title !== item.title ? { title } : {}),
             // Brio's grade stays Brio's; one the person picked on the card is theirs.
             ...(chosen && chosen !== item.priority ? { priority: chosen, prioritySetBy: actor.userId } : {}),
         },

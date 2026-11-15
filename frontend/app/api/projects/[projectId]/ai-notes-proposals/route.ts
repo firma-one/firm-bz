@@ -19,6 +19,9 @@ import { readMemoText, writeMemoReview } from '@/lib/memos/memo-store'
 import { auditMemoRead, notesEngagementRef } from '@/lib/memos/memo-review'
 import { alreadyAppliedIds, alreadyAppliedOn, memoReviewOf, type MemoAppliedAction } from '@/lib/memos/memo-shared'
 import { vaultForEngagement } from '@/lib/ai/known-entities'
+import { runMemoRaidCheck } from '@/lib/raid/raid-check'
+import { AiCreditLimitError } from '@/lib/ai/guarded-client'
+import { logger } from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -84,6 +87,7 @@ export async function POST(
         let applied: MemoAppliedAction[] | null = null
         let memoId: string | null = null
         let memoFileName = ''
+        let memoHeading: { title: string; date: string } | null = null
         if (body?.memoDocumentId !== undefined) {
             // An internal memo: its text comes from storage, read for this one request.
             const memo = await readMemoText(projectId, body.memoDocumentId)
@@ -92,6 +96,7 @@ export async function POST(
             applied = memo.memo.applied
             memoId = memo.memo.id
             memoFileName = memo.memo.fileName
+            memoHeading = { title: memo.memo.title, date: memo.memo.date }
             if (!notes) return NextResponse.json({ error: 'This memo is empty, so there is nothing to read.' }, { status: 400 })
             if (notes.length > MAX_MEMO_CHARS) {
                 return NextResponse.json(
@@ -118,13 +123,26 @@ export async function POST(
             notesEngagementRef(projectId, ctx.firmId),
         ])
 
-        const outcome = await findNotesActions({
-            notes,
-            deliverables,
-            today,
-            scope: { firmId: ctx.firmId, userId: user.id, feature: 'notesProposals' },
-            vault: await vaultForEngagement(projectId, ctx.firmId),
-        })
+        // A memo read again is read for its RAID suggestions too, at the same time, as when it was added: they
+        // replace the ones still waiting on it (lib/raid/raid-check.ts). No credit (memoRaid); its own
+        // failure never costs the action items.
+        const raidRead = memoId && memoHeading
+            ? runMemoRaidCheck({ engagementId: projectId, firmId: ctx.firmId, memo: { id: memoId, ...memoHeading, text: notes } })
+                .catch((error) => {
+                    if (!(error instanceof AiCreditLimitError)) logger.error('[ai-notes-proposals] the memo RAID pass failed', error as Error)
+                    return null
+                })
+            : Promise.resolve(null)
+        const [outcome] = await Promise.all([
+            findNotesActions({
+                notes,
+                deliverables,
+                today,
+                scope: { firmId: ctx.firmId, userId: user.id, feature: 'notesProposals' },
+                vault: await vaultForEngagement(projectId, ctx.firmId),
+            }),
+            raidRead,
+        ])
         // A memo's words went to Brio: the audit trail says so, and who asked (§14).
         const auditRead = (actionItems: number | null) => {
             if (memoId) {

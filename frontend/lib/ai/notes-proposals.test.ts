@@ -86,6 +86,24 @@ describe('validateNotesProposals', () => {
         expect(out.dropped).toBe(2)
     })
 
+    it('keeps the part of a quote that joins a sentence a transcript splits across turns', () => {
+        const notes = 'Tom Ortiz: this could become\n\nMaya Chen: Oh.\n\nTom Ortiz: a monthly feature for the newsletter, every first Tuesday.'
+        const out = validateNotesProposals({
+            ...empty,
+            deliverables: [{ name: 'Monthly Newsletter Feature', dueDate: null, quote: 'this could become a monthly feature for the newsletter, every first Tuesday.' }],
+        }, { notes, deliverables: [], today: TODAY })
+        expect(out.dropped).toBe(0)
+        expect(out.proposals[0]).toMatchObject({ kind: 'deliverable', quote: 'a monthly feature for the newsletter, every first Tuesday.' })
+    })
+
+    it('still drops a quote when only a few of its words are in the notes', () => {
+        const out = validateNotesProposals({
+            ...empty,
+            reminders: [{ title: 'Ask for the K-1 schedule', date: '2026-11-16', quote: 'Ask the partnership by end of the quarter for the final K-1 schedule and amendments' }],
+        }, ctx)
+        expect(out.dropped).toBe(1)
+    })
+
     it('accepts a quote that differs only in curly quotes, wrapping quote marks and spacing', () => {
         const out = validateNotesProposals({
             ...empty,
@@ -266,7 +284,7 @@ describe('findNotesActions', () => {
         create.mockResolvedValue({ stop_reason: 'tool_use', usage, content: [{ type: 'tool_use', id: 't1', name: NOTES_TOOL_NAME, input: empty }] })
         await findNotesActions({ ...ctx, scope, vault: null })
         const [body, options] = create.mock.calls[0]
-        expect(body).toMatchObject({ model: 'test-model', max_tokens: 4000, output_config: { effort: 'medium' }, tools: [NOTES_TOOL] })
+        expect(body).toMatchObject({ model: 'test-model', max_tokens: 8000, output_config: { effort: 'medium' }, tools: [NOTES_TOOL] })
         expect(body.tools[0].strict).toBe(true)
         expect(body).not.toHaveProperty('temperature')
         expect(body).not.toHaveProperty('top_p')

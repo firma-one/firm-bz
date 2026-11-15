@@ -106,7 +106,7 @@ describe('the rows', () => {
         expect(within(first).getByText('Alex · notes')).toBeTruthy()
         const second = screen.getByTestId(`memo-${TRANSCRIPT.id}`)
         expect(within(second).getByText('Sam · transcript, 38 min')).toBeTruthy()
-        expect(within(second).getByText('2 action items applied')).toBeTruthy()
+        expect(within(second).getByText('2 action items accepted')).toBeTruthy()
     })
 
     it('Open opens the file in Files', async () => {
@@ -136,19 +136,19 @@ describe('Find actions', () => {
         renderCard()
         fireEvent.click(await screen.findByRole('button', { name: 'Identify action items in Weekly check-in' }))
         const row = screen.getByTestId(`memo-${MEMO.id}`)
-        expect(await within(row).findByText('Applied action items note this memo, so identifying them again shows them as done.')).toBeTruthy()
+        expect(await within(row).findByText('Accepted action items note this memo, so identifying them again shows them as done.')).toBeTruthy()
         expect(calls.find((c) => c.url.endsWith('/ai-notes-proposals'))?.body).toEqual(expect.objectContaining({ memoDocumentId: MEMO.id }))
         expect(calls.find((c) => c.url.endsWith('/ai-notes-proposals'))?.body).not.toHaveProperty('notes')
-        expect(within(row).getByText('Applied earlier from this memo')).toBeTruthy()
-        expect(within(row).getByRole('button', { name: 'Apply 1 selected' })).toBeTruthy()
+        expect(within(row).getByText('Accepted earlier from this memo')).toBeTruthy()
+        expect(within(row).getByRole('button', { name: 'Accept 1 selected' })).toBeTruthy()
     })
 
     it('applies a reminder as a person would, then notes it on the memo', async () => {
         renderCard()
         fireEvent.click(await screen.findByRole('button', { name: 'Identify action items in Weekly check-in' }))
         const row = screen.getByTestId(`memo-${MEMO.id}`)
-        fireEvent.click(await within(row).findByRole('button', { name: 'Apply 1 selected' }))
-        await waitFor(() => expect(within(row).getByText('1 action item applied')).toBeTruthy())
+        fireEvent.click(await within(row).findByRole('button', { name: 'Accept 1 selected' }))
+        await waitFor(() => expect(within(row).getByText('1 action item accepted')).toBeTruthy())
         expect(h.createManualReminder).toHaveBeenCalledWith(expect.objectContaining({
             action: 'Chase the 1099-B', dateValue: '2026-11-16', entityValue: 'p1',
             note: 'From the memo “Weekly check-in”: “I need to chase the brokerage 1099-B, still missing”',

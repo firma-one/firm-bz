@@ -371,7 +371,8 @@ function CheckStatus({ state, lastCheckedAt, checking, now }: {
 export interface RaidHandlers {
     onCheckNow: () => Promise<{ message: string | null; error: string | null }>
     /** `priority`: the one chosen on the card, when it differs from Brio's. */
-    onAccept: (item: RaidItemView, priority?: RaidPriority) => Promise<string | null>
+    /** `priority` and `title`: as changed on the card before accepting, if they were. */
+    onAccept: (item: RaidItemView, priority?: RaidPriority, title?: string) => Promise<string | null>
     onDismiss: (item: RaidItemView) => Promise<string | null>
     onAdd: (input: RaidNewItem) => Promise<string | null>
     onEdit: (item: RaidItemView, patch: { title?: string | null; notes?: string | null; ownerUserId?: string | null; priority?: RaidPriority }) => Promise<string | null>
@@ -453,6 +454,13 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
     const [busyIds, setBusyIds] = useState<ReadonlySet<string>>(new Set())
     // A suggestion's priority as changed on its card, before it's accepted.
     const [chosenPriority, setChosenPriority] = useState<Record<string, RaidPriority>>({})
+    // A suggestion's title as edited on its card, before it's accepted.
+    const [editedTitle, setEditedTitle] = useState<Record<string, string>>({})
+    const titleFor = (s: RaidItemView) => editedTitle[s.id] ?? s.title
+    const changedTitle = (s: RaidItemView) => {
+        const t = titleFor(s).trim()
+        return t && t !== s.title ? t : undefined
+    }
 
     const readOnly = readOnlyProp || !!log?.readOnly
 
@@ -571,7 +579,19 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
                                     <RaidTypeBadge type={s.type} />
                                     <div className="min-w-0 flex-1">
                                         <div className="flex flex-wrap items-center gap-2">
-                                            <strong className="text-ui font-semibold text-fg">{s.title}</strong>
+                                            {readOnly || s.attachedTo ? (
+                                                <strong className="text-ui font-semibold text-fg">{s.title}</strong>
+                                            ) : (
+                                                // Editable before it's accepted, as a memo's action items are.
+                                                <Input
+                                                    value={titleFor(s)}
+                                                    onChange={(e) => setEditedTitle((t) => ({ ...t, [s.id]: e.target.value }))}
+                                                    disabled={busyIds.has(s.id)}
+                                                    maxLength={RAID_TITLE_MAX}
+                                                    aria-label={`${RAID_TYPE_LABEL[s.type]}: what the entry says`}
+                                                    className="h-8 min-w-[16rem] flex-1 text-small"
+                                                />
+                                            )}
                                             {source && <RaidSourceChip source={source} engagementBase={engagementBase} />}
                                             {s.internalSource && <Tag color="gray">Internal source</Tag>}
                                             {s.attachedTo && <span className="text-small text-fg-muted">· {attachPhrase(s.attachedTo)}</span>}
@@ -606,7 +626,7 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
                                             <Button type="button" variant="ghost" size="sm" disabled={busyIds.has(s.id)} onClick={() => void run(s, () => handlers.onDismiss(s))} aria-label={`Dismiss ${s.title}`}>
                                                 Dismiss
                                             </Button>
-                                            <Button type="button" variant="outline" size="sm" disabled={busyIds.has(s.id)} onClick={() => void run(s, () => handlers.onAccept(s, chosenPriority[s.id] !== s.priority ? chosenPriority[s.id] : undefined))} aria-label={`Accept ${s.title}`}>
+                                            <Button type="button" variant="outline" size="sm" disabled={busyIds.has(s.id) || !titleFor(s).trim()} onClick={() => void run(s, () => handlers.onAccept(s, chosenPriority[s.id] !== s.priority ? chosenPriority[s.id] : undefined, changedTitle(s)))} aria-label={`Accept ${s.title}`}>
                                                 Accept
                                             </Button>
                                         </div>
@@ -893,7 +913,7 @@ export function RaidTab({ projectId, engagementBase, readOnly = false }: {
                 return { message: null, error: brioFailureReason(e, BRIO_RAID_FAILED) }
             }
         },
-        onAccept: (item, priority) => patch(item, { action: 'accept', ...(priority ? { priority } : {}) }),
+        onAccept: (item, priority, title) => patch(item, { action: 'accept', ...(priority ? { priority } : {}), ...(title ? { title } : {}) }),
         onDismiss: (item) => patch(item, { action: 'dismiss' }),
         onAdd: (input) => change(`/api/projects/${projectId}/raid`, { method: 'POST', body: JSON.stringify(input) }),
         onEdit: (item, p) => patch(item, { action: 'edit', ...p }),

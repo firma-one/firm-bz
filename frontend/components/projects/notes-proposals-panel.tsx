@@ -16,6 +16,7 @@ import { AI_TIMEOUT_MS, AiAbortedError, AiTimeoutError, fetchWithTimeout } from 
 import { BRIO_GREEN } from '@/lib/ai/assistant'
 import { BRIO_PROPOSALS_FAILED, BRIO_TOO_SLOW, BRIO_UNREACHABLE_RETRY, brioFailureReason } from '@/lib/ai/brio-failure'
 import type { DeliverableProposal, NotesProposal, SkippedLine } from '@/lib/ai/notes-proposals'
+import { deliverableAsReminder } from '@/lib/memos/memo-shared'
 
 /**
  * "Identify action items in these notes" (was "Find actions"; .claude/plans/brio-features-round-2.md, §3.5): Brio reads the
@@ -66,7 +67,7 @@ const KIND_LABEL: Record<NotesProposal['kind'], string> = {
 const APPLIED_NOTE: Record<NotesProposal['kind'], string> = {
     reminder: 'Reminder added',
     dueDate: 'Due date moved',
-    deliverable: 'Opened',
+    deliverable: 'Reminder added',
 }
 
 /** A proposal's day, as the app writes dates: "Mon, Nov 16", with the year only when it isn't this one. */
@@ -88,6 +89,13 @@ function localDay(now = new Date()): string {
     return `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}`
 }
 
+/** The next working day, the person's own: when a new deliverable's reminder comes up unless they pick another. */
+function nextWorkday(now = new Date()): string {
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+    while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1)
+    return localDay(d)
+}
+
 /** "Couldn't add the reminder. Your session has ended…", unless the reason already says it couldn't. */
 function withLead(lead: string, reason: string): string {
     return /^couldn['’]?t\b/i.test(reason) ? reason : `${lead} ${reason}`
@@ -98,7 +106,6 @@ function clause(reason: string): string {
     return /^[A-Z][a-z]/.test(reason) ? reason[0].toLowerCase() + reason.slice(1) : reason
 }
 
-const selectable = (p: NotesProposal) => p.kind !== 'deliverable'
 
 /** What a person changed in a proposal before applying it. Only the parts that are theirs to change. */
 interface ProposalEdit {
@@ -106,6 +113,8 @@ interface ProposalEdit {
     date?: string
     newDate?: string
     name?: string
+    /** A new deliverable: the day of the reminder that accepting it adds. */
+    remindOn?: string
 }
 
 /** The proposal as it will be applied: Brio's, with the person's edits over it. */
@@ -159,11 +168,14 @@ function ProposalFields({
     shown,
     locked,
     onEdit,
+    remindOn,
 }: {
     proposal: NotesProposal
     shown: NotesProposal
     locked: boolean
     onEdit: (edit: ProposalEdit) => void
+    /** A new deliverable: the day of the reminder that accepting it adds. */
+    remindOn?: string
 }) {
     const id = useId()
     switch (shown.kind) {
@@ -222,6 +234,16 @@ function ProposalFields({
                         />
                     </Field>
                     {shown.dueDate && <p className="mt-1 text-small text-fg-muted">Due {formatProposalDay(shown.dueDate)}, from the notes</p>}
+                    <Field label="Remind me">
+                        <DateProperty
+                            value={remindOn ?? null}
+                            onChange={(v) => { const day = dayOf(v); if (day) onEdit({ remindOn: day }) }}
+                            disabled={locked}
+                            placeholder="Pick a day"
+                            chip
+                            compact
+                        />
+                    </Field>
                 </>
             )
     }
@@ -233,15 +255,10 @@ export interface NotesProposalsReviewProps {
     found: NotesProposalsFound
     /**
      * Applies one reminder or due date: `proposal` as the person edited it, `original` as Brio found
-     * it (what an internal memo records, so identifying them again still knows it's done). Never
-     * called for a new deliverable.
+     * it (what an internal memo records, so identifying them again still knows it's done). A new
+     * deliverable arrives here as the reminder accepting it adds (deliverableAsReminder).
      */
     apply: (proposal: Exclude<NotesProposal, DeliverableProposal>, original: Exclude<NotesProposal, DeliverableProposal>) => Promise<ApplyOutcome>
-    /**
-     * Opens creation of a new deliverable, filled in. Absent while the app has no such flow: the row
-     * then offers to copy the name and says where deliverables are made.
-     */
-    openDeliverable?: (proposal: DeliverableProposal) => void
     onDismiss: () => void
     /** A completed engagement, or a role that can't apply: the rows show, nothing applies. */
     readOnly?: boolean
@@ -252,28 +269,35 @@ export interface NotesProposalsReviewProps {
      * (Discussions › Memos, wide), with Dismiss and Apply kept in view at its foot.
      */
     layout?: 'card' | 'column'
-    /** Shown under the action items, above Dismiss and Apply: an internal memo's RAID suggestions (§13). */
+    /** Shown under the action items, above Dismiss and Accept: an internal memo's RAID suggestions (§13). */
     extra?: React.ReactNode
+    /**
+     * More for the foot's "Accept N selected" to take: the RAID suggestions selected in `extra`, so one
+     * press accepts everything chosen on the memo.
+     */
+    alsoSelected?: { count: number; accept: () => Promise<void> }
     /** In place of "Edit any of them…" under the heading, as after a memo was edited and read again. */
     caption?: string
 }
 
 /** What a proposal applied from this memo before shows instead of Apply. */
-const APPLIED_BEFORE = 'Applied earlier from this memo'
+const APPLIED_BEFORE = 'Accepted earlier from this memo'
 
-/** "Applied on Nov 12 from this memo, so it isn't applied twice.", or the plain note when the day isn't known. */
+/** "Accepted on Nov 12 from this memo, so it isn't added twice.", or the plain note when the day isn't known. */
 function appliedBeforeNote(at: string | undefined): string {
     if (!at) return APPLIED_BEFORE
     const day = new Date(at)
     if (Number.isNaN(day.getTime())) return APPLIED_BEFORE
-    return `Applied on ${day.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} from this memo, so it isn't applied twice.`
+    return `Accepted on ${day.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} from this memo, so it isn't added twice.`
 }
 
-export function NotesProposalsReview({ found, apply, openDeliverable, onDismiss, readOnly = false, footnote, layout = 'card', extra, caption }: NotesProposalsReviewProps) {
+export function NotesProposalsReview({ found, apply, onDismiss, readOnly = false, footnote, layout = 'card', extra, alsoSelected, caption }: NotesProposalsReviewProps) {
     const { proposals, skipped, dropped } = found
     const appliedBefore = new Set(found.alreadyApplied ?? [])
     // Reminders and due dates start selected, unless applied before; a new deliverable never is.
-    const [selected, setSelected] = useState<Set<string>>(() => new Set(proposals.filter((p) => selectable(p) && !appliedBefore.has(p.id)).map((p) => p.id)))
+    // Every action item starts selected, unless accepted before: a new deliverable too, since accepting
+    // one only adds a reminder to set it up.
+    const [selected, setSelected] = useState<Set<string>>(() => new Set(proposals.filter((p) => !appliedBefore.has(p.id)).map((p) => p.id)))
     const [rows, setRows] = useState<Record<string, RowState>>(() => Object.fromEntries(
         proposals.filter((p) => appliedBefore.has(p.id)).map((p) => [p.id, { status: 'applied', note: appliedBeforeNote(found.appliedOn?.[p.id]) } as RowState]),
     ))
@@ -302,23 +326,28 @@ export function NotesProposalsReview({ found, apply, openDeliverable, onDismiss,
         setRows((prev) => ({ ...prev, [p.id]: next }))
     }, [apply])
 
-    const applicable = (p: NotesProposal): p is Exclude<NotesProposal, DeliverableProposal> => selectable(p)
-    const pending = proposals.filter((p): p is Exclude<NotesProposal, DeliverableProposal> =>
-        applicable(p) && selected.has(p.id) && isComplete(shownOf(p)) && stateOf(p.id).status !== 'applied' && stateOf(p.id).status !== 'applying')
+    // A new deliverable's reminder comes up on the next working day unless the person picks another.
+    const [defaultRemindOn] = useState(() => nextWorkday())
+    const remindOnOf = (p: NotesProposal) => edits[p.id]?.remindOn ?? defaultRemindOn
+    /** What accepting it applies, as edited and as Brio found it: a new deliverable becomes its reminder. */
+    const toApply = (p: NotesProposal): [Exclude<NotesProposal, DeliverableProposal>, Exclude<NotesProposal, DeliverableProposal>] => (
+        p.kind === 'deliverable'
+            ? [deliverableAsReminder(shownOf(p) as DeliverableProposal, remindOnOf(p)), deliverableAsReminder(p, remindOnOf(p))]
+            : [shownOf(p) as Exclude<NotesProposal, DeliverableProposal>, p]
+    )
+    const pending = proposals.filter((p) =>
+        selected.has(p.id) && isComplete(shownOf(p)) && stateOf(p.id).status !== 'applied' && stateOf(p.id).status !== 'applying')
 
-    const applySelected = async () => {
+    // Everything selected on the memo: these action items and, when given, its RAID suggestions.
+    const selectedTotal = pending.length + (alsoSelected?.count ?? 0)
+    const acceptSelected = async () => {
         setApplyingAll(true)
-        // One at a time: a due date may stop to ask (the due-date rule), and reminders share one list.
-        for (const p of pending) await applyOne(shownOf(p) as Exclude<NotesProposal, DeliverableProposal>, p)
-        setApplyingAll(false)
-    }
-
-    const copyName = async (p: DeliverableProposal) => {
         try {
-            await navigator.clipboard.writeText(p.name.trim())
-            setRow(p.id, { status: 'applied', note: 'Name copied' })
-        } catch {
-            setRow(p.id, { status: 'failed', error: "Couldn't copy the name. The browser didn't allow it." })
+            // One at a time: a due date may stop to ask (the due-date rule), and reminders share one list.
+            for (const p of pending) await applyOne(...toApply(p))
+            if (alsoSelected && alsoSelected.count > 0) await alsoSelected.accept()
+        } finally {
+            setApplyingAll(false)
         }
     }
 
@@ -338,7 +367,7 @@ export function NotesProposalsReview({ found, apply, openDeliverable, onDismiss,
                     {count === 0 ? 'identified no action items in these notes' : `identified ${count} action item${count === 1 ? '' : 's'}`}
                 </h4>
                 <span className="flex-1" />
-                {count > 0 && <span className="text-caption font-normal text-fg-muted">{caption ?? 'Edit any of them. Nothing changes until you apply it.'}</span>}
+                {count > 0 && <span className="text-caption font-normal text-fg-muted">{caption ?? 'Edit any of them. Nothing changes until you accept it.'}</span>}
             </div>
 
             {proposals.map((p) => {
@@ -353,8 +382,8 @@ export function NotesProposalsReview({ found, apply, openDeliverable, onDismiss,
                     <div key={p.id} className={cn('flex items-start gap-2.5 border-t border-line py-3', column ? 'px-4' : 'px-3.5')} data-testid={`notes-proposal-${p.id}`}>
                         <Checkbox
                             className="mt-0.5"
-                            checked={!isDeliverable && selected.has(p.id)}
-                            disabled={isDeliverable || applied || readOnly || state.status === 'applying'}
+                            checked={selected.has(p.id)}
+                            disabled={applied || readOnly || state.status === 'applying'}
                             onCheckedChange={(v) => setSelected((prev) => {
                                 const next = new Set(prev)
                                 if (v === true) next.add(p.id)
@@ -376,15 +405,13 @@ export function NotesProposalsReview({ found, apply, openDeliverable, onDismiss,
                                     </span>
                                 )}
                             </div>
-                            <ProposalFields proposal={p} shown={shown} locked={locked} onEdit={(change) => edit(p.id, change)} />
+                            <ProposalFields proposal={p} shown={shown} locked={locked} onEdit={(change) => edit(p.id, change)} remindOn={isDeliverable ? remindOnOf(p) : undefined} />
                             <p className="mt-2 border-l-2 border-line-strong pl-2 text-small italic text-fg-muted">
                                 “{p.quote}”
                             </p>
                             {isDeliverable && (
                                 <p className="mt-1 text-small text-fg-muted">
-                                    {openDeliverable
-                                        ? 'New scope is your call. Opens Add deliverable, filled in.'
-                                        : 'New scope is your call. To add it, promote a folder to a deliverable in Files.'}
+                                    New scope is your call. Accept adds a reminder for you to set it up in Files.
                                 </p>
                             )}
                             {state.status === 'applied' && (
@@ -400,34 +427,18 @@ export function NotesProposalsReview({ found, apply, openDeliverable, onDismiss,
                                 </p>
                             )}
                             <div className="mt-2 flex justify-end">
-                                {isDeliverable ? (
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        disabled={readOnly || !complete}
-                                        onClick={() => {
-                                            const named = shown as DeliverableProposal
-                                            if (openDeliverable) openDeliverable(named)
-                                            else void copyName(named)
-                                        }}
-                                    >
-                                        {openDeliverable ? 'Open' : 'Copy name'}
-                                    </Button>
-                                ) : (
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        disabled={readOnly || applied || state.status === 'applying' || applyingAll || !complete}
-                                        onClick={() => applyOne(shown as Exclude<NotesProposal, DeliverableProposal>, p as Exclude<NotesProposal, DeliverableProposal>)}
-                                    >
-                                        {state.status === 'applying' ? <><Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />Applying</>
-                                            : applied ? <><Check className="h-3.5 w-3.5" aria-hidden />Applied</>
-                                            : state.status === 'failed' ? 'Try again'
-                                            : 'Apply'}
-                                    </Button>
-                                )}
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={readOnly || applied || state.status === 'applying' || applyingAll || !complete}
+                                    onClick={() => applyOne(...toApply(p))}
+                                >
+                                    {state.status === 'applying' ? <><Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />Accepting</>
+                                        : applied ? <><Check className="h-3.5 w-3.5" aria-hidden />Accepted</>
+                                        : state.status === 'failed' ? 'Try again'
+                                        : 'Accept'}
+                                </Button>
                             </div>
                         </div>
                     </div>
@@ -464,9 +475,9 @@ export function NotesProposalsReview({ found, apply, openDeliverable, onDismiss,
                 <Button type="button" variant="ghost" size="sm" onClick={onDismiss} disabled={applyingAll}>
                     {count === 0 ? 'Dismiss' : 'Dismiss all'}
                 </Button>
-                {proposals.some(selectable) && (
-                    <Button type="button" variant="greenCta" size="sm" disabled={readOnly || pending.length === 0 || applyingAll} onClick={applySelected}>
-                        {applyingAll ? 'Applying…' : `Apply ${pending.length} selected`}
+                {(proposals.length > 0 || (alsoSelected?.count ?? 0) > 0) && (
+                    <Button type="button" variant="greenCta" size="sm" disabled={readOnly || selectedTotal === 0 || applyingAll} onClick={acceptSelected}>
+                        {applyingAll ? 'Accepting…' : `Accept ${selectedTotal} selected`}
                     </Button>
                 )}
             </div>
@@ -624,11 +635,9 @@ export interface NotesProposalsPanelProps {
     notes: string
     /** A completed engagement: read only, so nothing can be found to apply. */
     disabled?: boolean
-    /** See NotesProposalsReview. */
-    openDeliverable?: (proposal: DeliverableProposal) => void
 }
 
-export function NotesProposalsPanel({ projectId, notes, disabled = false, openDeliverable }: NotesProposalsPanelProps) {
+export function NotesProposalsPanel({ projectId, notes, disabled = false }: NotesProposalsPanelProps) {
     const { found, busy, error, find, dismiss } = useNotesProposals(projectId)
     const { apply: applyProposal, dialog: dueDialog } = useApplyNotesProposal(projectId)
     // A new result is a new list: its selection and row states start over.
@@ -661,7 +670,6 @@ export function NotesProposalsPanel({ projectId, notes, disabled = false, openDe
                     key={round}
                     found={found}
                     apply={apply}
-                    openDeliverable={openDeliverable}
                     onDismiss={dismiss}
                     readOnly={disabled}
                 />
