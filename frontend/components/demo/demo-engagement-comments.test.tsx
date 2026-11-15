@@ -85,8 +85,8 @@ describe('Memos on /tour', () => {
 
         const actions = screen.getByRole('region', { name: 'Action items' })
         fireEvent.click(within(actions).getByRole('button', { name: 'Identify action items in Kickoff call' }))
-        fireEvent.click(await within(actions).findByRole('button', { name: 'Apply 1 selected' }, { timeout: 3000 }))
-        await waitFor(() => expect(within(screen.getByTestId('memo-row-tour-memo-kickoff')).getByText('1 action item applied')).toBeTruthy(), { timeout: 3000 })
+        fireEvent.click(await within(actions).findByRole('button', { name: 'Accept 1 selected' }, { timeout: 3000 }))
+        await waitFor(() => expect(within(screen.getByTestId('memo-row-tour-memo-kickoff')).getByText('1 action item accepted')).toBeTruthy(), { timeout: 3000 })
         expect(fetch).not.toHaveBeenCalled()
     })
 

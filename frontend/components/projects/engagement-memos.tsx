@@ -7,6 +7,7 @@ import { RaidPriorityPicker } from './raid/raid-priority'
 import { RaidTypeBadge } from './raid/raid-tab'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Checkbox } from '@/components/ui/checkbox'
 import { InternalOnlyTag } from '@/components/ui/internal-only-tag'
 import { Brio } from '@/components/ui/brio'
 import { ThinkingDots } from '@/components/brio/brio-typing'
@@ -44,7 +45,7 @@ import {
     type MemoRaidSuggestion,
     type MemoReviewPayload,
 } from '@/lib/memos/memo-shared'
-import type { RaidPriority } from '@/lib/raid/raid-shared'
+import { RAID_TITLE_MAX, RAID_TYPE_LABEL, type RaidPriority } from '@/lib/raid/raid-shared'
 import type { DeliverableProposal, NotesProposal } from '@/lib/ai/notes-proposals'
 import { LoadingAnnouncement, ShimmerBar, ShimmerBlock } from '@/components/ui/shimmer'
 
@@ -69,7 +70,7 @@ export interface MemoFound extends NotesProposalsFound {
     engagement?: NotesEngagementRef
 }
 
-export const MEMO_PROPOSALS_FOOTNOTE = 'Applied action items note this memo, so identifying them again shows them as done.'
+export const MEMO_PROPOSALS_FOOTNOTE = 'Accepted action items note this memo, so identifying them again shows them as done.'
 
 /** Where the memos are kept, as the memos route names it. */
 export type MemoStorageName = 'Google Drive' | 'OneDrive'
@@ -103,7 +104,7 @@ export function MemoDateBlock({ date }: { date: string }) {
     )
 }
 
-const appliedLine = (n: number) => `${n} action item${n === 1 ? '' : 's'} applied`
+const appliedLine = (n: number) => `${n} action item${n === 1 ? '' : 's'} accepted`
 
 // ── The app's memos ───────────────────────────────────────────────────────────────────────────
 
@@ -256,11 +257,11 @@ export function useEngagementMemos(projectId: string) {
     }, [projectId])
 
     /** Accepts or dismisses one of the memo's RAID suggestions, through the RAID log's own route. */
-    const actOnRaid = useCallback(async (_memo: MemoListItem, itemId: string, action: 'accept' | 'dismiss', priority?: RaidPriority): Promise<void> => {
+    const actOnRaid = useCallback(async (_memo: MemoListItem, itemId: string, action: 'accept' | 'dismiss', priority?: RaidPriority, title?: string): Promise<void> => {
         const res = await fetch(`/api/projects/${projectId}/raid/${itemId}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action, ...(action === 'accept' && priority ? { priority } : {}) }),
+            body: JSON.stringify({ action, ...(action === 'accept' && priority ? { priority } : {}), ...(action === 'accept' && title ? { title } : {}) }),
         })
         if (!res.ok) throw await failureFrom(res)
         setTick((t) => t + 1)
@@ -415,7 +416,8 @@ export interface MemosViewProps {
     dismissReview?: (memo: MemoListItem) => Promise<void>
     /** Accepts or dismisses one of the memo's RAID suggestions. Throws an error carrying the words to show. */
     /** `priority`: the one chosen on the card, when it differs from Brio's. */
-    actOnRaid?: (memo: MemoListItem, itemId: string, action: 'accept' | 'dismiss', priority?: RaidPriority) => Promise<void>
+    /** `priority` and `title`: as changed on the card before accepting, if they were. */
+    actOnRaid?: (memo: MemoListItem, itemId: string, action: 'accept' | 'dismiss', priority?: RaidPriority, title?: string) => Promise<void>
     /** Memos whose action items are being identified right now (just added, or edited). */
     identifyingIds?: readonly string[]
     /**
@@ -705,7 +707,11 @@ function MemoPane({
         setFindError(null)
         try {
             const result = await findActions(memo, ctrl.signal)
-            if (ctrlRef.current === ctrl) setFound(result)
+            if (ctrlRef.current === ctrl) {
+                setFound(result)
+                // Read again, the memo's RAID suggestions were read again too: show what waits now.
+                setReviewTick((t) => t + 1)
+            }
         } catch (e) {
             if (e instanceof AiAbortedError || ctrl.signal.aborted) return
             setFindError(e instanceof Error && e.message ? e.message : failureReason(e))
@@ -750,11 +756,11 @@ function MemoPane({
         })
     }
 
-    const actRaid = async (item: MemoRaidSuggestion, action: 'accept' | 'dismiss', priority?: RaidPriority) => {
+    const actRaid = async (item: MemoRaidSuggestion, action: 'accept' | 'dismiss', priority?: RaidPriority, title?: string) => {
         if (!actOnRaid) return
         setActionError(null)
         try {
-            await actOnRaid(memo, item.id, action, priority)
+            await actOnRaid(memo, item.id, action, priority, title)
             setWaitingPayload((p) => (p ? { ...p, raid: p.raid.filter((r) => r.id !== item.id) } : p))
         } catch (e) {
             setActionError(e instanceof Error && e.message ? e.message : failureReason(e))
@@ -819,7 +825,9 @@ function MemoPane({
     const shown = found ?? waiting
     const shownKey = found ? `run-${round}` : `waiting-${waitingPayload?.review?.at ?? ''}`
     const raidItems = waitingPayload?.raid ?? []
-    const raidSection = raidItems.length > 0 ? <MemoRaidSuggestions items={raidItems} memoText={memoText} onAct={actRaid} /> : null
+    const raidChoices = useMemoRaidChoices(raidItems, actRaid)
+    // Within the action items, each selectable for their "Accept N selected"; alone, each with its own Accept.
+    const raidSection = (selectable: boolean) => (raidItems.length > 0 ? <MemoRaidSuggestions choices={raidChoices} memoText={memoText} selectable={selectable} /> : null)
 
     return (
         <>
@@ -922,11 +930,12 @@ function MemoPane({
                                 readOnly={readOnly}
                                 footnote={MEMO_PROPOSALS_FOOTNOTE}
                                 layout="column"
-                                extra={raidSection}
+                                extra={raidSection(true)}
+                                alsoSelected={raidItems.length > 0 ? raidChoices.alsoSelected : undefined}
                                 caption={found ? undefined : caption}
                             />
-                        ) : raidSection ? (
-                            raidSection
+                        ) : raidItems.length > 0 ? (
+                            raidSection(false)
                         ) : identifying ? (
                             <div className="flex items-start gap-2 px-4 py-4" aria-busy="true">
                                 <LoadingAnnouncement label={`${ASSISTANT.name} is identifying the action items`} />
@@ -962,26 +971,58 @@ function MemoPane({
  * A memo's RAID suggestions (§13), under its action items: each accepted into the RAID log or dismissed
  * here, through the log's own route. Nothing of the memo's text is kept with them.
  */
-function MemoRaidSuggestions({ items, memoText, onAct }: {
-    items: MemoRaidSuggestion[]
+type RaidAct = (item: MemoRaidSuggestion, action: 'accept' | 'dismiss', priority?: RaidPriority, title?: string) => Promise<void>
+
+/**
+ * A memo's RAID suggestions chosen as its action items are: each starts selected, its title and priority
+ * can be changed before accepting, and the foot's "Accept N selected" takes the selected ones together
+ * with the selected action items (`alsoSelected`).
+ */
+function useMemoRaidChoices(items: MemoRaidSuggestion[], onAct: RaidAct) {
+    const [unselected, setUnselected] = useState<Set<string>>(() => new Set())
+    const [titles, setTitles] = useState<Record<string, string>>({})
+    const [chosen, setChosen] = useState<Record<string, RaidPriority>>({})
+    const [acting, setActing] = useState<Set<string>>(() => new Set())
+    const titleOf = (item: MemoRaidSuggestion) => titles[item.id] ?? item.title
+    const isSelected = (item: MemoRaidSuggestion) => !unselected.has(item.id)
+    const act = async (item: MemoRaidSuggestion, action: 'accept' | 'dismiss') => {
+        setActing((a) => new Set(a).add(item.id))
+        try {
+            const picked = chosen[item.id]
+            const title = titleOf(item).trim()
+            await onAct(item, action, picked && picked !== item.priority ? picked : undefined, title && title !== item.title ? title : undefined)
+        } finally {
+            setActing((a) => { const next = new Set(a); next.delete(item.id); return next })
+        }
+    }
+    const ready = items.filter((i) => isSelected(i) && titleOf(i).trim() && !acting.has(i.id))
+    return {
+        items,
+        titleOf,
+        setTitle: (id: string, value: string) => setTitles((t) => ({ ...t, [id]: value })),
+        priorityOf: (item: MemoRaidSuggestion) => chosen[item.id] ?? item.priority,
+        setPriority: (id: string, value: RaidPriority) => setChosen((c) => ({ ...c, [id]: value })),
+        isSelected,
+        setSelected: (id: string, on: boolean) => setUnselected((u) => { const next = new Set(u); if (on) next.delete(id); else next.add(id); return next }),
+        isActing: (item: MemoRaidSuggestion) => acting.has(item.id),
+        act,
+        alsoSelected: {
+            count: ready.length,
+            accept: async () => { for (const item of ready) await act(item, 'accept') },
+        },
+    }
+}
+
+function MemoRaidSuggestions({ choices, memoText, selectable }: {
+    choices: ReturnType<typeof useMemoRaidChoices>
     /** The memo as the pane has it, to show each suggestion's line from (its place is all that's stored). */
     memoText: string | null
-    onAct: (item: MemoRaidSuggestion, action: 'accept' | 'dismiss', priority?: RaidPriority) => Promise<void>
+    /** Inside the action items' list, whose foot accepts what's selected: each row gets a checkbox. */
+    selectable: boolean
 }) {
     const matchText = memoText !== null ? memoMatchText(memoText) : null
     const quoteOf = (item: MemoRaidSuggestion) => (matchText !== null ? quoteFromAnchor(matchText, item.quoteAt) : null)
-    const [acting, setActing] = useState<string | null>(null)
-    // A suggestion's priority as changed here, before it's accepted.
-    const [chosen, setChosen] = useState<Record<string, RaidPriority>>({})
-    const act = async (item: MemoRaidSuggestion, action: 'accept' | 'dismiss') => {
-        setActing(item.id)
-        try {
-            const picked = chosen[item.id]
-            await onAct(item, action, picked && picked !== item.priority ? picked : undefined)
-        } finally {
-            setActing(null)
-        }
-    }
+    const c = choices
     return (
         <section aria-label="RAID suggestions" className="border-t border-line px-4 py-3">
             <h4 className="flex items-center gap-1 text-ui font-semibold text-fg">RAID suggestions <RaidInfo /></h4>
@@ -989,41 +1030,61 @@ function MemoRaidSuggestions({ items, memoText, onAct }: {
                 Risks, Assumptions, Issues and Decisions from this memo. What you accept goes into the RAID log.
             </p>
             <ul className="mt-2 flex flex-col">
-                {items.map((item) => (
-                    <li key={item.id} className="flex items-start gap-2.5 border-t border-line py-2.5 first:border-t-0">
-                        <RaidTypeBadge type={item.type} />
-                        <div className="min-w-0 flex-1">
-                            <p className="text-small text-fg">{item.title}</p>
-                            {/* The line it came from, as an action item cites its own. */}
-                            {quoteOf(item) && (
-                                <p className="mt-1.5 border-l-2 border-line-strong pl-2 text-small italic text-fg-muted">
-                                    “{quoteOf(item)}”
-                                </p>
+                {c.items.map((item) => {
+                    const busy = c.isActing(item)
+                    const priority = c.priorityOf(item)
+                    return (
+                        <li key={item.id} className="flex items-start gap-2.5 border-t border-line py-2.5 first:border-t-0">
+                            {selectable && (
+                                <Checkbox
+                                    className="mt-1.5"
+                                    checked={c.isSelected(item)}
+                                    disabled={busy}
+                                    onCheckedChange={(v) => c.setSelected(item.id, v === true)}
+                                    aria-label={`Select: ${RAID_TYPE_LABEL[item.type].toLowerCase()} · ${c.titleOf(item)}`}
+                                />
                             )}
-                            {item.priority && (
-                                <div className="mt-0.5 flex items-center gap-1.5 text-caption text-fg-muted">
-                                    <span>Priority</span>
-                                    <RaidPriorityPicker
-                                        value={chosen[item.id] ?? item.priority}
-                                        onChange={(p) => setChosen((c) => ({ ...c, [item.id]: p }))}
-                                        label={`Priority of ${item.title}`}
-                                        disabled={acting === item.id}
-                                        className="mx-0 h-6"
-                                    />
-                                    <span className="text-fg-subtle">· {ASSISTANT.name}&apos;s suggestion</span>
+                            <RaidTypeBadge type={item.type} />
+                            <div className="min-w-0 flex-1">
+                                <Input
+                                    value={c.titleOf(item)}
+                                    onChange={(e) => c.setTitle(item.id, e.target.value)}
+                                    disabled={busy}
+                                    maxLength={RAID_TITLE_MAX}
+                                    aria-label={`${RAID_TYPE_LABEL[item.type]}: what the entry says`}
+                                    className="h-8 text-small"
+                                />
+                                {/* The line it came from, as an action item cites its own. */}
+                                {quoteOf(item) && (
+                                    <p className="mt-1.5 border-l-2 border-line-strong pl-2 text-small italic text-fg-muted">
+                                        “{quoteOf(item)}”
+                                    </p>
+                                )}
+                                {priority && (
+                                    <div className="mt-0.5 flex items-center gap-1.5 text-caption text-fg-muted">
+                                        <span>Priority</span>
+                                        <RaidPriorityPicker
+                                            value={priority}
+                                            onChange={(p) => c.setPriority(item.id, p)}
+                                            label={`Priority of ${item.title}`}
+                                            disabled={busy}
+                                            className="mx-0 h-6"
+                                        />
+                                        <span className="text-fg-subtle">· {ASSISTANT.name}&apos;s suggestion</span>
+                                    </div>
+                                )}
+                                <div className="mt-1.5 flex justify-end gap-1.5">
+                                    <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={() => void c.act(item, 'dismiss')}>
+                                        Dismiss
+                                    </Button>
+                                    <Button type="button" variant="outline" size="sm" disabled={busy || !c.titleOf(item).trim()} onClick={() => void c.act(item, 'accept')}>
+                                        Accept
+                                    </Button>
                                 </div>
-                            )}
-                            <div className="mt-1.5 flex justify-end gap-1.5">
-                                <Button type="button" variant="ghost" size="sm" disabled={acting === item.id} onClick={() => void act(item, 'dismiss')}>
-                                    Dismiss
-                                </Button>
-                                <Button type="button" variant="outline" size="sm" disabled={acting === item.id} onClick={() => void act(item, 'accept')}>
-                                    Accept
-                                </Button>
                             </div>
-                        </div>
-                    </li>
-                ))}
+                        </li>
+                    )
+                })}
             </ul>
         </section>
     )

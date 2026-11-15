@@ -170,7 +170,7 @@ export function InternalMemosView({
                                         ) : memo.appliedCount > 0 && (
                                             <p className="mt-0.5 inline-flex items-center gap-1 text-caption text-fg-muted">
                                                 <Check className="h-3 w-3" aria-hidden />
-                                                {memo.appliedCount} action item{memo.appliedCount === 1 ? '' : 's'} applied
+                                                {memo.appliedCount} action item{memo.appliedCount === 1 ? '' : 's'} accepted
                                             </p>
                                         )}
                                     </div>

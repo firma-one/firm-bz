@@ -327,6 +327,19 @@ export function appliedTargetOf(p: NotesProposal): Pick<MemoAppliedAction, 'kind
     return null
 }
 
+/**
+ * What a New deliverable action item becomes when it's accepted: a reminder for you to set it up in Files.
+ * New scope stays a person's call; Brio never creates a deliverable.
+ */
+export function deliverableReminderTitle(name: string): string {
+    return `Set up “${name.trim()}” as a deliverable in Files`
+}
+
+/** A New deliverable action item as the reminder accepting it adds, on `date` (YYYY-MM-DD). */
+export function deliverableAsReminder(p: DeliverableProposal, date: string): ReminderProposal {
+    return { kind: 'reminder', id: p.id, title: deliverableReminderTitle(p.name), date, quote: p.quote }
+}
+
 /** How the card names an applied action. */
 export function appliedLabelOf(p: NotesProposal): string {
     if (p.kind === 'reminder') return `Reminder · ${p.title}`
@@ -351,7 +364,18 @@ export function closeTitles(a: string, b: string): boolean {
 }
 
 /** The applied action a proposal matches: same kind and day, and the same deliverable or a close title. */
+/**
+ * The reminder accepted for a New deliverable: its words only, never the line it came from, since one line
+ * can also give a reminder of its own.
+ */
+function deliverableReminderMatch(name: string, applied: MemoAppliedAction[]): MemoAppliedAction | undefined {
+    const want = deliverableReminderTitle(name)
+    return applied.find((a) => a.kind === 'reminder' && closeTitles(a.target, want))
+}
+
 function appliedMatch(p: NotesProposal, applied: MemoAppliedAction[]): MemoAppliedAction | undefined {
+    // A new deliverable was accepted as its reminder: matched on that reminder's words, whatever day was picked.
+    if (p.kind === 'deliverable') return deliverableReminderMatch(p.name, applied)
     const t = appliedTargetOf(p)
     if (!t) return undefined
     return applied.find((a) => a.kind === t.kind && a.date === t.date
@@ -563,7 +587,7 @@ export function resolveMemoReview(review: MemoReview, memoText: string): { propo
 
 /** The applied action a stored proposal matches: the same kind and day, and the same deliverable or a close title. */
 function storedAppliedMatch(p: StoredProposal, applied: MemoAppliedAction[]): MemoAppliedAction | undefined {
-    if (p.kind === 'deliverable') return undefined
+    if (p.kind === 'deliverable') return deliverableReminderMatch(p.name, applied)
     const target = p.kind === 'reminder' ? normalize(p.title) : p.deliverableId
     const date = p.kind === 'reminder' ? p.date : p.newDate
     return applied.find((a) => a.kind === p.kind && a.date === date

@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
+    deliverableAsReminder,
+    deliverableReminderTitle,
     MEMO_CHANGED_QUOTE,
     alreadyAppliedIds,
     alreadyAppliedOn,
@@ -82,6 +84,24 @@ describe('parseMemoSettings', () => {
         expect(parseMemoSettings({})).toBeNull()
         expect(parseMemoSettings({ memo: { date: '2026-02-30', title: 'x', authorUserId: 'u1' } })).toBeNull()
         expect(parseMemoSettings({ memoFolder: true })).toBeNull()
+    })
+})
+
+describe('a new deliverable accepted as its reminder', () => {
+    const deliverable = { kind: 'deliverable' as const, id: 'd-1', name: 'Monday Morning LinkedIn Post Template', dueDate: null, quote: 'The key is that the template has to be done.' }
+    const accepted = (title: string, quote = 'the key is that the template has to be done.') => ({
+        kind: 'reminder' as const, target: title.toLowerCase(), date: '2026-11-16', quote, label: `Reminder · ${title}`, at: '2026-11-15T10:00:00.000Z',
+    })
+
+    it('becomes a reminder to set it up in Files, never a deliverable', () => {
+        expect(deliverableAsReminder(deliverable, '2026-11-16')).toEqual({
+            kind: 'reminder', id: 'd-1', title: 'Set up “Monday Morning LinkedIn Post Template” as a deliverable in Files', date: '2026-11-16', quote: deliverable.quote,
+        })
+    })
+
+    it('read again, shows as accepted by its reminder, whatever day was picked, and not by another reminder from the same line', () => {
+        expect(alreadyAppliedIds([deliverable], [accepted(deliverableReminderTitle(deliverable.name))])).toEqual(['d-1'])
+        expect(alreadyAppliedIds([deliverable], [accepted("Check Neha's Monday morning post template")])).toEqual([])
     })
 })
 

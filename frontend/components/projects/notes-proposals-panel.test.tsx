@@ -33,7 +33,7 @@ describe('NotesProposalsReview', () => {
     it('reads as the mock: count, kinds, the change, its quote, the skipped line', () => {
         render(<NotesProposalsReview found={FOUND} apply={vi.fn()} onDismiss={vi.fn()} />)
         expect(screen.getByRole('heading').textContent).toMatch(/identified 3 action items$/)
-        expect(screen.getByText('Edit any of them. Nothing changes until you apply it.')).toBeTruthy()
+        expect(screen.getByText('Edit any of them. Nothing changes until you accept it.')).toBeTruthy()
         expect(screen.getByText('Reminder for you')).toBeTruthy()
         expect(screen.getByText('NPT-6 · Estimated Payments Schedule')).toBeTruthy()
         expect(screen.getByText('“I need to chase the brokerage 1099-B, still missing”')).toBeTruthy()
@@ -41,24 +41,28 @@ describe('NotesProposalsReview', () => {
         expect(screen.getByText(/1 more didn't match the notes or the Board/)).toBeTruthy()
     })
 
-    it('selects reminders and due dates, never a new deliverable', () => {
+    it('selects every action item, a new deliverable too', () => {
         render(<NotesProposalsReview found={FOUND} apply={vi.fn()} onDismiss={vi.fn()} />)
         expect(checkbox(/reminder for you/i).getAttribute('data-state')).toBe('checked')
         expect(checkbox(/due date/i).getAttribute('data-state')).toBe('checked')
         const deliverable = checkbox(/new deliverable/i)
-        expect(deliverable.getAttribute('data-state')).toBe('unchecked')
-        expect(deliverable.hasAttribute('disabled')).toBe(true)
-        expect(screen.getByRole('button', { name: 'Apply 2 selected' })).toBeTruthy()
+        expect(deliverable.getAttribute('data-state')).toBe('checked')
+        expect(deliverable.hasAttribute('disabled')).toBe(false)
+        expect(screen.getByRole('button', { name: 'Accept 3 selected' })).toBeTruthy()
     })
 
-    it('"Apply 2 selected" applies the reminder and the due date, one at a time, and not the deliverable', async () => {
-        const apply = vi.fn(async (_p: NotesProposal) => ({ ok: true as const }))
+    it('"Accept 3 selected" accepts each, one at a time: a new deliverable as a reminder to set it up', async () => {
+        const apply = vi.fn(async (_p: NotesProposal, _original: NotesProposal) => ({ ok: true as const }))
         render(<NotesProposalsReview found={FOUND} apply={apply} onDismiss={vi.fn()} />)
-        fireEvent.click(screen.getByRole('button', { name: 'Apply 2 selected' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Accept 3 selected' }))
+        await waitFor(() => expect(apply).toHaveBeenCalledTimes(3))
+        expect(apply.mock.calls.map(([p]) => p.kind)).toEqual(['reminder', 'dueDate', 'reminder'])
+        expect(apply.mock.calls[2][0]).toEqual(expect.objectContaining({
+            kind: 'reminder', id: 'deliverable-3', title: 'Set up “Rental Property Depreciation Review” as a deliverable in Files', date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+        }))
         await waitFor(() => expect(screen.getByText('Due date moved')).toBeTruthy())
-        expect(apply.mock.calls.map(([p]) => p.kind)).toEqual(['reminder', 'dueDate'])
-        expect(screen.getByText('Reminder added')).toBeTruthy()
-        expect(screen.getByRole('button', { name: 'Apply 0 selected' }).hasAttribute('disabled')).toBe(true)
+        expect(screen.getAllByText('Reminder added')).toHaveLength(2)
+        expect(screen.getByRole('button', { name: 'Accept 0 selected' }).hasAttribute('disabled')).toBe(true)
     })
 
     it('an action item is edited before it is applied: the edit is applied, Brio\'s original goes with it, Reset undoes it', async () => {
@@ -75,7 +79,8 @@ describe('NotesProposalsReview', () => {
 
         fireEvent.change(what, { target: { value: 'Chase the 1099-B and the K-1' } })
         fireEvent.click(checkbox(/due date/i))
-        fireEvent.click(screen.getByRole('button', { name: 'Apply 1 selected' }))
+        fireEvent.click(checkbox(/new deliverable/i))
+        fireEvent.click(screen.getByRole('button', { name: 'Accept 1 selected' }))
         await waitFor(() => expect(screen.getByText('Reminder added')).toBeTruthy())
         const [applied, original] = apply.mock.calls[0]
         expect(applied).toEqual(expect.objectContaining({ kind: 'reminder', title: 'Chase the 1099-B and the K-1', date: '2026-11-16' }))
@@ -87,15 +92,16 @@ describe('NotesProposalsReview', () => {
     it('a reminder with no words left can\'t be applied', () => {
         render(<NotesProposalsReview found={FOUND} apply={vi.fn()} onDismiss={vi.fn()} />)
         fireEvent.change(screen.getByLabelText('What'), { target: { value: '   ' } })
-        // Only the due date is left to apply.
-        expect(screen.getByRole('button', { name: 'Apply 1 selected' })).toBeTruthy()
+        // The due date and the new deliverable are left to accept.
+        expect(screen.getByRole('button', { name: 'Accept 2 selected' })).toBeTruthy()
     })
 
     it('an unchecked row is left out', async () => {
         const apply = vi.fn(async (_p: NotesProposal) => ({ ok: true as const }))
         render(<NotesProposalsReview found={FOUND} apply={apply} onDismiss={vi.fn()} />)
         fireEvent.click(checkbox(/due date/i))
-        fireEvent.click(screen.getByRole('button', { name: 'Apply 1 selected' }))
+        fireEvent.click(checkbox(/new deliverable/i))
+        fireEvent.click(screen.getByRole('button', { name: 'Accept 1 selected' }))
         await waitFor(() => expect(screen.getByText('Reminder added')).toBeTruthy())
         expect(apply).toHaveBeenCalledTimes(1)
     })
@@ -103,7 +109,7 @@ describe('NotesProposalsReview', () => {
     it('a failed apply says why, on its own row', async () => {
         const apply = vi.fn(async () => ({ ok: false as const, error: 'Only a Lead can change due dates.' }))
         render(<NotesProposalsReview found={{ ...FOUND, proposals: [FOUND.proposals[1]] }} apply={apply} onDismiss={vi.fn()} />)
-        fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Accept' }))
         expect((await screen.findByRole('alert')).textContent).toBe("Couldn't move the due date. Only a Lead can change due dates.")
         expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy()
     })
@@ -111,25 +117,28 @@ describe('NotesProposalsReview', () => {
     it('a closed due-date question leaves the row as it was', async () => {
         const apply = vi.fn(async () => ({ ok: false as const, cancelled: true as const }))
         render(<NotesProposalsReview found={{ ...FOUND, proposals: [FOUND.proposals[1]] }} apply={apply} onDismiss={vi.fn()} />)
-        fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Accept' }))
         await waitFor(() => expect(apply).toHaveBeenCalled())
         expect(screen.queryByRole('alert')).toBeNull()
-        expect(screen.getByRole('button', { name: 'Apply' })).toBeTruthy()
+        expect(screen.getByRole('button', { name: 'Accept' })).toBeTruthy()
     })
 
-    it('a new deliverable opens its creation when the page can, and never through apply', () => {
-        const apply = vi.fn()
-        const openDeliverable = vi.fn()
-        render(<NotesProposalsReview found={FOUND} apply={apply} openDeliverable={openDeliverable} onDismiss={vi.fn()} />)
-        fireEvent.click(screen.getByRole('button', { name: 'Open' }))
-        expect(openDeliverable).toHaveBeenCalledWith(FOUND.proposals[2])
-        expect(apply).not.toHaveBeenCalled()
+    it("a new deliverable is never created: Accept adds a reminder to set it up, on the day picked, with Brio's name as its original", async () => {
+        const apply = vi.fn(async (_p: NotesProposal, _original: NotesProposal) => ({ ok: true as const }))
+        render(<NotesProposalsReview found={{ ...FOUND, proposals: [FOUND.proposals[2]] }} apply={apply} onDismiss={vi.fn()} />)
+        expect(screen.getByText('New scope is your call. Accept adds a reminder for you to set it up in Files.')).toBeTruthy()
+        fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Rental depreciation review' } })
+        fireEvent.click(screen.getByRole('button', { name: 'Accept' }))
+        await waitFor(() => expect(screen.getByText('Reminder added')).toBeTruthy())
+        const [applied, original] = apply.mock.calls[0]
+        expect(applied).toEqual(expect.objectContaining({ kind: 'reminder', title: 'Set up “Rental depreciation review” as a deliverable in Files' }))
+        expect(original).toEqual(expect.objectContaining({ kind: 'reminder', title: 'Set up “Rental Property Depreciation Review” as a deliverable in Files' }))
     })
 
     it('read only: nothing can be applied', () => {
         render(<NotesProposalsReview found={FOUND} apply={vi.fn()} onDismiss={vi.fn()} readOnly />)
-        expect(screen.getByRole('button', { name: 'Apply 2 selected' }).hasAttribute('disabled')).toBe(true)
-        for (const b of screen.getAllByRole('button', { name: 'Apply' })) expect(b.hasAttribute('disabled')).toBe(true)
+        expect(screen.getByRole('button', { name: 'Accept 3 selected' }).hasAttribute('disabled')).toBe(true)
+        for (const b of screen.getAllByRole('button', { name: 'Accept' })) expect(b.hasAttribute('disabled')).toBe(true)
     })
 
     it('Dismiss all hands back', () => {

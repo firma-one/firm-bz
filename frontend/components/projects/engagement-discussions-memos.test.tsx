@@ -220,7 +220,7 @@ describe('Memos', () => {
         expect(screen.getByRole('button', { name: /Add internal memo/ })).toBeTruthy()
         const first = screen.getByTestId(`memo-row-${MEMO.id}`)
         expect(within(first).getByText('Alex · transcript, 38 min')).toBeTruthy()
-        expect(within(first).getByText('1 action item applied')).toBeTruthy()
+        expect(within(first).getByText('1 action item accepted')).toBeTruthy()
         expect(within(screen.getByTestId(`memo-row-${OLDER.id}`)).getByText('Marcus · notes')).toBeTruthy()
         expect(screen.getByText('Each memo is a Markdown file in “Internal Memos” in your OneDrive.')).toBeTruthy()
 
@@ -289,12 +289,12 @@ describe('Memos', () => {
         // The action items have their own column beside the memo.
         const actions = screen.getByRole('region', { name: 'Action items' })
         fireEvent.click(within(actions).getByRole('button', { name: 'Identify action items in Call with Dana' }))
-        expect(await within(actions).findByText('Applied earlier from this memo')).toBeTruthy()
-        expect(within(actions).getByText('Applied action items note this memo, so identifying them again shows them as done.')).toBeTruthy()
+        expect(await within(actions).findByText('Accepted earlier from this memo')).toBeTruthy()
+        expect(within(actions).getByText('Accepted action items note this memo, so identifying them again shows them as done.')).toBeTruthy()
         expect(calls.find((c) => c.url.endsWith('/ai-notes-proposals'))?.body).toEqual(expect.objectContaining({ memoDocumentId: MEMO.id }))
 
-        fireEvent.click(within(actions).getByRole('button', { name: 'Apply 1 selected' }))
-        await waitFor(() => expect(within(screen.getByTestId(`memo-row-${MEMO.id}`)).getByText('2 action items applied')).toBeTruthy())
+        fireEvent.click(within(actions).getByRole('button', { name: 'Accept 1 selected' }))
+        await waitFor(() => expect(within(screen.getByTestId(`memo-row-${MEMO.id}`)).getByText('2 action items accepted')).toBeTruthy())
         expect(h.createManualReminder).toHaveBeenCalledWith(expect.objectContaining({
             action: 'Chase the 1099-B', note: 'From the memo “Call with Dana”: “I still need the brokerage 1099-B”',
         }))
@@ -321,17 +321,41 @@ describe('Memos', () => {
         expect(calls.some((c) => c.url.endsWith('/ai-notes-proposals'))).toBe(false)
 
         const raid = within(actions).getByRole('region', { name: 'RAID suggestions' })
-        expect(within(raid).getByText('The K-1s may arrive late')).toBeTruthy()
+        // Chosen with the action items: it starts selected, and the foot counts it with them.
+        expect(within(actions).getByRole('button', { name: 'Accept 2 selected' })).toBeTruthy()
+        fireEvent.click(within(raid).getByRole('checkbox', { name: /Select: risk/ }))
+        expect(within(actions).getByRole('button', { name: 'Accept 1 selected' })).toBeTruthy()
+        fireEvent.click(within(raid).getByRole('checkbox', { name: /Select: risk/ }))
+        expect(within(actions).getByRole('button', { name: 'Accept 2 selected' })).toBeTruthy()
+        // Its title, editable before accepting, as an action item's fields are.
+        const title = within(raid).getByDisplayValue('The K-1s may arrive late')
         // The line it came from, as an action item cites its own.
         expect(within(raid).getByText('“We will send the K-1s by end of next week.”')).toBeTruthy()
         // Brio's priority, to keep or change before accepting; kept as it is, nothing more is sent.
         expect(within(raid).getByRole('combobox', { name: 'Priority of The K-1s may arrive late' }).textContent).toContain('Medium')
+        fireEvent.change(title, { target: { value: 'K-1s from the Garcias may arrive after the Nov 20 filing prep' } })
         fireEvent.click(within(raid).getByRole('button', { name: 'Accept' }))
-        await waitFor(() => expect(calls.find((c) => c.url === '/api/projects/p1/raid/raid-1' && c.method === 'PATCH')?.body).toEqual({ action: 'accept' }))
+        await waitFor(() => expect(calls.find((c) => c.url === '/api/projects/p1/raid/raid-1' && c.method === 'PATCH')?.body)
+            .toEqual({ action: 'accept', title: 'K-1s from the Garcias may arrive after the Nov 20 filing prep' }))
         await waitFor(() => expect(within(actions).queryByRole('region', { name: 'RAID suggestions' })).toBeNull())
 
         fireEvent.click(within(actions).getByRole('button', { name: 'Dismiss all' }))
         await waitFor(() => expect(calls.some((c) => c.url === `/api/projects/p1/memos/${MEMO.id}/review` && c.method === 'DELETE')).toBe(true))
+    })
+
+    it('"Accept N selected" accepts the selected action items and RAID suggestions together', async () => {
+        const stored = memoReviewOf({ proposals: [FOUND.proposals[0]] as never, skipped: [], dropped: 0 }, TEXT, 'auto')
+        waiting = {
+            ...NOTHING_WAITING,
+            review: stored,
+            raid: [{ id: 'raid-1', type: 'RISK', title: 'The K-1s may arrive late', priority: 'MEDIUM', quoteAt: null }],
+        }
+        listing.memos = [{ ...MEMO, toReview: 2, reviewedAt: stored.at }, OLDER]
+        await openMemos()
+        const actions = screen.getByRole('region', { name: 'Action items' })
+        fireEvent.click(await within(actions).findByRole('button', { name: 'Accept 2 selected' }))
+        await waitFor(() => expect(calls.some((c) => c.url === `/api/projects/p1/memos/${MEMO.id}/applied` && c.method === 'POST')).toBe(true))
+        await waitFor(() => expect(calls.find((c) => c.url === '/api/projects/p1/raid/raid-1' && c.method === 'PATCH')?.body).toEqual({ action: 'accept' }))
     })
 
     it('Edit opens the memo filled in, saves through the memo route, and the pane reads it afresh (§14.3)', async () => {

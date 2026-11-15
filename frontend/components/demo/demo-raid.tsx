@@ -204,7 +204,7 @@ export function DemoRaidTab({ engagementBase = '' }: { engagementBase?: string }
             update((l) => ({ ...l, lastCheckedAt: new Date().toISOString(), conversation: 'current' }))
             return { message: 'Nothing new since the last check.', error: null }
         },
-        onAccept: async (s, priority) => {
+        onAccept: async (s, priority, title) => {
             update((l) => {
                 const suggestions = l.suggestions.filter((x) => x.id !== s.id)
                 const target = s.attachedTo ? l.items.find((i) => i.id === s.attachedTo!.id) : undefined
@@ -220,7 +220,7 @@ export function DemoRaidTab({ engagementBase = '' }: { engagementBase?: string }
                 return {
                     ...l,
                     suggestions,
-                    items: [{ ...s, status: liveStatusFor(s.type), attachedTo: null, ...(priority ? { priority, prioritySetByPerson: true } : {}) }, ...l.items],
+                    items: [{ ...s, status: liveStatusFor(s.type), attachedTo: null, ...(priority ? { priority, prioritySetByPerson: true } : {}), ...(title ? { title } : {}) }, ...l.items],
                 }
             })
             return null

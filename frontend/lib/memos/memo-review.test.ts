@@ -103,11 +103,20 @@ describe('reviewMemoOnAdd', () => {
         expect(h.find).not.toHaveBeenCalled()
     })
 
-    it('over the credit allowance, stops quietly: nothing stored, no RAID pass', async () => {
+    it('over the credit allowance, stops quietly: nothing stored, the RAID pass refused by its own gate', async () => {
+        // Both passes start together; each is refused by the credit gate before spending anything.
         h.find.mockRejectedValue(new h.LimitError('Your group has used its AI credits for this period.'))
+        h.raid.mockRejectedValue(new h.LimitError('Your group has used its AI credits for this period.'))
         expect(await review()).toEqual({ status: 'over_limit' })
         expect(h.write).not.toHaveBeenCalled()
-        expect(h.raid).not.toHaveBeenCalled()
+    })
+
+    it("saves the RAID suggestions before the action items land, so the pane that reloads on them shows both", async () => {
+        const order: string[] = []
+        h.raid.mockImplementation(async () => { order.push('raid'); return { ok: true, suggested: 1, dropped: 0 } })
+        h.write.mockImplementation(async () => { order.push('review'); return true })
+        await review()
+        expect(order).toEqual(['raid', 'review'])
     })
 
     it('never throws: a memo it couldn\'t read is left as it was', async () => {

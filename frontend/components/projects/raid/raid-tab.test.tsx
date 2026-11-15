@@ -48,8 +48,13 @@ describe('RaidTabView', { timeout: 20_000 }, () => {
         const h = handlers()
         render(<RaidTabView log={demoRaidLog(NOW)} engagementBase="" readOnly={false} now={NOW} {...h} />)
         await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Accept Dana sends the brokerage 1099-B by Nov 29' })) })
-        // An Assumption has no priority to change: accepted as Brio wrote it.
-        expect(h.onAccept).toHaveBeenCalledWith(expect.objectContaining({ id: 'raid-suggest-1099' }), undefined)
+        // An Assumption has no priority to change, and its title wasn't touched: accepted as Brio wrote it.
+        expect(h.onAccept).toHaveBeenCalledWith(expect.objectContaining({ id: 'raid-suggest-1099' }), undefined, undefined)
+        // A title edited on the card is accepted as edited. One that adds to an entry has no title of its own to edit.
+        fireEvent.change(screen.getByDisplayValue('Dana sends the brokerage 1099-B by Nov 29'), { target: { value: 'Dana sends the brokerage 1099-B for the joint account by Nov 29' } })
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Accept Dana sends the brokerage 1099-B by Nov 29' })) })
+        expect(h.onAccept).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'raid-suggest-1099' }), undefined, 'Dana sends the brokerage 1099-B for the joint account by Nov 29')
+        expect(screen.queryByDisplayValue('Pricing in section 4.2 may be out of date')).toBeNull()
         await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Dismiss Pricing in section 4.2 may be out of date' })) })
         expect(h.onDismiss).toHaveBeenCalledWith(expect.objectContaining({ id: 'raid-suggest-pricing' }))
     })

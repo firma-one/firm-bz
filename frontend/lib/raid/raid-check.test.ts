@@ -18,6 +18,7 @@ const h = vi.hoisted(() => {
         memoText: new Map<string, string>(),
         docs: [] as Array<Record<string, unknown>>,
         raidRows: [] as Array<Record<string, unknown>>,
+        raidDeleteMany: vi.fn(async () => ({ count: 0 })),
         create: vi.fn(),
         meter: vi.fn(async () => {}),
         guard: vi.fn(),
@@ -56,7 +57,8 @@ vi.mock('@/lib/prisma', () => ({
             },
         },
         engagementMember: { findMany: async () => [{ userId: 'u-dana', role: 'eng_viewer' }, { userId: 'u-alex', role: 'eng_admin' }] },
-        engagementRaidItem: { findMany: async () => h.raidRows, createMany: h.createMany },
+        engagementRaidItem: { findMany: async () => h.raidRows, createMany: h.createMany, deleteMany: h.raidDeleteMany },
+        $transaction: async (ops: Promise<unknown>[]) => Promise.all(ops),
         $executeRawUnsafe: h.executeRaw,
         $queryRawUnsafe: h.queryRaw,
     },
@@ -154,6 +156,12 @@ describe('validateRaidSuggestions', () => {
             ],
         }, ctx)
         expect(out).toEqual({ suggestions: [], dropped: 3 })
+    })
+
+    it('keeps the part of a quote that is in the source when the model ran on past it', () => {
+        const out = validateRaidSuggestions({ suggestions: [s({ quote: "I'll chase the 1099-B and send it before the end of the month. Dana will also call" })] }, ctx)
+        expect(out.dropped).toBe(0)
+        expect(out.suggestions[0].quote).toBe("I'll chase the 1099-B and send it before the end of the month.")
     })
 
     it('drops ids that are not in the input: a foreign message, memo or log entry', () => {
@@ -375,6 +383,25 @@ describe('runMemoRaidCheck', () => {
         const anchor = savedRows()[0].quoteAt as { at: number; length: number; hash: string }
         expect(anchor).toEqual({ at: expect.any(Number), length: expect.any(Number), hash: expect.any(String) })
         expect(quoteFromAnchor(memoMatchText(MEMO_TEXT), anchor)).toBe('We can scope that separately.')
+    })
+
+    it("read again, replaces the memo's suggestions still waiting, and keeps what a person already decided", async () => {
+        h.create.mockResolvedValue(toolAnswer(ANSWER))
+        h.raidRows = [
+            // Waiting: replaced, so Brio's suggestion of the same title comes back new, with its line's place.
+            { id: 'waiting-1', type: 'DECISION', sourceKind: 'MEMO', sourceRef: MEMO, status: 'SUGGESTED', quote: null, title: 'Rental depreciation is scoped separately', extraSources: [] },
+        ]
+        h.raidDeleteMany.mockClear()
+        const out = await runMemoRaidCheck({ engagementId: 'p1', firmId: 'f1', memo, now: NOW })
+        expect(out).toMatchObject({ ok: true, suggested: 1 })
+        expect(h.raidDeleteMany).toHaveBeenCalledWith({ where: { engagementId: 'p1', status: 'SUGGESTED', sourceKind: 'MEMO', sourceRef: MEMO } })
+        expect(savedRows()[0].quoteAt).toEqual({ at: expect.any(Number), length: expect.any(Number), hash: expect.any(String) })
+
+        // Dismissed by a person: never suggested again, even read again.
+        h.createMany.mockClear()
+        h.raidRows = [{ id: 'dismissed-1', type: 'DECISION', sourceKind: 'MEMO', sourceRef: MEMO, status: 'DISMISSED', quote: null, title: 'Rental depreciation is scoped separately', extraSources: [] }]
+        expect(await runMemoRaidCheck({ engagementId: 'p1', firmId: 'f1', memo, now: NOW })).toMatchObject({ ok: true, suggested: 0 })
+        h.raidRows = []
     })
 
     it('reads nothing for a completed engagement or an empty memo', async () => {
