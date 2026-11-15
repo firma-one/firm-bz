@@ -54,6 +54,32 @@ describe('streamDraft', () => {
         expect(create.mock.calls[0][0]).not.toHaveProperty('temperature')
     })
 
+    it('opens with the given words, then Brio\'s, and the whole text includes them', async () => {
+        const { client } = clientYielding([
+            { type: 'content_block_delta', delta: { type: 'text_delta', text: '\n Just checking in.' } },
+            { type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { output_tokens: 5 } },
+        ])
+        const out = await lines(await streamDraft({
+            client, scope, system: 's', user: 'u', effort: 'low', maxTokens: 1000,
+            failure: 'f', label: 'test', prefix: 'Hi @Dana Whitfield,\n\n',
+        }))
+        expect(out.map((l) => l.type)).toEqual(['meta', 'delta', 'delta', 'done'])
+        expect(out[1].text).toBe('Hi @Dana Whitfield,\n\n')
+        expect(out[2].text).toBe('Just checking in.')
+        expect(out[3].text).toBe('Hi @Dana Whitfield,\n\nJust checking in.')
+    })
+
+    it('is still empty when Brio writes nothing after the opening', async () => {
+        const { client } = clientYielding([
+            { type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { output_tokens: 0 } },
+        ])
+        const out = await lines(await streamDraft({
+            client, scope, system: 's', user: 'u', effort: 'low', maxTokens: 1000,
+            failure: 'f', label: 'test', prefix: 'Hi @Dana Whitfield,\n\n',
+        }))
+        expect(out[out.length - 1]).toEqual({ type: 'error', message: 'f' })
+    })
+
     it('a declined draft is an error, never a draft to send', async () => {
         const { client } = clientYielding([
             { type: 'content_block_delta', delta: { type: 'text_delta', text: 'Part' } },

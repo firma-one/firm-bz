@@ -53,12 +53,14 @@ beforeEach(() => {
 })
 
 describe('POST .../documents/[documentId]/ai-nudge-draft', () => {
-    it('drafts for a Lead, greeting the person by first name', async () => {
+    it('drafts for a Lead, opening with the person tagged by their member name', async () => {
         expect(await (await post()).text()).toBe('stream')
-        const call = (streamDraft.mock.calls[0] as unknown as [{ user: string; scope: { feature: string } }])[0]
+        const call = (streamDraft.mock.calls[0] as unknown as [{ user: string; prefix?: string; scope: { feature: string } }])[0]
         expect(call.scope.feature).toBe('nudgeDraft')
         expect(call.user).toContain('"Dana"')
         expect(call.user).toContain('QSR-9')
+        // A mention, as the comment box writes one, so the thread draws it as theirs.
+        expect(call.prefix).toBe('Hi @Dana Whitfield,\n\n')
     })
 
     it('refuses anyone who is not a Lead', async () => {

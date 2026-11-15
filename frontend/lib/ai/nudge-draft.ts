@@ -100,7 +100,7 @@ export const NUDGE_SYSTEM_PROMPT = `You draft a short, friendly check-in from a 
 
 Write the message only:
 - Two or three sentences, under 70 words. Plain prose.
-- Open with "Hi <first name>," and nothing else on that line.
+- No greeting and no name to open with: "Hi" and the person, tagged, come before your words. Start with the check-in itself.
 - Say which deliverable it is, by name with its reference in brackets, how long it has been with them, and its due date if one is given.
 - Make it easy to respond: say a comment on the deliverable is the quickest way to send changes or approval.
 - Never pressure, threaten or guilt. Never invent a consequence, a deadline or a reason for the wait.
@@ -127,4 +127,12 @@ export function buildNudgePrompt(facts: {
         `In review with them since: ${facts.inReviewSince.slice(0, 10)} (${facts.daysWaiting} days)`,
         `Due date: ${facts.dueDate ? facts.dueDate.slice(0, 10) : 'not set'}`,
     ].join('\n')
+}
+
+/**
+ * How a nudge opens: the person tagged by their member name ("@Dana Whitfield"), as the comment box
+ * writes a mention, so the thread draws it as theirs. Brio writes what follows.
+ */
+export function nudgeGreeting(displayName: string): string {
+    return `Hi @${displayName},\n\n`
 }

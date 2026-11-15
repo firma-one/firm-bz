@@ -38,8 +38,8 @@ export function WaitingOnClient({
     projectId: string
     deliverables: DeliverableProgress[]
     engagementBase: string
-    /** The /tour: canned people and drafts; no requests, nothing sent. */
-    demo?: { recipients: ComposerRecipient[]; draft: (c: NudgeCandidate, firstName: string) => string }
+    /** The /tour: canned people and drafts (`name` is the person's member name); no requests, nothing sent. */
+    demo?: { recipients: ComposerRecipient[]; draft: (c: NudgeCandidate, name: string) => string }
 }) {
     const { addToast } = useToast()
     const candidates = useMemo(() => nudgeCandidates(deliverables), [deliverables])
@@ -167,7 +167,9 @@ export function WaitingOnClient({
                     draftUrl={`/api/projects/${projectId}/documents/${active.deliverableId}/ai-nudge-draft`}
                     draftBody={{ recipientUserId: chosen.userId }}
                     sendLabel="Send nudge"
-                    staticDraft={demo ? demo.draft(active, chosen.name.split(/\s+/)[0]) : undefined}
+                    staticDraft={demo ? demo.draft(active, chosen.name) : undefined}
+                    // The draft opens by tagging them ("Hi @Dana Whitfield,"): a chip, as in the comment box.
+                    mentionNames={[chosen.name]}
                     sentNote={`Posts as a comment on ${active.docId ?? `"${active.name}"`} and reminds ${chosen.name.split(/\s+/)[0]}.`}
                     onSend={send}
                     onSent={() => {

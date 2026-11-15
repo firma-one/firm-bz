@@ -106,6 +106,28 @@ describe('DraftComposer while Brio writes', () => {
     })
 })
 
+describe('DraftComposer mentions', () => {
+    it('draws a tagged member as the comment box draws a mention, while typing and after', async () => {
+        const { baseElement } = render(
+            <DraftComposer
+                open
+                onOpenChange={() => {}}
+                title="Nudge about QSR-9"
+                recipients={[{ userId: 'u1', name: 'Dana Whitfield', role: 'Reviewer' }]}
+                draftUrl="/draft"
+                sendLabel="Send nudge"
+                onSend={async () => ({ ok: true, data: null })}
+                staticDraft={'Hi @Dana Whitfield,\n\nA quick check-in.'}
+                mentionNames={['Dana Whitfield']}
+            />,
+        )
+        const box = () => screen.getByRole('textbox') as HTMLTextAreaElement
+        await waitFor(() => expect(box().value).toBe('Hi @Dana Whitfield,\n\nA quick check-in.'), { timeout: 3000 })
+        const marks = Array.from(baseElement.querySelectorAll('mark')).map((m) => m.textContent)
+        expect(marks).toEqual(['@Dana Whitfield'])
+    })
+})
+
 describe('useBrioDraft', () => {
     it('leaves the text and status to a newer draft when an older one is replaced', async () => {
         const second = controlledStream()

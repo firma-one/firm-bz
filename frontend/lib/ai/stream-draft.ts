@@ -30,6 +30,12 @@ export async function streamDraft(params: {
     /** Brio's words for this surface's failure (lib/ai/brio-failure.ts). */
     failure: string
     label: string
+    /**
+     * Words of ours the draft opens with, sent before Brio's (a nudge's "Hi @Dana Whitfield,", so
+     * the person is tagged by their member name, not however the model spells it). Not Brio's to
+     * write or change; a draft is still empty without Brio's own words after it.
+     */
+    prefix?: string
 }): Promise<Response> {
     const modelStream = await params.client.messages.create({
         model: AI_MODEL,
@@ -63,6 +69,7 @@ export async function streamDraft(params: {
             let stopReason: string | null = null
             try {
                 controller.enqueue(line({ type: 'meta' }))
+                if (params.prefix) controller.enqueue(line({ type: 'delta', text: params.prefix }))
                 for await (const event of modelStream) {
                     if (event.type === 'message_start') {
                         const u = event.message.usage
@@ -73,20 +80,24 @@ export async function streamDraft(params: {
                         outputTokens = event.usage?.output_tokens ?? 0
                         stopReason = event.delta?.stop_reason ?? stopReason
                     } else if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-                        full += event.delta.text
-                        controller.enqueue(line({ type: 'delta', text: event.delta.text }))
+                        // After our opening, Brio's words start where it ends, not after spaces of theirs.
+                        const text = params.prefix && !full ? event.delta.text.trimStart() : event.delta.text
+                        if (!text) continue
+                        full += text
+                        controller.enqueue(line({ type: 'delta', text }))
                     }
                 }
                 if (cancelled) return
                 await meter()
 
-                const text = full.trim()
+                const written = full.trim()
                 // Declined, cut off at the cap, or empty: not a draft anyone should send.
-                if (!text || stopReason === 'refusal' || stopReason === 'max_tokens') {
+                if (!written || stopReason === 'refusal' || stopReason === 'max_tokens') {
                     controller.enqueue(line({ type: 'error', message: params.failure }))
                     return
                 }
-                controller.enqueue(line({ type: 'done', text }))
+                // What was streamed, prefix and all: the reader's text and this one agree.
+                controller.enqueue(line({ type: 'done', text: params.prefix ? `${params.prefix}${full}`.trim() : written }))
             } catch (error) {
                 if (cancelled) return
                 logger.error(`AI draft stream error (${params.label}):`, error as Error)
