@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Hint } from '@/components/ui/tooltip'
 import { Brio } from '@/components/ui/brio'
 import { BrioSections } from '@/components/ui/brio-sections'
-import { StreamingText } from '@/components/ui/streaming-text'
+import { BrioTypedText, ThinkingDots, useTypedText } from '@/components/brio/brio-typing'
 import { InfoHint } from './overview-charts'
 import { cn, formatRelativeTime } from '@/lib/utils'
 import { LEAD_PLACEHOLDER, LEAD_SECTIONS, isPlaceholderText, splitSections, writeSection } from '@/lib/ai/summary-sections'
@@ -110,6 +110,10 @@ export function SummaryDraftReview({
     onPublish, onDismiss, onCopy, copied, note, published, draftBehind, onRewrite, onStop,
 }: SummaryDraftReviewProps) {
     const [showPublished, setShowPublished] = useState(false)
+    // Typed out as Brio writes it (components/brio/brio-typing.tsx); the draft is still being
+    // written until its last word is on screen.
+    const typed = useTypedText(streamText, streaming)
+    const writing = streaming || typed.typing
     const busy = busyAction !== null
     const blocked = unfilledSections.length > 0
     const empty = !value.trim()
@@ -119,9 +123,9 @@ export function SummaryDraftReview({
         <div className="flex min-h-0 flex-1 flex-col">
             <div className="flex items-center gap-2 border-b border-line px-4 py-2">
                 <span className="inline-flex min-w-0 items-center gap-1.5 text-small text-fg-muted">
-                    {streaming ? <><Brio className="animate-pulse" /> is writing…</> : <>Suggested by <Brio /></>}
+                    {writing ? <><Brio className="animate-pulse" /> is writing…</> : <>Suggested by <Brio /></>}
                 </span>
-                {!streaming && generatedAt && <span className="text-caption text-fg-subtle">{formatRelativeTime(generatedAt)}</span>}
+                {!writing && generatedAt && <span className="text-caption text-fg-subtle">{formatRelativeTime(generatedAt)}</span>}
                 {streaming && onStop && (
                     <button
                         type="button"
@@ -131,7 +135,7 @@ export function SummaryDraftReview({
                         <Square className="h-3 w-3 fill-current" /> Stop
                     </button>
                 )}
-                {!streaming && (
+                {!writing && (
                     <div className="ml-auto flex items-center gap-0.5 rounded-control bg-surface-muted p-0.5" role="tablist" aria-label="Draft view">
                         {([['preview', 'Preview'], ['edit', 'Markdown']] as const).map(([m, label]) => (
                             <button
@@ -153,7 +157,7 @@ export function SummaryDraftReview({
             <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4">
                 {/* Said before publishing: the draft describes the engagement as it was when Brio
                     wrote it. Publishing it anyway is the lead's call, and records today's data. */}
-                {draftBehind && !streaming && (
+                {draftBehind && !writing && (
                     <div className="mb-4 flex items-start gap-2 rounded-control bg-tag-yellow-bg px-3 py-2 text-caption text-tag-yellow-fg">
                         <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                         <span className="flex-1">
@@ -165,14 +169,13 @@ export function SummaryDraftReview({
                         </button>
                     </div>
                 )}
-                {streaming ? (
+                {writing ? (
                     <p className="whitespace-pre-wrap text-ui leading-relaxed text-fg">
-                        <StreamingText text={streamText} />
-                        <span
-                            className="ml-0.5 inline-block h-[1.05em] w-[0.5em] -mb-[0.15em] translate-y-px bg-action align-baseline"
-                            style={{ animation: 'fm-caret 1.3s ease-in-out infinite' }}
-                        />
-                        {!streamText && <span className="text-fg-subtle"><Brio /> is reading this engagement…</span>}
+                        {typed.shown ? (
+                            <BrioTypedText shown={typed.shown} />
+                        ) : (
+                            <span className="inline-flex items-center gap-2 text-fg-subtle"><ThinkingDots /><span><Brio /> is reading this engagement…</span></span>
+                        )}
                     </p>
                 ) : mode === 'edit' ? (
                     <textarea
@@ -199,7 +202,7 @@ export function SummaryDraftReview({
                     </div>
                 )}
 
-                {published && !streaming && (
+                {published && !writing && (
                     <div className="mt-6 border-t border-line pt-3">
                         <button
                             type="button"
@@ -216,7 +219,7 @@ export function SummaryDraftReview({
                 )}
             </div>
 
-            {!streaming && (
+            {!writing && (
                 <div className="flex flex-col gap-2 border-t border-line px-4 py-3">
                     {note && <p className="text-caption text-action">{note}</p>}
                     {/* One line: what stops publishing, or what publishing does. The detail is in the tip. */}

@@ -80,7 +80,6 @@ import { failureReason } from '@/lib/files/action-failure'
 import { LoadFailed } from '@/components/ui/load-failed'
 import { shareReportText, type ShareReportOutcome } from '@/lib/insights/share-report-outcome'
 import { BRIO_SUMMARY_FAILED, BRIO_UNREACHABLE_RETRY } from '@/lib/ai/brio-failure'
-import { StreamingText } from '@/components/ui/streaming-text'
 import { BrioSections } from '@/components/ui/brio-sections'
 import { findUnfilledSections } from '@/lib/ai/summary-sections'
 import { planningGapCount } from '@/lib/insights/health-penalties'
@@ -2791,56 +2790,10 @@ export function EngagementInsightsDashboard({
         const abort = new AbortController()
         generationAbortRef.current = abort
 
-        let pending = ''          // received but not yet shown
-        let shown = ''            // currently on screen
-        let finished = false      // network stream closed
-        let raf = 0
-
-        // Words are revealed whole rather than character by character: each one blurs in via
-        // StreamingText, and a letter-by-letter drip would fight that animation. Release happens
-        // on a time budget so the pace still reads as typing rather than as chunks landing.
-        // One word per tick. The interval shortens as a backlog builds so a long response still
-        // lands close to the network, but a single word is always the unit — releasing several at
-        // once would defeat the per-word blur-in.
-        let lastEmit = 0
-        // Paced so each word's blur-in is actually perceptible: at ~11 words/sec the 260ms
-        // animation resolves well within view. Faster than this and words stack up mid-animation,
-        // so the blur never reads and the text just appears.
-        const BASE_MS_PER_WORD = 150
-        const MIN_MS_PER_WORD = 80
-
-        const drain = (now: number) => {
-            const waiting = pending.split(/\s+/).length
-            // The floor drops as the backlog grows, so a long response still catches up rather
-            // than leaving the reader watching text well after generation ended. A short one
-            // never reaches the deep end of this curve and stays at the readable base pace.
-            const floor = waiting > 40 ? 28 : waiting > 24 ? 45 : MIN_MS_PER_WORD
-            const interval = Math.max(floor, BASE_MS_PER_WORD - waiting * 4)
-
-            if (pending.length > 0 && now - lastEmit >= interval) {
-                // Take through the end of the next whitespace run, so a word arrives together with
-                // the space that follows it and never lands half-built. While the stream is still
-                // open, hold back a trailing fragment that has no space yet — it may be mid-word.
-                const m = /\S\s+/.exec(pending)
-                const cut = m ? m.index + m[0].length : (finished ? pending.length : 0)
-                if (cut > 0) {
-                    shown += pending.slice(0, cut)
-                    pending = pending.slice(cut)
-                    lastEmit = now
-                    setAiStreamText(shown)
-                }
-            }
-            if (!finished || pending.length > 0) {
-                raf = requestAnimationFrame(drain)
-            }
-        }
-        raf = requestAnimationFrame(drain)
-
-        /** Resolves once the buffer has fully drained, so the UI never cuts off mid-sentence. */
-        const waitForDrain = () => new Promise<void>((resolve) => {
-            const check = () => (pending.length === 0 ? resolve() : setTimeout(check, 16))
-            check()
-        })
+        // What has arrived. The review pane types it out as Brio writes everywhere
+        // (components/brio/brio-typing.tsx), and holds the editable draft back until the last
+        // word is on screen, so the text goes to it as it arrives, unpaced.
+        let received = ''
 
         try {
             const res = await fetchWithTimeout(
@@ -2877,7 +2830,8 @@ export function EngagementInsightsDashboard({
                     const evt = JSON.parse(raw) as { type: string; text?: string; content?: string; generatedAt?: string; message?: string }
 
                     if (evt.type === 'delta' && evt.text) {
-                        pending += evt.text
+                        received += evt.text
+                        setAiStreamText(received)
                     } else if (evt.type === 'unchanged' && evt.content) {
                         setAiDraftEdit(evt.content)
                         setAiGenerateNote(`Nothing has changed since ${ASSISTANT.name} last wrote this.`)
@@ -2895,11 +2849,6 @@ export function EngagementInsightsDashboard({
                     }
                 }
             }
-
-            finished = true
-            // Let the animation finish before swapping in the editable textarea, otherwise the
-            // last words appear instantly and the effect breaks at the very end.
-            await waitForDrain()
 
             if (completed) {
                 setAiDraftEdit(completed.content)
@@ -2921,8 +2870,6 @@ export function EngagementInsightsDashboard({
             // Stopped because its pane was closed: discarding it was the point, so no error.
             if (!abort.signal.aborted) setAiGenerateNote(e instanceof TypeError ? BRIO_UNREACHABLE_RETRY : BRIO_SUMMARY_FAILED)
         } finally {
-            finished = true
-            cancelAnimationFrame(raf)
             setAiStreaming(false)
             setAiStreamText('')
         }

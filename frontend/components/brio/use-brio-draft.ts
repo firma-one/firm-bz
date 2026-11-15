@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AI_TIMEOUT_MS } from '@/lib/ai/fetch-timeout'
 import { BRIO_DRAFT_FAILED, BRIO_TOO_SLOW, BRIO_UNREACHABLE_RETRY } from '@/lib/ai/brio-failure'
+import { createDraftReveal, prefersReducedMotion, type DraftReveal } from './draft-reveal'
 
 /** One line of a draft stream (lib/ai/stream-draft.ts). */
 export type DraftEvent =
@@ -16,10 +17,16 @@ export type DraftStatus = 'idle' | 'streaming' | 'done' | 'error'
 /**
  * Reads a Brio draft as it is written, into editable text.
  *
+ * The draft types out at a steady pace (components/brio/draft-reveal.ts) rather than in the bursts
+ * the model sends, and stays `streaming` until it is all on screen, so Send waits for it. People
+ * who asked for less motion see each piece as it arrives.
+ *
  * The text is the user's from the first keystroke: `setText` edits it, and a draft is never sent
- * from here. Stopping keeps what was written so far. A failure keeps it too and says why, in Brio's
- * words: the route's own (a credit limit, a refusal), "couldn't reach" when the request never left,
- * or "took too long" when Brio went quiet longer than a stream is allowed.
+ * from here. Stopping keeps what is on screen. A failure keeps all that arrived and says why, in
+ * Brio's words: the route's own (a credit limit, a refusal), "couldn't reach" when the request never
+ * left, or "took too long" when Brio went quiet longer than a stream is allowed.
+ *
+ * `play` types out a draft that is already written (the /tour's canned ones) the same way.
  *
  * `failure` is the surface's fallback sentence; BRIO_DRAFT_FAILED when omitted.
  */
@@ -43,13 +50,28 @@ export function useBrioDraft(failure: string = BRIO_DRAFT_FAILED) {
         setError(null)
     }, [])
 
-    const start = useCallback(async (url: string, body?: unknown): Promise<string | null> => {
+    /** A new draft replaces any in flight; its reveal writes only while it is the current one. */
+    const begin = useCallback(() => {
         ctrlRef.current?.abort('stopped')
         const ctrl = new AbortController()
         ctrlRef.current = ctrl
         setText('')
         setError(null)
         setStatus('streaming')
+        const reveal = createDraftReveal((shown) => { if (!ctrl.signal.aborted) setText(shown) }, { instant: prefersReducedMotion() })
+        return { ctrl, reveal }
+    }, [])
+
+    /** Stopped on purpose: what is on screen stays, as an ordinary editable draft. */
+    const keepShown = useCallback((reveal: DraftReveal): string | null => {
+        const shown = reveal.shown()
+        setText(shown)
+        setStatus(shown ? 'done' : 'idle')
+        return shown || null
+    }, [])
+
+    const start = useCallback(async (url: string, body?: unknown): Promise<string | null> => {
+        const { ctrl, reveal } = begin()
 
         // Gives up when Brio goes quiet for too long: reset on every piece of text, so a draft
         // still being written is never cut off.
@@ -61,7 +83,7 @@ export function useBrioDraft(failure: string = BRIO_DRAFT_FAILED) {
         arm()
 
         let answered = false
-        let written = ''
+        let received = ''
         try {
             const res = await fetch(url, {
                 method: 'POST',
@@ -77,8 +99,8 @@ export function useBrioDraft(failure: string = BRIO_DRAFT_FAILED) {
             const reader = res.body.getReader()
             const decoder = new TextDecoder()
             let buffer = ''
-            let finished = false
-            while (!finished) {
+            let finalText: string | null = null
+            while (finalText === null) {
                 const { value, done } = await reader.read()
                 if (done) break
                 arm()
@@ -90,40 +112,65 @@ export function useBrioDraft(failure: string = BRIO_DRAFT_FAILED) {
                     if (!raw) continue
                     const event = JSON.parse(raw) as DraftEvent
                     if (event.type === 'delta') {
-                        written += event.text
-                        setText(written)
+                        received += event.text
+                        reveal.push(received)
                     } else if (event.type === 'done') {
-                        written = event.text
-                        setText(written)
-                        finished = true
+                        finalText = event.text
+                        // The final text is what arrived, trimmed; if it ever differs, it wins.
+                        if (received.trim() !== finalText) {
+                            received = finalText
+                            reveal.push(received)
+                        }
                     } else if (event.type === 'error') {
                         throw new Error(event.message || failure)
                     }
                 }
             }
-            if (!finished) throw new Error(failure)
+            if (finalText === null) throw new Error(failure)
+            // Brio has finished; the draft is done once it is all on screen.
+            clearTimeout(idle)
+            await reveal.settle(ctrl.signal)
+            setText(finalText)
             setStatus('done')
-            return written
+            return finalText
         } catch (e) {
-            if (ctrl.signal.aborted && ctrl.signal.reason === 'stopped') {
-                // Stopped on purpose: what was written stays, as an ordinary editable draft.
-                setStatus(written ? 'done' : 'idle')
-                return written || null
-            }
+            // Replaced by a newer start (Rewrite, or a sheet reopened): that one owns the text and
+            // status now, so this one leaves them alone.
+            if (ctrlRef.current !== ctrl) return null
+            if (ctrl.signal.aborted && ctrl.signal.reason === 'stopped') return keepShown(reveal)
             const reason = ctrl.signal.reason === 'timeout'
                 ? BRIO_TOO_SLOW
                 : !answered && e instanceof TypeError
                     ? BRIO_UNREACHABLE_RETRY
                     // Only words thrown above (the route's); a parse error's own text isn't for a reader.
                     : e instanceof Error && e.name === 'Error' && e.message ? e.message : failure
+            setText(received)
             setError(reason)
             setStatus('error')
             return null
         } finally {
             clearTimeout(idle)
+            reveal.cancel()
             if (ctrlRef.current === ctrl) ctrlRef.current = null
         }
-    }, [failure])
+    }, [begin, keepShown, failure])
 
-    return { text, setText, status, error, start, stop, reset }
+    const play = useCallback(async (full: string): Promise<string | null> => {
+        const { ctrl, reveal } = begin()
+        reveal.push(full)
+        try {
+            await reveal.settle(ctrl.signal)
+            setText(full)
+            setStatus('done')
+            return full
+        } catch {
+            if (ctrlRef.current !== ctrl) return null
+            return keepShown(reveal)
+        } finally {
+            reveal.cancel()
+            if (ctrlRef.current === ctrl) ctrlRef.current = null
+        }
+    }, [begin, keepShown])
+
+    return { text, setText, status, error, start, play, stop, reset }
 }

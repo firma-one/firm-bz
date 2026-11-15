@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Tag } from '@/components/ui/tag'
 import { Brio } from '@/components/ui/brio'
+import { ThinkingDots } from '@/components/brio/brio-typing'
 import { Hint } from '@/components/ui/tooltip'
 import { LoadFailed } from '@/components/ui/load-failed'
 import { ChatMarkdown } from '@/components/ui/chat-markdown'
@@ -896,11 +897,11 @@ function MemoPane({
                             </p>
                         )}
                         {busy ? (
-                            <div className="flex flex-col gap-2.5 px-4 py-4" aria-busy="true">
+                            // Brio's dots while it reads, as it waits everywhere (components/brio/brio-typing.tsx).
+                            <div className="flex items-center gap-2 px-4 py-4 text-small text-fg-subtle" aria-busy="true">
                                 <LoadingAnnouncement label={`${ASSISTANT.name} is reading the memo`} />
-                                <ShimmerBar className="h-3 w-3/5" />
-                                <ShimmerBar className="w-full" />
-                                <ShimmerBar className="w-[85%]" />
+                                <ThinkingDots />
+                                <span aria-hidden><Brio /> is reading the memo…</span>
                             </div>
                         ) : findError ? (
                             <div className="flex flex-wrap items-center gap-2 px-4 py-4">
@@ -925,13 +926,12 @@ function MemoPane({
                         ) : raidSection ? (
                             raidSection
                         ) : identifying ? (
-                            <div className="flex flex-col gap-2.5 px-4 py-4" aria-busy="true">
+                            <div className="flex items-start gap-2 px-4 py-4" aria-busy="true">
                                 <LoadingAnnouncement label={`${ASSISTANT.name} is identifying the action items`} />
+                                <ThinkingDots className="shrink-0" />
                                 <p className="text-small text-fg-muted">
                                     <Brio /> is identifying this memo&apos;s action items. They&apos;ll appear here in a moment.
                                 </p>
-                                <ShimmerBar className="h-3 w-3/5" />
-                                <ShimmerBar className="w-full" />
                             </div>
                         ) : (
                             <div className="px-4 py-5 @[1040px]:pt-16">

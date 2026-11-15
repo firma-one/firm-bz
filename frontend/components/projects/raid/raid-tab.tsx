@@ -19,6 +19,7 @@ import { Input } from '@/components/ui/input'
 import { Tag } from '@/components/ui/tag'
 import { Hint, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Brio } from '@/components/ui/brio'
+import { ThinkingDots } from '@/components/brio/brio-typing'
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -334,8 +335,9 @@ function CheckStatus({ state, lastCheckedAt, checking, now }: {
 }) {
     if (checking) {
         return (
-            <span className="mr-1.5 inline-flex items-center gap-1 text-caption text-fg-muted" aria-live="polite">
-                <Brio className="animate-pulse" /> is checking…
+            <span className="mr-1.5 inline-flex items-center gap-1.5 text-caption text-fg-muted" aria-live="polite">
+                <ThinkingDots />
+                <span><Brio /> is checking…</span>
             </span>
         )
     }

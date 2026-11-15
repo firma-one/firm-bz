@@ -34,7 +34,7 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers())
 
 describe('DemoBrioChat with the firm as its subject', () => {
-    it('arrives collapsed on its own tour anchor, then answers with engagement links to the tour', () => {
+    it('arrives collapsed on its own tour anchor, then answers with engagement links to the tour', async () => {
         render(<DemoBrioChat subject={SUBJECT} turns={firmChat(ROWS, NOW)} />)
         act(() => { vi.advanceTimersByTime(0) })
 
@@ -50,7 +50,8 @@ describe('DemoBrioChat with the firm as its subject', () => {
         expect(screen.getByText('This firm')).toBeTruthy()
 
         fireEvent.click(screen.getByRole('button', { name: new RegExp(DEMO_FIRM_CHAT_QUESTIONS[0].replace('?', '\\?')) }))
-        act(() => { vi.advanceTimersByTime(10_000) })
+        // The answer arrives, then is typed out to its last word before its links show.
+        for (let i = 0; i < 20; i++) await act(async () => { vi.advanceTimersByTime(500) })
 
         const link = screen.getByRole('link', { name: '"Q4 Growth Strategy"' })
         expect(link.getAttribute('href')).toBe('/tour/northwind/q4-growth')

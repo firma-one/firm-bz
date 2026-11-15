@@ -9,8 +9,7 @@ import { CREDIT_WEIGHTS } from '@/lib/ai/features'
 import { Brio } from '@/components/ui/brio'
 import { Button } from '@/components/ui/button'
 import { ChatMarkdown } from '@/components/ui/chat-markdown'
-import { StreamingText } from '@/components/ui/streaming-text'
-import { ShimmerBar } from '@/components/ui/shimmer'
+import { BrioTypedText, ThinkingDots, useTypedText } from '@/components/brio/brio-typing'
 import { ElapsedTime } from '@/components/ui/elapsed-time'
 import { Hint } from '@/components/ui/tooltip'
 import { fetchWithTimeout, AI_TIMEOUT_MS, AiTimeoutError, AiAbortedError } from '@/lib/ai/fetch-timeout'
@@ -242,12 +241,23 @@ export function FirmChatPanel({
     }, [turns])
     const asked = useMemo(() => new Set(turns.filter((t) => t.role === 'user').map((t) => t.content)), [turns])
 
+    // The newest answer is typed out as Brio writes it (components/brio/brio-typing.tsx), and is
+    // still being answered until its last word is on screen. Stopped or cut off, what arrived shows
+    // at once.
+    const lastTurn = turns[turns.length - 1]
+    const typed = useTypedText(
+        lastTurn?.role === 'assistant' ? parseFirmChatReply(lastTurn.content).answer : '',
+        busy,
+        { finishNow: !!lastTurn?.stopped || !!lastTurn?.cutOff },
+    )
+    const answering = busy || typed.typing
+
     // Follow the conversation while the reader is at the bottom; leave them be if they scrolled up.
     useEffect(() => {
         const el = scrollRef.current
         if (!el) return
-        if (el.scrollHeight - el.scrollTop - el.clientHeight < 80 || !busy) el.scrollTop = el.scrollHeight
-    }, [turns, busy])
+        if (el.scrollHeight - el.scrollTop - el.clientHeight < 80 || !answering) el.scrollTop = el.scrollHeight
+    }, [turns, answering, typed.shown])
 
     // Said once when an answer starts and once when it ends, not word by word.
     const [announce, setAnnounce] = useState('')
@@ -315,31 +325,29 @@ export function FirmChatPanel({
                             )
                         }
                         const parsed = parseFirmChatReply(turn.content)
-                        const streamingThis = busy && i === turns.length - 1
+                        const streamingThis = answering && i === turns.length - 1
                         // Under the newest answer: its own follow-ups, or the starting questions when
                         // it has none (an off-topic reply, a stopped answer), so there is always a next step.
                         const modelFollowUps = parsed.followUps.filter((f) => !asked.has(f))
-                        const followUps = i === lastAssistant && !busy
+                        const followUps = i === lastAssistant && !answering
                             ? (modelFollowUps.length > 0 ? modelFollowUps : freshStarters)
                             : []
                         const drewOn = parsed.sources?.drewOn ?? 0
                         return (
                             <div key={i} className="flex min-w-0 flex-col gap-2.5 text-ui text-fg">
-                                {!turn.content ? (
-                                    // Thinking: shaped like the answer that is coming, with the time
-                                    // so far, as the engagement chat does.
-                                    <div className="flex w-full flex-col gap-1.5 py-1" role="status">
-                                        <ShimmerBar className="w-full" />
-                                        <ShimmerBar className="w-[88%]" />
-                                        <ShimmerBar className="w-[62%]" />
-                                        <span className="mt-1 inline-flex items-center gap-1 text-caption text-fg-subtle">
+                                {!turn.content || (streamingThis && !typed.shown) ? (
+                                    // Thinking: Brio's dots until its first word, with the time so
+                                    // far, as the engagement chat does.
+                                    <div className="flex w-full items-center gap-2 py-1" role="status">
+                                        <ThinkingDots />
+                                        <span className="inline-flex items-center gap-1 text-caption text-fg-subtle">
                                             <Brio /> is thinking
                                             <ElapsedTime className="text-caption text-fg-subtle" />
                                         </span>
                                     </div>
                                 ) : streamingThis ? (
                                     <span className="whitespace-pre-line break-words leading-relaxed">
-                                        <StreamingText text={parsed.answer} />
+                                        <BrioTypedText shown={typed.shown} />
                                     </span>
                                 ) : (
                                     <div onClickCapture={onLinkClick}>

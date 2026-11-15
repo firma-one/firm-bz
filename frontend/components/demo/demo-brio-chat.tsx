@@ -7,8 +7,7 @@ import { WindowGlyph } from '@/components/ui/window-glyph'
 import { ASSISTANT } from '@/lib/ai/assistant'
 import { Brio } from '@/components/ui/brio'
 import { ChatMarkdown } from '@/components/ui/chat-markdown'
-import { StreamingText } from '@/components/ui/streaming-text'
-import { ShimmerBar } from '@/components/ui/shimmer'
+import { BrioTypedText, ThinkingDots, useTypedText } from '@/components/brio/brio-typing'
 import { Hint } from '@/components/ui/tooltip'
 import type { OpeningFact } from '@/lib/ai/chat-suggestions'
 import { FIRM_CHAT_CAPABILITY, FIRM_CHAT_PLACEHOLDER, type FirmChatLink, type FirmChatSources } from '@/lib/ai/firm-chat'
@@ -110,10 +109,19 @@ export function DemoBrioChat({
         return () => pending.forEach((t) => window.clearTimeout(t))
     }, [])
 
+    // The newest answer is typed out as the app types it (components/brio/brio-typing.tsx).
+    const lastMessage = messages[messages.length - 1]
+    const typed = useTypedText(
+        lastMessage?.role === 'assistant' ? lastMessage.content : '',
+        busy,
+        { finishNow: !!lastMessage?.stopped },
+    )
+    const answering = busy || typed.typing
+
     useEffect(() => {
         const el = scrollRef.current
         if (el) el.scrollTop = el.scrollHeight
-    }, [messages, open])
+    }, [messages, open, typed.shown])
 
     // Opening focuses the composer, as in the app.
     useEffect(() => {
@@ -273,22 +281,22 @@ export function DemoBrioChat({
                             </div>
                         )}
 
-                        {messages.map((m, i) => (
+                        {messages.map((m, i) => {
+                            const writing = answering && i === messages.length - 1 && m.role === 'assistant'
+                            return (
                             <div key={i} className={m.role === 'user' ? 'flex justify-end' : 'flex justify-start'}>
                                 {m.role === 'user' ? (
                                     <div className="max-w-[85%] rounded-card bg-surface-muted px-3 py-2 text-ui text-fg">{m.content}</div>
                                 ) : (
                                     <div className="w-full px-0.5 py-1 text-ui leading-relaxed text-fg">
-                                        {!m.content ? (
-                                            <div className="flex w-full flex-col gap-1.5 py-1" role="status">
-                                                <ShimmerBar className="w-full" />
-                                                <ShimmerBar className="w-[88%]" />
-                                                <ShimmerBar className="w-[62%]" />
-                                                <span className="mt-1 inline-flex items-center gap-1 text-caption text-fg-subtle">
+                                        {!m.content || (writing && !typed.shown) ? (
+                                            <div className="flex w-full items-center gap-2 py-1" role="status">
+                                                <ThinkingDots />
+                                                <span className="inline-flex items-center gap-1 text-caption text-fg-subtle">
                                                     <Brio /> is thinking
                                                 </span>
                                             </div>
-                                        ) : m.done ? (
+                                        ) : m.done && !writing ? (
                                             firm ? (
                                                 <FirmChatAnswer answer={m.content} links={m.sources?.engagements} hrefFor={firm.hrefFor} />
                                             ) : (
@@ -296,19 +304,19 @@ export function DemoBrioChat({
                                             )
                                         ) : (
                                             <div className="whitespace-pre-line break-words">
-                                                <StreamingText text={m.content} />
+                                                <BrioTypedText shown={typed.shown} />
                                             </div>
                                         )}
                                         {m.stopped && (
                                             <p className="mt-1 text-caption italic text-fg-subtle">Stopped · this answer is incomplete.</p>
                                         )}
                                         {/* What a firm answer drew on, as the app shows it. */}
-                                        {m.done && !m.stopped && (m.sources?.drewOn ?? 0) > 0 && (
+                                        {m.done && !writing && !m.stopped && (m.sources?.drewOn ?? 0) > 0 && (
                                             <p className="mt-1.5 text-caption text-fg-subtle">
                                                 Based on {m.sources!.drewOn} engagement{m.sources!.drewOn === 1 ? '' : 's'}
                                             </p>
                                         )}
-                                        {i === lastAssistant && m.done && !busy && suggestions.length > 0 && (
+                                        {i === lastAssistant && m.done && !answering && suggestions.length > 0 && (
                                             <div className="mt-2 flex flex-col gap-px">
                                                 <p className="px-2 pb-0.5 text-caption text-fg-subtle">Ask next</p>
                                                 {suggestions.map((q) => (
@@ -319,7 +327,7 @@ export function DemoBrioChat({
                                     </div>
                                 )}
                             </div>
-                        ))}
+                        )})}
                     </div>
 
                     <form onSubmit={(e) => { e.preventDefault(); ask(input) }} className="shrink-0 px-3 pb-3 pt-2">

@@ -222,9 +222,22 @@ export type PersonOption = {
 
 export function PersonAvatar({ person, size = 20 }: { person: Pick<PersonOption, "name" | "avatarUrl">; size?: number }) {
     const style = { width: size, height: size }
-    if (person.avatarUrl) {
-        // eslint-disable-next-line @next/next/no-img-element
-        return <img src={person.avatarUrl} alt="" style={style} className="shrink-0 rounded-full object-cover" />
+    // A photo that won't load (Google's refuse some requests that name the page asking) shows the
+    // initials instead of a broken image. Keyed by URL, so a new photo gets a fresh try.
+    const [failedUrl, setFailedUrl] = React.useState<string | null>(null)
+    if (person.avatarUrl && failedUrl !== person.avatarUrl) {
+        const url = person.avatarUrl
+        return (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+                src={url}
+                alt=""
+                style={style}
+                referrerPolicy="no-referrer"
+                onError={() => setFailedUrl(url)}
+                className="shrink-0 rounded-full object-cover"
+            />
+        )
     }
     return (
         <span style={style} className="flex shrink-0 items-center justify-center rounded-full bg-surface-muted text-[9px] font-medium text-fg-muted">
