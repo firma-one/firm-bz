@@ -57,6 +57,9 @@ describe('what an item is about', () => {
         expect(reminderEntity('platform.doc_comments', 'Review comment')).toBe('comment')
         expect(reminderEntity('platform.firm_invitations.expireAt', 'Invitation expiring')).toBe('invitation')
         expect(reminderEntity('platform.connectors.tokenExpiresAt', 'Reconnect')).toBe('storage')
+        // An Action in an engagement's RAID log, its owner's reminder.
+        expect(reminderEntity('platform.engagement_raid_items', 'Action')).toBe('action')
+        expect(reminderEntity('platform.engagement_raid_items.dueDate', 'Action')).toBe('action')
         expect(reminderEntity('platform.something_new.id', 'Follow-up')).toBeNull()
     })
 

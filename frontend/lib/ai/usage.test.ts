@@ -4,12 +4,14 @@ import { CREDIT_WEIGHTS, creditPeriod, creditPeriodStart, creditWindowStart } fr
 const NOW = new Date('2026-09-26T12:00:00Z')
 
 describe('credit weights', () => {
-    it('charges a search less than a generated answer', () => {
-        // Search is the highest-frequency action and genuinely cheaper; the rest are one credit
-        // so the unit stays legible ("one credit = one AI action").
-        expect(CREDIT_WEIGHTS.searchInterpret).toBeLessThan(CREDIT_WEIGHTS.chat)
+    it('charges every AI call one credit, a search and a generated answer alike', () => {
+        // One credit = one AI action, so the unit stays legible: a search, a brief, a memo's read and
+        // its minutes cost the same as a chat answer.
+        expect(CREDIT_WEIGHTS.searchInterpret).toBe(CREDIT_WEIGHTS.chat)
         expect(CREDIT_WEIGHTS.brief).toBe(CREDIT_WEIGHTS.summary)
         expect(CREDIT_WEIGHTS.summary).toBe(CREDIT_WEIGHTS.chat)
+        expect([CREDIT_WEIGHTS.dayBrief, CREDIT_WEIGHTS.memoRaid, CREDIT_WEIGHTS.memoMinutes]).toEqual([1, 1, 1])
+        expect(new Set(Object.values(CREDIT_WEIGHTS))).toEqual(new Set([1]))
     })
 })
 

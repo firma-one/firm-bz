@@ -1,4 +1,4 @@
-import { Briefcase, Building2, FileText, Folder, HardDrive, Mail, MessagesSquare, Users } from 'lucide-react'
+import { Briefcase, Building2, FileText, Folder, HardDrive, ListChecks, Mail, MessagesSquare, Users } from 'lucide-react'
 import { ClientIcon } from '@/components/ui/client-icon'
 import { DeliverableGlyph } from '@/components/ui/deliverable-icon'
 import { DocumentIcon } from '@/components/ui/document-icon'
@@ -7,10 +7,11 @@ import { cn } from '@/lib/utils'
 /*
  * What an item is, in the marks the app uses for each: Building2 a firm, the handshake a client,
  * Briefcase an engagement, folder-plus a deliverable, Folder a folder, a document's file-type icon
- * when its type is known, MessagesSquare a comment, Mail an invitation, Users members, HardDrive storage.
+ * when its type is known, MessagesSquare a comment, Mail an invitation, Users members, HardDrive storage,
+ * ListChecks an Action in an engagement's RAID log.
  */
 
-export type EntityKind = 'firm' | 'client' | 'engagement' | 'deliverable' | 'folder' | 'document' | 'comment' | 'invitation' | 'member' | 'storage'
+export type EntityKind = 'firm' | 'client' | 'engagement' | 'deliverable' | 'folder' | 'document' | 'comment' | 'invitation' | 'member' | 'storage' | 'action'
 
 export const ENTITY_ICON: Record<EntityKind, React.ElementType> = {
     firm: Building2,
@@ -23,6 +24,7 @@ export const ENTITY_ICON: Record<EntityKind, React.ElementType> = {
     invitation: Mail,
     member: Users,
     storage: HardDrive,
+    action: ListChecks,
 }
 
 const ENTITY_LABEL: Record<EntityKind, string> = {
@@ -36,6 +38,7 @@ const ENTITY_LABEL: Record<EntityKind, string> = {
     invitation: 'Invitation',
     member: 'Member',
     storage: 'Storage',
+    action: 'Action',
 }
 
 export function EntityIcon({ kind, mimeType, className }: { kind: EntityKind; mimeType?: string | null; className?: string }) {

@@ -205,6 +205,35 @@ registerEntityResolver('platform.doc_comments', async (id) => {
     }
 })
 
+/**
+ * An Action in an engagement's RAID log, as its owner's reminder (lib/raid/raid-action-reminders.ts): its
+ * own title, so Home and the Inbox read "Send the brand guide to Maya", opening the RAID tab.
+ */
+registerEntityResolver('platform.engagement_raid_items', async (id) => {
+    const item = await prisma.engagementRaidItem.findUnique({
+        where: { id },
+        select: {
+            title: true,
+            engagement: { select: { name: true, slug: true, client: { select: { name: true, slug: true, firm: { select: { id: true, slug: true, group: { select: { slug: true } } } } } } } },
+        },
+    })
+    const groupSlug = item?.engagement?.client?.firm?.group?.slug ?? null
+    const firmSlug = item?.engagement?.client?.firm?.slug ?? null
+    const firmId = item?.engagement?.client?.firm?.id ?? null
+    const clientSlug = item?.engagement?.client?.slug ?? null
+    const engSlug = item?.engagement?.slug ?? null
+    return {
+        name: item?.title ?? 'Action',
+        slug: null,
+        firmSlug,
+        firmId,
+        ctaUrl: groupSlug && firmSlug && clientSlug && engSlug
+            ? engagementPath(groupSlug, firmSlug, clientSlug, engSlug, { tab: 'raid' })
+            : null,
+        ...placeOf(item?.engagement),
+    }
+})
+
 registerEntityResolver('platform.firms', async (id) => {
     const f = await prisma.firm.findUnique({
         where: { id },

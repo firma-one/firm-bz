@@ -63,7 +63,7 @@ export function trustMapNodes(brand: string): TrustMapNode[] {
       title: 'Encrypted metadata',
       subtitle: 'Structure, never contents',
       detail:
-        'What is stored is the structure of your work, not the work: engagements, statuses, permissions and the audit log. Sensitive fields (client and engagement names, contact details, comments, the lines Brio cites and storage tokens) are encrypted with AES-256-GCM before they are stored.',
+        'What is stored is the structure of your work, not the work: engagements, statuses, permissions and the audit log. Sensitive fields (client and engagement names, contact details, comments, the lines Brio cites, the minutes it writes and storage tokens) are encrypted with AES-256-GCM before they are stored.',
       points: ['Structure only, never file contents', 'Sensitive fields encrypted with AES-256-GCM', 'The audit log records every open and download'],
     },
     {
@@ -72,7 +72,7 @@ export function trustMapNodes(brand: string): TrustMapNode[] {
       title: 'Brio',
       subtitle: 'Never opens your deliverables',
       detail:
-        'Brio, the assistant for client delivery, works from names, statuses, dates and who is involved, and never opens the files you deliver. It reads internal memos and discussion messages only to identify action items, suggest RAID entries or draft a reply. Names, emails and links it recognizes are replaced with placeholders before the model reads anything, and put back in what it writes. What it reads goes to Anthropic for that one request, under terms that do not allow training on it. It never changes anything without your consent, and nothing reaches a client until a person on your team sends or publishes it.',
+        'Brio, the assistant for client delivery, works from names, statuses, dates and who is involved, and never opens the files you deliver. It reads internal memos and discussion messages only to write a meeting’s minutes, suggest RAID entries or draft a reply. Names, emails and links it recognizes are replaced with placeholders before the model reads anything, and put back in what it writes. What it reads goes to Anthropic for that one request, under terms that do not allow training on it. It never changes anything without your consent, and nothing reaches a client until a person on your team sends or publishes it.',
       points: ['Never opens the files you deliver', 'Names replaced before the AI reads', 'Not used to train AI models', 'Never changes anything without your consent'],
     },
   ];

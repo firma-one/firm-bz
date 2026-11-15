@@ -269,7 +269,7 @@ const SPECS: { tag: string; where: string; title: string; body: string }[] = [
     tag: 'AES-256',
     where: 'In our metadata database',
     title: 'Encrypted at rest',
-    body: 'Sensitive metadata (client and engagement names, contact details, comments, the lines Brio cites and storage tokens) is encrypted with AES-256-GCM before it’s stored.',
+    body: 'Sensitive metadata (client and engagement names, contact details, comments, the lines Brio cites, the minutes it writes and storage tokens) is encrypted with AES-256-GCM before it’s stored.',
   },
   {
     tag: 'OAuth 2.0',

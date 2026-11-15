@@ -40,6 +40,9 @@ const EVENING = 1300;
 /** Your brief's own pointer to the lists below it (components/home/day-brief.tsx). */
 const DAY_ITEMS_LINE = 'The items are below, in Needs you and Agenda.';
 
+/** A RAID letter's full word, shown on hover (D is Decisions, A is Actions). */
+const RAID_WORD: Record<string, string> = { R: 'Risk', A: 'Action', I: 'Issue', D: 'Decision' };
+
 const DOT_POP = 'mkDotPop 700ms var(--mk-ease) both';
 const PRESS = 'mkPress 500ms var(--mk-ease) both';
 
@@ -231,16 +234,19 @@ function ReplyStory({ e }: { e: number }) {
   );
 }
 
-/** 1:00 PM: Identify action items in an internal memo's call notes; two are kept, one is skipped. */
-function ActionsStory({ D, e, live }: { D: DemoDates; e: number; live: boolean }) {
-  const rows: { on: boolean; kind: string; text: string }[] = [
-    { on: true, kind: 'Reminder', text: `Send Dana the revised launch timeline · ${D.follow}` },
-    { on: true, kind: 'Due date', text: `Post-Launch Retrospective Report → ${D.q2EndShort}` },
-    { on: false, kind: 'New deliverable', text: 'Media list refresh' },
+/**
+ * 1:00 PM: Brio reads an internal memo of a call once: the meeting's minutes, to copy into an email, and
+ * its RAID suggestions, every commitment an Action with an owner and a due date.
+ */
+function MemoStory({ D, e, live }: { D: DemoDates; e: number; live: boolean }) {
+  const minutes = 'The launch date holds. Dana gets the revised launch timeline and sends the final brand photos.';
+  const rows = [
+    { badge: 'A', text: 'Send Dana the revised launch timeline', source: `You · ${D.follow}` },
+    { badge: 'D', text: 'The launch date holds', source: '“Let’s keep the date”' },
   ];
   return (
     <>
-      <CardHead title="3 action items" meta="Internal memo" />
+      <CardHead title="Minutes and RAID" meta="Internal memo" />
       <span className="mk-brio-memo">
         Call with Dana{' '}
         {/* With the lock the app's Internal only badge carries (components/ui/internal-only-tag.tsx). */}
@@ -249,19 +255,28 @@ function ActionsStory({ D, e, live }: { D: DemoDates; e: number; live: boolean }
           Internal only
         </span>
       </span>
+      <div className="mk-brio-draft mk-brio-draft--short" style={{ opacity: e >= 300 ? 1 : 0 }}>
+        <span className="mk-brio-draft-who">Minutes</span>
+        <span className="mk-brio-copy">{words(minutes, e, 500, 55)}</span>
+      </div>
       {rows.map((row, i) => (
-        <span key={row.kind} className="mk-brio-row" style={rise(e >= 300 + i * 350)}>
-          <span aria-hidden="true" className={row.on ? 'mk-brio-box mk-brio-box--on' : 'mk-brio-box'} />
+        <span key={row.badge} className="mk-brio-row" style={rise(e >= 1600 + i * 350)}>
+          <span aria-hidden="true" className="mk-brio-badge" title={RAID_WORD[row.badge]}>
+            {row.badge}
+          </span>
           <span>
-            <span className="mk-brio-muted">{row.kind}</span>
-            <br />
             {row.text}
+            <br />
+            <span className="mk-brio-src">{row.source}</span>
           </span>
         </span>
       ))}
-      <span className="mk-brio-btn mk-brio-btn--start" style={press(live, e >= 1600)}>
-        Accept 2
-      </span>
+      <div className="mk-brio-actions" style={rise(e >= 2300)}>
+        <span className="mk-brio-btn" style={press(live, e >= 2700)}>
+          Accept 2
+        </span>
+        <span className="mk-brio-btn mk-brio-btn--ghost">Copy summary</span>
+      </div>
     </>
   );
 }
@@ -317,18 +332,18 @@ function NudgeStory({ D, e, live }: { D: DemoDates; e: number; live: boolean }) 
   );
 }
 
-/** 5:00 PM: the daily RAID check suggests a Risk and an Assumption from the day's messages and memos. */
+/** 5:00 PM: the daily RAID check suggests a Risk and an Action (owner and due date) from the day's messages and memos. */
 function RaidStory({ D, e, live }: { D: DemoDates; e: number; live: boolean }) {
   const rows = [
     { badge: 'R', text: 'Landing page pricing may change before launch', source: 'Thread · Dana' },
-    { badge: 'A', text: `Dana sends the final brand photos by ${D.follow}`, source: 'Memo · Call with Dana' },
+    { badge: 'A', text: `Dana to send the final brand photos · ${D.follow}`, source: 'Memo · Call with Dana' },
   ];
   return (
     <>
       <CardHead title="RAID check" meta="2 suggestions" />
       {rows.map((row, i) => (
         <span key={row.badge} className="mk-brio-row" style={rise(e >= 300 + i * 450)}>
-          <span aria-hidden="true" className="mk-brio-badge">
+          <span aria-hidden="true" className="mk-brio-badge" title={RAID_WORD[row.badge]}>
             {row.badge}
           </span>
           <span>
@@ -431,12 +446,12 @@ function dayMoments(D: DemoDates): MomentDef[] {
     },
     {
       minutes: 780,
-      label: '1:00 PM · Call notes into action items',
+      label: '1:00 PM · Call notes into minutes and RAID',
       isNew: true,
-      ariaLabel: 'Brio identifies three action items in the notes of a call with Dana: a reminder, a due date and a new deliverable. Two are kept and applied.',
-      foot: 'You · keep what’s right, skip the rest',
-      footAt: 2300,
-      story: (e, live) => <ActionsStory D={D} e={e} live={live} />,
+      ariaLabel: 'Brio reads the notes of a call with Dana once: it writes the minutes to copy into an email, and suggests a RAID Action with an owner and a due date and a Decision. Both are accepted.',
+      foot: 'You · accept, then send the minutes',
+      footAt: 3000,
+      story: (e, live) => <MemoStory D={D} e={e} live={live} />,
     },
     {
       minutes: 840,
@@ -473,7 +488,7 @@ function dayMoments(D: DemoDates): MomentDef[] {
         </>
       ),
       isNew: true,
-      ariaLabel: 'Brio’s daily RAID check suggests a risk from Dana’s thread and an assumption from the call memo, each to accept or dismiss.',
+      ariaLabel: 'Brio’s daily RAID check suggests a risk from Dana’s thread and an action from the call memo, Dana to send the final brand photos by a due date, each to accept or dismiss.',
       foot: 'You · accept what’s real, dismiss the rest',
       footAt: 2300,
       story: (e, live) => <RaidStory D={D} e={e} live={live} />,

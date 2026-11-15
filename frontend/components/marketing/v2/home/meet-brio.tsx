@@ -10,7 +10,7 @@ import type { ReactNode } from 'react';
 import { Brio } from '@/components/ui/brio';
 import { FILES_AGENT_PUBLIC } from '../config';
 import { Band } from '../primitives';
-import { RaidTerm } from '../raid-tip';
+import { RaidTerm, withRaidTip } from '../raid-tip';
 import { HearBrio } from './hear-brio';
 import { MeetBrioTimeline } from './meet-brio-timeline';
 import './meet-brio.css';
@@ -41,7 +41,7 @@ const LANE: { icon: ReactNode; text: string }[] = [
         <circle cx="12" cy="12" r="3" />
       </>
     ),
-    text: 'Never opens the files you deliver. Reads comments and internal memos only to draft a reply, log a risk or identify action items.',
+    text: 'Never opens the files you deliver. Reads comments and internal memos only to draft a reply, write a call’s minutes or suggest RAID entries.',
   },
   {
     icon: (
@@ -113,7 +113,7 @@ export function MeetBrioSection() {
               reads the delivery data in your workspace (deliverables, due dates, statuses, who’s involved) and turns
               it into the brief you’d write yourself if you had the time. It tells you each morning what needs you, drafts the
               client update, the reply and the nudge, keeps the <RaidTerm tone="dark">RAID log</RaidTerm>
-              {FILES_AGENT_PUBLIC ? ', turns call notes into action items and keeps your files tidy' : ' and turns call notes into action items'},
+              {FILES_AGENT_PUBLIC ? ', turns call notes into minutes and Actions and keeps your files tidy' : ' and turns call notes into minutes and Actions'},
               and it always waits for you before anything changes.
             </p>
             <p className="mk-brio-lede mk-brio-narrow">
@@ -131,7 +131,7 @@ export function MeetBrioSection() {
               {LANE.map((item) => (
                 <li key={item.text}>
                   <LaneIcon>{item.icon}</LaneIcon>
-                  <span>{item.text}</span>
+                  <span>{withRaidTip(item.text, 'dark')}</span>
                 </li>
               ))}
             </ul>
@@ -175,8 +175,9 @@ export function MeetBrioSection() {
           <span className="mk-brio-credits-name">
             <BrioOnDark />
           </span>{' '}
-          credits a month on the free plan, 500 on Standard. One credit is one answer, summary or draft. Brio’s morning
-          rundown of what needs you is free, and your clients can ask Brio only once you turn that on.
+          credits a month on the free plan, 500 on Standard. One credit is one answer, summary, draft or morning brief,
+          and reading a call memo for its minutes and <RaidTerm tone="dark">RAID entries</RaidTerm> is two. Your clients
+          can ask Brio only once you turn that on.
         </p>
       </div>
     </Band>

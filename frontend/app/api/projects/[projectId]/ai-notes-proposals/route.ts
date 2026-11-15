@@ -15,15 +15,14 @@ import {
     loadNotesDeliverables,
     resolveToday,
 } from '@/lib/ai/notes-proposals'
-import { readMemoText, writeMemoReview } from '@/lib/memos/memo-store'
-import { auditMemoRead, notesEngagementRef } from '@/lib/memos/memo-review'
-import { alreadyAppliedIds, alreadyAppliedOn, memoReviewOf, type MemoAppliedAction } from '@/lib/memos/memo-shared'
+import { readMemoText } from '@/lib/memos/memo-store'
+import { auditMemoRead, notesEngagementRef, readMemoWithBrio } from '@/lib/memos/memo-review'
+import { alreadyAppliedIds, alreadyAppliedOn, type MemoAppliedAction } from '@/lib/memos/memo-shared'
 import { vaultForEngagement } from '@/lib/ai/known-entities'
-import { runMemoRaidCheck } from '@/lib/raid/raid-check'
-import { AiCreditLimitError } from '@/lib/ai/guarded-client'
-import { logger } from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
+/** A memo's read is two model calls side by side (minutes and RAID), each allowed 55 seconds. */
+export const maxDuration = 90
 
 /**
  * POST /api/projects/[projectId]/ai-notes-proposals
@@ -84,19 +83,12 @@ export async function POST(
         const body = await request.json().catch(() => null) as { notes?: unknown; memoDocumentId?: unknown; today?: unknown } | null
 
         let notes: string
-        let applied: MemoAppliedAction[] | null = null
-        let memoId: string | null = null
-        let memoFileName = ''
-        let memoHeading: { title: string; date: string } | null = null
+        const applied: MemoAppliedAction[] | null = null
         if (body?.memoDocumentId !== undefined) {
             // An internal memo: its text comes from storage, read for this one request.
             const memo = await readMemoText(projectId, body.memoDocumentId)
             if (!memo.ok) return NextResponse.json({ error: memo.error }, { status: memo.status })
             notes = memo.text.trim()
-            applied = memo.memo.applied
-            memoId = memo.memo.id
-            memoFileName = memo.memo.fileName
-            memoHeading = { title: memo.memo.title, date: memo.memo.date }
             if (!notes) return NextResponse.json({ error: 'This memo is empty, so there is nothing to read.' }, { status: 400 })
             if (notes.length > MAX_MEMO_CHARS) {
                 return NextResponse.json(
@@ -104,6 +96,27 @@ export async function POST(
                     { status: 413 },
                 )
             }
+            // A memo is read for its minutes and its RAID suggestions, every commitment an Action
+            // (.claude/plans/raid-actions-memo-minutes.md), as when it was added: two credits, the person's.
+            // Both wait on the memo; the panel loads them again from its review.
+            const read = await readMemoWithBrio({
+                engagementId: projectId,
+                firmId: ctx.firmId,
+                memo: { id: memo.memo.id, title: memo.memo.title, date: memo.memo.date, text: notes },
+                userId: user.id,
+                by: 'person',
+                now: new Date(),
+            })
+            if (read.status === 'over_limit') return aiFailureResponse(read.error, BRIO_PROPOSALS_FAILED, '[ai-notes-proposals] memo read over limit:')
+            if (read.status === 'unconfigured') return NextResponse.json({ error: `${ASSISTANT.name} isn't available right now.` }, { status: 503 })
+            auditMemoRead({
+                firmId: ctx.firmId, clientId: ctx.clientId, engagementId: projectId, memoId: memo.memo.id, fileName: memo.memo.fileName,
+                actorUserId: user.id, trigger: 'person',
+                minutes: read.status === 'reviewed' && read.minutes,
+                raidSuggested: read.status === 'reviewed' ? read.raidSuggested : null,
+            })
+            if (read.status === 'no_answer') return NextResponse.json({ error: BRIO_PROPOSALS_FAILED }, { status: 502 })
+            return NextResponse.json({ data: { memoRead: { minutes: read.minutes, raidSuggested: read.raidSuggested } } })
         } else {
             notes = typeof body?.notes === 'string' ? body.notes.trim() : ''
             if (!notes) {
@@ -123,47 +136,20 @@ export async function POST(
             notesEngagementRef(projectId, ctx.firmId),
         ])
 
-        // A memo read again is read for its RAID suggestions too, at the same time, as when it was added: they
-        // replace the ones still waiting on it (lib/raid/raid-check.ts). No credit (memoRaid); its own
-        // failure never costs the action items.
-        const raidRead = memoId && memoHeading
-            ? runMemoRaidCheck({ engagementId: projectId, firmId: ctx.firmId, memo: { id: memoId, ...memoHeading, text: notes } })
-                .catch((error) => {
-                    if (!(error instanceof AiCreditLimitError)) logger.error('[ai-notes-proposals] the memo RAID pass failed', error as Error)
-                    return null
-                })
-            : Promise.resolve(null)
-        const [outcome] = await Promise.all([
-            findNotesActions({
-                notes,
-                deliverables,
-                today,
-                scope: { firmId: ctx.firmId, userId: user.id, feature: 'notesProposals' },
-                vault: await vaultForEngagement(projectId, ctx.firmId),
-            }),
-            raidRead,
-        ])
-        // A memo's words went to Brio: the audit trail says so, and who asked (§14).
-        const auditRead = (actionItems: number | null) => {
-            if (memoId) {
-                auditMemoRead({
-                    firmId: ctx.firmId, clientId: ctx.clientId, engagementId: projectId, memoId, fileName: memoFileName,
-                    actorUserId: user.id, trigger: 'person', actionItems,
-                })
-            }
-        }
+        // Notes typed in place (not a memo): their action items, as before memos had minutes and RAID.
+        const outcome = await findNotesActions({
+            notes,
+            deliverables,
+            today,
+            scope: { firmId: ctx.firmId, userId: user.id, feature: 'notesProposals' },
+            vault: await vaultForEngagement(projectId, ctx.firmId),
+        })
         if (!outcome.ok) {
-            if (outcome.reason !== 'unconfigured') auditRead(null)
             if (outcome.reason === 'unconfigured') {
                 return NextResponse.json({ error: `${ASSISTANT.name} isn't available right now.` }, { status: 503 })
             }
             return NextResponse.json({ error: BRIO_PROPOSALS_FAILED }, { status: 502 })
         }
-
-        // A memo's action items wait on it, so they're there the next time it's opened (§13): quotes as
-        // anchors only, never the memo's words.
-        if (memoId) await writeMemoReview(projectId, memoId, memoReviewOf(outcome, notes, 'person'))
-        auditRead(outcome.proposals.length)
 
         return NextResponse.json({
             data: {

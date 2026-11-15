@@ -3,7 +3,7 @@ import { act, render, screen, within, fireEvent, cleanup, renderHook, waitFor } 
 import { StrictMode } from 'react'
 import { RaidTab, RaidTabView, checkStatusTip, useRaidCount, type RaidHandlers } from './raid-tab'
 import { demoRaidLog } from '@/components/demo/demo-raid'
-import { RAID_CHANGED_EVENT } from '@/lib/raid/raid-shared'
+import { RAID_CHANGED_EVENT, dueDay, nextWeekStart, type RaidItemView, type RaidLogPayload } from '@/lib/raid/raid-shared'
 
 /**
  * Discussions › RAID: Brio's suggestions wait in a strip with their source; the log filters by type and
@@ -33,11 +33,12 @@ afterEach(() => {
 describe('RaidTabView', { timeout: 20_000 }, () => {
     it("shows Brio's suggestions from threads with their source: a thread's quote, what an attachment adds to", () => {
         render(<RaidTabView log={demoRaidLog(NOW)} engagementBase="/d/e/q2" readOnly={false} now={NOW} {...handlers()} />)
+        expect(screen.getByText('Risks, Actions, Issues and Decisions · Internal only')).toBeTruthy()
         expect(screen.getByText('suggests 2')).toBeTruthy()
         expect(screen.getByText('Nothing enters the log until someone accepts it')).toBeTruthy()
 
         const thread = screen.getByTestId('raid-suggestion-raid-suggest-1099')
-        expect(thread.querySelector('blockquote')?.textContent).toBe("“I'll chase the 1099-B and send it before the end of the month.”")
+        expect(thread.querySelector('blockquote')?.textContent).toBe("“The brokerage still hasn't issued the 1099-B, and they won't say when.”")
         expect(within(thread).getByText(/^Thread · QSR-9 · Dana · /)).toBeTruthy()
 
         const attach = screen.getByTestId('raid-suggestion-raid-suggest-pricing')
@@ -47,13 +48,14 @@ describe('RaidTabView', { timeout: 20_000 }, () => {
     it('accepts and dismisses through its handlers', async () => {
         const h = handlers()
         render(<RaidTabView log={demoRaidLog(NOW)} engagementBase="" readOnly={false} now={NOW} {...h} />)
-        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Accept Dana sends the brokerage 1099-B by Nov 29' })) })
-        // An Assumption has no priority to change, and its title wasn't touched: accepted as Brio wrote it.
+        const title = 'The brokerage 1099-B may not arrive before the end of the month'
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: `Accept ${title}` })) })
+        // Brio's priority kept, and its title untouched: accepted as Brio wrote it.
         expect(h.onAccept).toHaveBeenCalledWith(expect.objectContaining({ id: 'raid-suggest-1099' }), undefined, undefined)
         // A title edited on the card is accepted as edited. One that adds to an entry has no title of its own to edit.
-        fireEvent.change(screen.getByDisplayValue('Dana sends the brokerage 1099-B by Nov 29'), { target: { value: 'Dana sends the brokerage 1099-B for the joint account by Nov 29' } })
-        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Accept Dana sends the brokerage 1099-B by Nov 29' })) })
-        expect(h.onAccept).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'raid-suggest-1099' }), undefined, 'Dana sends the brokerage 1099-B for the joint account by Nov 29')
+        fireEvent.change(screen.getByDisplayValue(title), { target: { value: 'The joint account 1099-B may not arrive before the end of the month' } })
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: `Accept ${title}` })) })
+        expect(h.onAccept).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'raid-suggest-1099' }), undefined, 'The joint account 1099-B may not arrive before the end of the month')
         expect(screen.queryByDisplayValue('Pricing in section 4.2 may be out of date')).toBeNull()
         await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Dismiss Pricing in section 4.2 may be out of date' })) })
         expect(h.onDismiss).toHaveBeenCalledWith(expect.objectContaining({ id: 'raid-suggest-pricing' }))
@@ -64,23 +66,86 @@ describe('RaidTabView', { timeout: 20_000 }, () => {
         expect(screen.queryByTestId('raid-suggestion-tour-raid-weekly-1')).toBeNull()
         expect(screen.queryByRole('button', { name: /The signed change order/ })).toBeNull()
         const waiting = screen.getByRole('list', { name: 'Suggestions waiting on memos' })
-        expect(waiting.textContent).toMatch(/^1 suggestion waits on the memo “Weekly check-in · \w{3} \d+”, with its action items\./)
+        expect(waiting.textContent).toMatch(/^1 suggestion waits on the memo “Weekly check-in · \w{3} \d+”\.Review in Memos$/)
         expect(within(waiting).getByRole('link', { name: 'Review in Memos' }).getAttribute('href')).toBe('/d/e/q2/comments?view=memos&memo=tour-memo-weekly')
     })
 
     it('filters by type with counts, and by Open or Closed', () => {
         render(<RaidTabView log={demoRaidLog(NOW)} engagementBase="" readOnly={false} now={NOW} {...handlers()} />)
         const bar = screen.getByRole('toolbar', { name: 'Filter the RAID log' })
-        expect(within(bar).getByRole('button', { name: 'All 7' }).getAttribute('aria-pressed')).toBe('true')
+        expect(within(bar).getByRole('button', { name: 'All 8' }).getAttribute('aria-pressed')).toBe('true')
         expect(within(bar).getByRole('button', { name: 'Risks 2' })).toBeTruthy()
+        expect(within(bar).getByRole('button', { name: 'Actions 2' })).toBeTruthy()
         expect(within(bar).getByRole('button', { name: 'Decisions 2' })).toBeTruthy()
-        expect(screen.getAllByTestId(/^raid-row-/)).toHaveLength(7)
+        expect(screen.getAllByTestId(/^raid-row-/)).toHaveLength(8)
 
         fireEvent.click(within(bar).getByRole('button', { name: 'Issues 2' }))
         expect(screen.getAllByTestId(/^raid-row-/).map((r) => r.getAttribute('data-testid')).sort()).toEqual(['raid-row-raid-overdue', 'raid-row-raid-waiting'])
 
         fireEvent.click(within(bar).getByRole('button', { name: 'Closed' }))
         expect(screen.getByText('Nothing closed here yet.')).toBeTruthy()
+    })
+
+    it('under the Actions filter, reads as an action list: no priority, "Action" and "Next step", and Done', () => {
+        render(<RaidTabView log={demoRaidLog(NOW)} engagementBase="" readOnly={false} now={NOW} {...handlers()} />)
+        const bar = screen.getByRole('toolbar', { name: 'Filter the RAID log' })
+        const headers = () => screen.getAllByRole('columnheader').map((th) => th.textContent?.trim())
+        expect(headers()).toEqual(expect.arrayContaining(['Priority', 'Item', 'Due', 'Mitigation · next step']))
+
+        fireEvent.click(within(bar).getByRole('button', { name: 'Actions 2' }))
+        expect(screen.getAllByTestId(/^raid-row-/).map((r) => r.getAttribute('data-testid')).sort()).toEqual(['raid-row-raid-k1', 'raid-row-raid-letter'])
+        expect(headers()).toEqual(expect.arrayContaining(['Action', 'Due', 'Next step']))
+        expect(headers()).not.toContain('Priority')
+        expect(headers()).not.toContain('Item')
+        expect(within(bar).queryByRole('button', { name: 'Closed' })).toBeNull()
+
+        fireEvent.click(within(bar).getByRole('button', { name: 'Done' }))
+        expect(screen.getByText('Nothing done here yet.')).toBeTruthy()
+    })
+
+    it("shows an Action's due date, in red once it's past; other types have none", () => {
+        const log = demoRaidLog(NOW)
+        render(<RaidTabView log={log} engagementBase="" readOnly={false} now={NOW} {...handlers()} />)
+        const letter = log.items.find((i) => i.id === 'raid-letter')!
+        const k1 = log.items.find((i) => i.id === 'raid-k1')!
+        const lateDue = within(screen.getByTestId('raid-row-raid-letter')).getByText(`${dueDay(letter.dueDate)} · overdue`)
+        expect(lateDue.className).toContain('text-danger')
+        expect(within(screen.getByTestId('raid-row-raid-letter')).getByText('Open').closest('span[class*="bg-tag-red-bg"]')).toBeTruthy()
+        expect(within(screen.getByTestId('raid-row-raid-k1')).getByRole('button', { name: `Due ${dueDay(k1.dueDate)} for ${k1.title}. Change` })).toBeTruthy()
+        expect(within(screen.getByTestId('raid-row-raid-letter')).getByText('Add a next step')).toBeTruthy()
+        expect(within(screen.getByTestId('raid-row-raid-pace')).queryByRole('button', { name: /^Due / })).toBeNull()
+    })
+
+    it('a done Action reads "Done", and its menu offers Mark done while it is open', async () => {
+        const log = demoRaidLog(NOW)
+        const done: RaidLogPayload = {
+            ...log,
+            items: log.items.map((i): RaidItemView => (i.id === 'raid-k1' ? { ...i, status: 'CLOSED', closedReason: 'Done by Alex · Nov 12', canReopen: true } : i)),
+        }
+        render(<RaidTabView log={done} engagementBase="" readOnly={false} now={NOW} {...handlers()} />)
+        const bar = screen.getByRole('toolbar', { name: 'Filter the RAID log' })
+        fireEvent.click(within(bar).getByRole('button', { name: 'Closed' }))
+        const row = screen.getByTestId('raid-row-raid-k1')
+        expect(within(row).getByText('Done').closest('span[class*="bg-tag-green-bg"]')).toBeTruthy()
+        expect(within(row).getByTitle('Done by Alex · Nov 12')).toBeTruthy()
+
+        fireEvent.click(within(bar).getByRole('button', { name: 'Open' }))
+        const trigger = within(screen.getByTestId('raid-row-raid-letter')).getByRole('button', { name: 'More for Send Dana the revised engagement letter' })
+        fireEvent.keyDown(trigger, { key: 'Enter' })
+        expect(await screen.findByRole('menuitem', { name: 'Mark done' })).toBeTruthy()
+    })
+
+    it('lists an Assumption saved before Actions with the Decisions, labelled', () => {
+        const log = demoRaidLog(NOW)
+        const scope = log.items.find((i) => i.id === 'raid-scope')!
+        const legacy: RaidItemView = { ...scope, id: 'raid-legacy', type: 'ASSUMPTION', status: 'OPEN', title: 'Client keeps the same brokerage' }
+        render(<RaidTabView log={{ ...log, items: [...log.items, legacy] }} engagementBase="" readOnly={false} now={NOW} {...handlers()} />)
+        const bar = screen.getByRole('toolbar', { name: 'Filter the RAID log' })
+        fireEvent.click(within(bar).getByRole('button', { name: 'Decisions 3' }))
+        const row = screen.getByTestId('raid-row-raid-legacy')
+        // A gray tag beside its words, and the Decisions' letter (its own word for screen readers).
+        expect(within(row).getAllByText('Assumption').some((el) => el.closest('span[class*="bg-tag-gray-bg"]'))).toBe(true)
+        expect(within(row).getByText('D')).toBeTruthy()
     })
 
     it('shows where each kept entry comes from and how it closes, and an overdue Issue in the danger tone', () => {
@@ -160,9 +225,11 @@ describe('RaidTabView', { timeout: 20_000 }, () => {
 
     it("offers Brio's priority on a Risk or an Issue it suggests, to keep or change before accepting", () => {
         render(<RaidTabView log={demoRaidLog(NOW)} engagementBase="" readOnly={false} now={NOW} {...handlers()} />)
+        const risk = screen.getByTestId('raid-suggestion-raid-suggest-1099')
+        expect(within(risk).getByRole('combobox', { name: 'Priority of The brokerage 1099-B may not arrive before the end of the month' }).textContent).toContain('Medium')
+        expect(within(risk).getByText("· Brio's suggestion")).toBeTruthy()
         // The pricing issue adds to an entry already in the log, so it has none of its own to set.
         expect(within(screen.getByTestId('raid-suggestion-raid-suggest-pricing')).queryByRole('combobox')).toBeNull()
-        expect(within(screen.getByTestId('raid-suggestion-raid-suggest-1099')).queryByRole('combobox')).toBeNull()
     })
 
     it('asks a priority only for a Risk or an Issue being added', () => {
@@ -171,6 +238,25 @@ describe('RaidTabView', { timeout: 20_000 }, () => {
         expect(screen.getByRole('combobox', { name: 'Priority' }).textContent).toContain('Medium')
         fireEvent.click(screen.getByRole('radio', { name: 'Decision' }))
         expect(screen.queryByRole('combobox', { name: 'Priority' })).toBeNull()
+    })
+
+    it('asks an owner and a due date for an Action being added, and no priority', async () => {
+        const h = handlers()
+        render(<RaidTabView log={demoRaidLog(NOW)} engagementBase="" readOnly={false} now={NOW} {...h} />)
+        fireEvent.click(screen.getByRole('button', { name: 'Add an item' }))
+        fireEvent.click(screen.getByRole('radio', { name: 'Action' }))
+        expect(screen.queryByRole('combobox', { name: 'Priority' })).toBeNull()
+        expect(screen.getByRole('combobox', { name: 'Owner' }).textContent).toBe('You')
+        const due = screen.getByLabelText('Due') as HTMLInputElement
+        expect(due.type).toBe('date')
+        expect(due.value).toBe(nextWeekStart())
+        expect(screen.getByLabelText(/^Next step/, { selector: 'input' })).toBeTruthy()
+
+        fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Send Dana the signed letter' } })
+        fireEvent.change(due, { target: { value: '2026-11-20' } })
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Add to the log' })) })
+        // Left as You, the server makes the person adding it the owner.
+        expect(h.onAdd).toHaveBeenCalledWith({ type: 'ACTION', title: 'Send Dana the signed letter', notes: null, dueDate: '2026-11-20' })
     })
 
     it('adds an entry through its handler', async () => {

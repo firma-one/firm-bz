@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useId, useRef, useState, type ComponentProps } from 'react'
 import Link from 'next/link'
-import { AlertCircle, AlertTriangle, Check, CircleDot, Clock3, Link2, ListChecks, Loader2, MoreHorizontal, Plus, Shapes, SignalHigh, Sparkles, Type as TypeIcon, UserRound } from 'lucide-react'
+import { AlertCircle, AlertTriangle, CalendarDays, Check, CircleDot, Clock3, Link2, ListChecks, Loader2, MoreHorizontal, Plus, Shapes, SignalHigh, Sparkles, Type as TypeIcon, UserRound } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { LoadingAnnouncement, ShimmerBar, ShimmerBlock } from '@/components/ui/shimmer'
 import {
@@ -38,7 +38,6 @@ import { RaidPriorityMark, RaidPriorityPicker } from './raid-priority'
 import {
     RAID_CHANGED_EVENT,
     RAID_NOTES_MAX,
-    RAID_STATUS_LABEL,
     RAID_TITLE_MAX,
     RAID_TYPES,
     RAID_TYPE_LABEL,
@@ -46,15 +45,19 @@ import {
     RAID_TYPE_STAGE,
     RAID_TYPE_PLURAL,
     attachPhrase,
+    dueDay,
     filterRaidItems,
     hasPriority,
     isAutoSource,
+    isLegacyAssumption,
     isLive,
     lastCheckedPhrase,
     memoReviewHref,
     memoSuggestionGroups,
+    nextWeekStart,
     raidCountsByType,
     raidOpenCount,
+    raidStatusLabel,
     raidTone,
     shortDay,
     sourceHref,
@@ -73,8 +76,9 @@ import {
 } from '@/lib/raid/raid-shared'
 
 /**
- * The RAID tab (.claude/plans/brio-features-round-2.md, §9; a Discussions sub-tab until 2026-11-14): the engagement's Risks, Assumptions,
- * Issues and Decisions, internal only. Status, health and Board entries keep themselves current; Brio's
+ * The RAID tab (.claude/plans/brio-features-round-2.md, §9; a Discussions sub-tab until 2026-11-14): the engagement's Risks, Actions,
+ * Issues and Decisions, internal only (Actions replaced Assumptions on 2026-11-15, .claude/plans/raid-actions-memo-minutes.md).
+ * An Action has an owner and a due date, and is its owner's reminder on Home and in the Inbox. Status, health and Board entries keep themselves current; Brio's
  * suggestions from threads and memos wait in a strip until a person accepts or dismisses them; people
  * add their own, own them and write the mitigation.
  *
@@ -135,7 +139,53 @@ export function RaidSourceChip({ source, engagementBase }: { source: RaidSourceV
 const TONE_COLOR: Record<RaidTone, TagColor> = { open: 'yellow', late: 'red', closed: 'green', recorded: 'blue', suggested: 'gray' }
 
 export function RaidStatusTag({ item }: { item: Pick<RaidItemView, 'status' | 'type' | 'overdue'> }) {
-    return <Tag color={TONE_COLOR[raidTone(item)]}>{RAID_STATUS_LABEL[item.status]}</Tag>
+    return <Tag color={TONE_COLOR[raidTone(item)]}>{raidStatusLabel(item)}</Tag>
+}
+
+/** An Action's due date: the day, in red once it's past; a date field while it's changed. */
+function DueCell({ item, readOnly, onChange }: {
+    item: RaidItemView
+    readOnly: boolean
+    onChange: (dueDate: string) => Promise<boolean>
+}) {
+    const [editing, setEditing] = useState(false)
+    const [busy, setBusy] = useState(false)
+    if (item.type !== 'ACTION') return <span className="text-fg-subtle">·</span>
+    const label = item.dueDate ? dueDay(item.dueDate) : 'No date'
+    const shown = <span className={cn(item.overdue && 'font-medium text-danger')}>{label}{item.overdue ? ' · overdue' : ''}</span>
+    if (readOnly || !isLive(item)) return shown
+    if (editing) {
+        return (
+            <Input
+                type="date"
+                autoFocus
+                aria-label={`Due date of ${item.title}`}
+                defaultValue={item.dueDate ?? ''}
+                disabled={busy}
+                onBlur={() => setEditing(false)}
+                onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); setEditing(false) } }}
+                onChange={async (e) => {
+                    const next = e.target.value
+                    if (!next || next === item.dueDate) return
+                    setBusy(true)
+                    const ok = await onChange(next)
+                    setBusy(false)
+                    if (ok) setEditing(false)
+                }}
+                className="h-7 w-[9.5rem] px-2 text-small"
+            />
+        )
+    }
+    return (
+        <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="-mx-1 rounded-control px-1 text-left hover:bg-surface-hover"
+            aria-label={`Due ${label} for ${item.title}. Change`}
+        >
+            {shown}
+        </button>
+    )
 }
 
 /** Text a person edits in place: shown as text, an input while editing. Enter or leaving the field saves. */
@@ -228,20 +278,31 @@ export interface RaidNewItem {
     notes: string | null
     /** Risks and Issues: Medium unless the person chose otherwise. */
     priority?: RaidPriority
+    /** Actions: who owns it. Left out, it's the person adding it. */
+    ownerUserId?: string | null
+    /** Actions: YYYY-MM-DD. */
+    dueDate?: string
 }
 
-function AddItemForm({ onAdd, onCancel }: { onAdd: (input: RaidNewItem) => Promise<string | null>; onCancel: () => void }) {
+/** The owner picker's own choice for "the person adding it", which the server fills in. */
+const ME = '__me'
+
+function AddItemForm({ members, onAdd, onCancel }: { members: RaidMember[]; onAdd: (input: RaidNewItem) => Promise<string | null>; onCancel: () => void }) {
     const titleId = useId()
     const [type, setType] = useState<RaidType>('RISK')
     const [priority, setPriority] = useState<RaidPriority>('MEDIUM')
     const [title, setTitle] = useState('')
     const [notes, setNotes] = useState('')
+    const [owner, setOwner] = useState<string>(ME)
+    const [dueDate, setDueDate] = useState(() => nextWeekStart())
     const [busy, setBusy] = useState(false)
     const [error, setError] = useState<string | null>(null)
+    const isAction = type === 'ACTION'
 
     const submit = async (e: React.FormEvent) => {
         e.preventDefault()
         if (!title.trim()) { setError('Give the entry a title.'); return }
+        if (isAction && !dueDate) { setError('Choose a due date.'); return }
         setBusy(true)
         setError(null)
         const failed = await onAdd({
@@ -249,6 +310,7 @@ function AddItemForm({ onAdd, onCancel }: { onAdd: (input: RaidNewItem) => Promi
             title: title.trim(),
             notes: type === 'DECISION' ? null : notes.trim() || null,
             ...(hasPriority(type) ? { priority } : {}),
+            ...(isAction ? { dueDate, ...(owner === ME ? {} : { ownerUserId: owner === NO_OWNER ? null : owner }) } : {}),
         })
         setBusy(false)
         if (failed) setError(failed)
@@ -284,9 +346,32 @@ function AddItemForm({ onAdd, onCancel }: { onAdd: (input: RaidNewItem) => Promi
                     <RaidPriorityPicker value={priority} onChange={setPriority} label="Priority" className="mx-0" />
                 </div>
             )}
+            {isAction && (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="flex flex-col gap-1">
+                        <span id={`${titleId}-owner`} className="text-caption text-fg-muted">Owner</span>
+                        <Select value={owner} onValueChange={setOwner}>
+                            <SelectTrigger aria-labelledby={`${titleId}-owner`} className="h-9 text-small">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value={ME}>You</SelectItem>
+                                {members.map((m) => <SelectItem key={m.userId} value={m.userId}>{m.name}</SelectItem>)}
+                                <SelectItem value={NO_OWNER}>No owner</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                        <label htmlFor={`${titleId}-due`} className="text-caption text-fg-muted">Due</label>
+                        <Input id={`${titleId}-due`} type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="h-9 text-small" />
+                    </div>
+                </div>
+            )}
             {type !== 'DECISION' && (
                 <div className="flex flex-col gap-1">
-                    <label htmlFor={`${titleId}-notes`} className="text-caption text-fg-muted">Mitigation · next step <span className="text-fg-subtle">(optional)</span></label>
+                    <label htmlFor={`${titleId}-notes`} className="text-caption text-fg-muted">
+                        {isAction ? 'Next step' : 'Mitigation · next step'} <span className="text-fg-subtle">(optional)</span>
+                    </label>
                     <Input id={`${titleId}-notes`} value={notes} maxLength={RAID_NOTES_MAX} onChange={(e) => setNotes(e.target.value)} />
                 </div>
             )}
@@ -375,7 +460,7 @@ export interface RaidHandlers {
     onAccept: (item: RaidItemView, priority?: RaidPriority, title?: string) => Promise<string | null>
     onDismiss: (item: RaidItemView) => Promise<string | null>
     onAdd: (input: RaidNewItem) => Promise<string | null>
-    onEdit: (item: RaidItemView, patch: { title?: string | null; notes?: string | null; ownerUserId?: string | null; priority?: RaidPriority }) => Promise<string | null>
+    onEdit: (item: RaidItemView, patch: { title?: string | null; notes?: string | null; ownerUserId?: string | null; priority?: RaidPriority; dueDate?: string | null }) => Promise<string | null>
     onClose: (item: RaidItemView) => Promise<string | null>
     onReopen: (item: RaidItemView) => Promise<string | null>
 }
@@ -497,6 +582,8 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
 
     const counts = raidCountsByType(log.items, stateFilter)
     const rows = filterRaidItems(log.items, typeFilter, stateFilter)
+    // The Actions filter reads as an action list: no priority (the due date does that job), "Next step", "Done".
+    const actionsOnly = typeFilter === 'ACTION'
     // A memo's suggestions wait on the memo, with its action items (§13): here, only a line to it.
     const suggestions = log.suggestions.filter((s) => !waitsOnMemo(s))
     const memoGroups = memoSuggestionGroups(log.suggestions)
@@ -504,7 +591,7 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
     return (
         <div className="flex flex-col gap-4" data-no-export="">
             <div className="flex flex-wrap items-center gap-2">
-                <span className="text-small text-fg-muted">Risks, Assumptions, Issues and Decisions · Internal only</span>
+                <span className="text-small text-fg-muted">Risks, Actions, Issues and Decisions · Internal only</span>
                 <span className="flex-1" />
                 {readOnly ? (
                     <span className="text-small text-fg-subtle">Read only · completed</span>
@@ -549,6 +636,7 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
 
             {adding && !readOnly && (
                 <AddItemForm
+                    members={log.members}
                     onCancel={() => setAdding(false)}
                     onAdd={async (input) => {
                         const failed = await handlers.onAdd(input)
@@ -644,7 +732,7 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
                         <li key={g.memoId ?? g.title} className="flex flex-wrap items-baseline gap-x-1.5 text-small text-fg-muted">
                             <span>
                                 <strong className="font-semibold text-fg">{g.count} {g.count === 1 ? 'suggestion waits' : 'suggestions wait'}</strong>{' '}
-                                on the memo{g.title ? ` “${g.title}”` : ''}, with its action items.
+                                on the memo{g.title ? ` “${g.title}”` : ''}.
                             </span>
                             <RaidLink href={memoReviewHref(engagementBase, g.memoId)} className="text-action hover:underline">
                                 Review in Memos
@@ -683,7 +771,7 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
                             stateFilter === st ? 'bg-surface-selected text-fg' : 'text-fg-muted hover:bg-surface-hover',
                         )}
                     >
-                        {st === 'open' ? 'Open' : 'Closed'}
+                        {st === 'open' ? 'Open' : actionsOnly ? 'Done' : 'Closed'}
                     </button>
                 ))}
             </div>
@@ -696,17 +784,18 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
                     <p className="border-y border-line px-2.5 py-2.5 text-small text-fg-muted">
                         {log.items.length === 0
                             ? 'Nothing in the log yet. Status, health and Board items appear here on their own.'
-                            : stateFilter === 'open' ? 'Nothing open here.' : 'Nothing closed here yet.'}
+                            : stateFilter === 'open' ? 'Nothing open here.' : actionsOnly ? 'Nothing done here yet.' : 'Nothing closed here yet.'}
                     </p>
                 ) : (
                     <NotionTable>
                         <NotionTableHeader>
                             <NotionTableHead icon={<Shapes />} className="w-[72px]">Type</NotionTableHead>
-                            <NotionTableHead icon={<SignalHigh />} className="w-[112px]">Priority</NotionTableHead>
-                            <NotionTableHead icon={<TypeIcon />}>Item</NotionTableHead>
+                            {!actionsOnly && <NotionTableHead icon={<SignalHigh />} className="w-[112px]">Priority</NotionTableHead>}
+                            <NotionTableHead icon={<TypeIcon />}>{actionsOnly ? 'Action' : 'Item'}</NotionTableHead>
                             <NotionTableHead icon={<Link2 />}>Source</NotionTableHead>
                             <NotionTableHead icon={<UserRound />}>Owner</NotionTableHead>
-                            <NotionTableHead icon={<ListChecks />}>Mitigation · next step</NotionTableHead>
+                            <NotionTableHead icon={<CalendarDays />}>Due</NotionTableHead>
+                            <NotionTableHead icon={<ListChecks />}>{actionsOnly ? 'Next step' : 'Mitigation · next step'}</NotionTableHead>
                             <NotionTableHead icon={<CircleDot />}>Status</NotionTableHead>
                             <NotionTableHead icon={<Clock3 />}>Raised</NotionTableHead>
                             {!readOnly && <NotionTableActionsHead />}
@@ -719,31 +808,37 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
                                 return (
                                     <NotionTableRow key={item.id} data-testid={`raid-row-${item.id}`}>
                                         <NotionTableCell><RaidTypeBadge type={item.type} /></NotionTableCell>
-                                        <NotionTableCell className="whitespace-nowrap">
-                                            {item.priority && !readOnly && isLive(item) ? (
-                                                <RaidPriorityPicker
-                                                    value={item.priority}
-                                                    onChange={(priority) => void run(item, () => handlers.onEdit(item, { priority }))}
-                                                    label={`Priority of ${item.title}`}
-                                                    disabled={busyIds.has(item.id)}
-                                                />
-                                            ) : (
-                                                <RaidPriorityMark priority={item.priority} />
-                                            )}
-                                        </NotionTableCell>
+                                        {!actionsOnly && (
+                                            <NotionTableCell className="whitespace-nowrap">
+                                                {item.priority && !readOnly && isLive(item) ? (
+                                                    <RaidPriorityPicker
+                                                        value={item.priority}
+                                                        onChange={(priority) => void run(item, () => handlers.onEdit(item, { priority }))}
+                                                        label={`Priority of ${item.title}`}
+                                                        disabled={busyIds.has(item.id)}
+                                                    />
+                                                ) : (
+                                                    <RaidPriorityMark priority={item.priority} />
+                                                )}
+                                            </NotionTableCell>
+                                        )}
                                         <NotionTableCell className="min-w-[16rem] max-w-[28rem]">
-                                            {readOnly || auto ? (
-                                                <span className="block truncate font-medium text-fg" title={item.title}>{item.title}</span>
-                                            ) : (
-                                                <InlineText
-                                                    value={item.title}
-                                                    placeholder="Add a title"
-                                                    label="Title"
-                                                    maxLength={RAID_TITLE_MAX}
-                                                    className="font-medium text-fg"
-                                                    onSave={async (next) => (next ? run(item, () => handlers.onEdit(item, { title: next })) : false)}
-                                                />
-                                            )}
+                                            <span className="flex min-w-0 items-center gap-1.5">
+                                                {readOnly || auto ? (
+                                                    <span className="block truncate font-medium text-fg" title={item.title}>{item.title}</span>
+                                                ) : (
+                                                    <InlineText
+                                                        value={item.title}
+                                                        placeholder="Add a title"
+                                                        label="Title"
+                                                        maxLength={RAID_TITLE_MAX}
+                                                        className="font-medium text-fg"
+                                                        onSave={async (next) => (next ? run(item, () => handlers.onEdit(item, { title: next })) : false)}
+                                                    />
+                                                )}
+                                                {/* Saved as an Assumption before Actions: listed with the Decisions, labelled. */}
+                                                {isLegacyAssumption(item) && <Tag color="gray">Assumption</Tag>}
+                                            </span>
                                         </NotionTableCell>
                                         <NotionTableCell className="whitespace-nowrap">
                                             <span className="inline-flex items-center gap-1" title={item.autoLine ?? undefined}>
@@ -759,16 +854,19 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
                                                 onChange={(ownerUserId) => void run(item, () => handlers.onEdit(item, { ownerUserId }))}
                                             />
                                         </NotionTableCell>
+                                        <NotionTableCell className="whitespace-nowrap">
+                                            <DueCell item={item} readOnly={readOnly} onChange={(dueDate) => run(item, () => handlers.onEdit(item, { dueDate }))} />
+                                        </NotionTableCell>
                                         <NotionTableCell className="min-w-[12rem] max-w-[22rem]">
-                                            {item.type === 'DECISION' ? (
+                                            {item.type === 'DECISION' || isLegacyAssumption(item) ? (
                                                 <span className="text-fg-subtle">·</span>
                                             ) : readOnly || !isLive(item) ? (
                                                 item.notes ? <span className="block truncate" title={item.notes}>{item.notes}</span> : <span className="text-fg-subtle">·</span>
                                             ) : (
                                                 <InlineText
                                                     value={item.notes}
-                                                    placeholder="Add a mitigation"
-                                                    label={`Mitigation for ${item.title}`}
+                                                    placeholder={item.type === 'ACTION' ? 'Add a next step' : 'Add a mitigation'}
+                                                    label={`${item.type === 'ACTION' ? 'Next step' : 'Mitigation'} for ${item.title}`}
                                                     maxLength={RAID_NOTES_MAX}
                                                     onSave={(next) => run(item, () => handlers.onEdit(item, { notes: next }))}
                                                 />
@@ -791,7 +889,7 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
                                                         </DropdownMenuTrigger>
                                                         <DropdownMenuContent align="end">
                                                             {isLive(item)
-                                                                ? <DropdownMenuItem onSelect={() => void run(item, () => handlers.onClose(item))}>Close</DropdownMenuItem>
+                                                                ? <DropdownMenuItem onSelect={() => void run(item, () => handlers.onClose(item))}>{item.type === 'ACTION' ? 'Mark done' : 'Close'}</DropdownMenuItem>
                                                                 : <DropdownMenuItem onSelect={() => void run(item, () => handlers.onReopen(item))}>Reopen</DropdownMenuItem>}
                                                         </DropdownMenuContent>
                                                     </DropdownMenu>
@@ -807,10 +905,10 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
             </section>
 
             <p className="text-small text-fg-muted">
-                Status, health and Board items are free and keep themselves current. <Brio noIcon /> reads threads with new messages once a
-                day, or when you check with the sparkle: at most 1 credit per engagement per active day. A memo is read once, when it&apos;s
-                added, and its suggestions wait on the memo, to accept or dismiss there with its action items. <Brio noIcon /> records
-                what people decided; it never decides.
+                Status, health and Board items keep themselves current, with no credits. <Brio noIcon /> reads threads with new messages once a
+                day, or when you check with the sparkle: 1 credit per read. A memo is read once, when it&apos;s added, and its suggestions
+                wait on the memo, to accept or dismiss there. An open Action shows on its owner&apos;s Home and Inbox until it&apos;s done.{' '}
+                <Brio noIcon /> records what people decided; it never decides.
             </p>
         </div>
     )

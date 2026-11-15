@@ -27,7 +27,8 @@ describe('RaidInfo', () => {
     it('says what RAID stands for on hover', async () => {
         render(<RaidInfo />)
         fireEvent.focus(screen.getByRole('button', { name: 'What RAID means' }))
-        await waitFor(() => expect(screen.getAllByText(/Risks, Assumptions, Issues and Decisions/).length).toBeGreaterThan(0))
+        await waitFor(() => expect(screen.getAllByText(/Risks, Actions, Issues and Decisions/).length).toBeGreaterThan(0))
+        expect(screen.queryAllByText(/Assumptions/)).toHaveLength(0)
     })
 
     it('inside a tab or link, is a plain mark rather than a second button', () => {
@@ -37,15 +38,25 @@ describe('RaidInfo', () => {
 })
 
 describe('RaidTypeBadge', () => {
-    it.each([['RISK', 'Risk'], ['ASSUMPTION', 'Assumption'], ['ISSUE', 'Issue'], ['DECISION', 'Decision']] as const)(
+    const hover = (badge: HTMLElement) => {
+        fireEvent.pointerMove(badge)
+        fireEvent.mouseEnter(badge)
+        fireEvent.focus(badge)
+    }
+
+    it.each([['RISK', 'Risk'], ['ACTION', 'Action'], ['ISSUE', 'Issue'], ['DECISION', 'Decision']] as const)(
         '%s shows its full word on hover',
         async (type, word) => {
             render(<RaidTypeBadge type={type} decorative />)
-            const badge = screen.getByText(word[0]).parentElement as HTMLElement
-            fireEvent.pointerMove(badge)
-            fireEvent.mouseEnter(badge)
-            fireEvent.focus(badge)
+            hover(screen.getByText(word[0]).parentElement as HTMLElement)
             await waitFor(() => expect(screen.getAllByText(word).length).toBeGreaterThan(0))
         },
     )
+
+    it("an Assumption saved before Actions shows the Decisions' D, and its own word on hover", async () => {
+        render(<RaidTypeBadge type="ASSUMPTION" decorative />)
+        expect(screen.queryByText('A')).toBeNull()
+        hover(screen.getByText('D').parentElement as HTMLElement)
+        await waitFor(() => expect(screen.getAllByText('Assumption').length).toBeGreaterThan(0))
+    })
 })

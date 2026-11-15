@@ -317,7 +317,7 @@ export function deliverableRef(index: number): string {
 /** Weeks ahead in the calendar: enough for "in a month", "end of next month" and most of a quarter. */
 const CALENDAR_WEEKS = 9
 
-function renderCalendar(today: Date): string {
+export function renderCalendar(today: Date): string {
     const dow = today.getUTCDay() // 0 = Sunday
     const monday = addDays(today, dow === 0 ? -6 : 1 - dow)
     const lines: string[] = []

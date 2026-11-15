@@ -1505,7 +1505,7 @@ export const cleanupEngagementReminders = inngest.createFunction(
     async ({ event, step }) => {
         const { engagementId, memberUserIds } = event.data
 
-        const { docIds, commentIds } = await step.run("fetch-child-entity-ids", async () => {
+        const { docIds, commentIds, actionIds } = await step.run("fetch-child-entity-ids", async () => {
             const docs = await prisma.engagementDocument.findMany({
                 where: { engagementId },
                 select: { id: true },
@@ -1514,9 +1514,15 @@ export const cleanupEngagementReminders = inngest.createFunction(
                 where: { engagementId },
                 select: { id: true },
             })
+            // RAID Actions are their owners' reminders (lib/raid/raid-action-reminders.ts).
+            const actions = await prisma.engagementRaidItem.findMany({
+                where: { engagementId, type: 'ACTION' },
+                select: { id: true },
+            })
             return {
                 docIds: docs.map((d: { id: string }) => d.id),
                 commentIds: comments.map((c: { id: string }) => c.id),
+                actionIds: actions.map((a: { id: string }) => a.id),
             }
         })
 
@@ -1550,6 +1556,14 @@ export const cleanupEngagementReminders = inngest.createFunction(
             )
         })
 
+        await step.run("remove-raid-action-reminders", async () => {
+            if (actionIds.length === 0) return
+            const { removeRemindersByEntityForUsers } = await import('@/lib/reminders/reminder-service')
+            await Promise.allSettled(
+                actionIds.map((id: string) => removeRemindersByEntityForUsers(memberUserIds, 'platform.engagement_raid_items', id))
+            )
+        })
+
         return { engagementId, memberCount: memberUserIds.length, docCount: docIds.length, commentCount: commentIds.length }
     }
 )
@@ -1569,7 +1583,7 @@ export const cleanupMemberReminders = inngest.createFunction(
     async ({ event, step }) => {
         const { engagementId, userId } = event.data
 
-        const { docIds, commentIds } = await step.run("fetch-child-entity-ids", async () => {
+        const { docIds, commentIds, actionIds } = await step.run("fetch-child-entity-ids", async () => {
             const docs = await prisma.engagementDocument.findMany({
                 where: { engagementId },
                 select: { id: true },
@@ -1578,9 +1592,15 @@ export const cleanupMemberReminders = inngest.createFunction(
                 where: { engagementId },
                 select: { id: true },
             })
+            // The RAID Actions they owned here: their reminders go with them.
+            const actions = await prisma.engagementRaidItem.findMany({
+                where: { engagementId, type: 'ACTION', ownerUserId: userId },
+                select: { id: true },
+            })
             return {
                 docIds: docs.map((d: { id: string }) => d.id),
                 commentIds: comments.map((c: { id: string }) => c.id),
+                actionIds: actions.map((a: { id: string }) => a.id),
             }
         })
 
@@ -1597,6 +1617,7 @@ export const cleanupMemberReminders = inngest.createFunction(
                 ...ENGAGEMENT_KEYS.map((key) => removeRemindersByEntity(userId, key, engagementId)),
                 ...docIds.map((docId: string) => removeRemindersByEntity(userId, 'platform.documents', docId)),
                 ...commentIds.map((commentId: string) => removeRemindersByEntity(userId, 'platform.doc_comments', commentId)),
+                ...actionIds.map((id: string) => removeRemindersByEntity(userId, 'platform.engagement_raid_items', id)),
             ])
         })
 

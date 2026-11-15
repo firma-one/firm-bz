@@ -10,6 +10,8 @@ import { useToast } from '@/components/ui/toast'
 import {
     FindActionsButton,
     NotesProposalsReview,
+    proposalsFailureMessage,
+    requestNotesProposals,
     type ApplyOutcome,
 } from '@/components/projects/notes-proposals-panel'
 import { AddMemoSheet, type AddMemoInput, type AddMemoOutcome } from '@/components/projects/add-memo-sheet'
@@ -247,6 +249,15 @@ function EngagementMemos({ projectId, engagementBase }: { projectId: string; eng
     const { addToast } = useToast()
     const m = useEngagementMemos(projectId)
     const [adding, setAdding] = useState(false)
+    // This card (unmounted since Discussions › Memos took memos over) still asks for action items the old way.
+    const findActions = useCallback(async (memo: MemoListItem, signal: AbortSignal): Promise<MemoFound> => {
+        try {
+            return await requestNotesProposals(projectId, { memoDocumentId: memo.id }, signal)
+        } catch (e) {
+            if (e instanceof AiAbortedError) throw e
+            throw new Error(proposalsFailureMessage(e))
+        }
+    }, [projectId])
 
     const openHref = useCallback(
         (memo: MemoListItem) => (engagementBase ? `${engagementBase}/files#doc-file:${memo.id}` : undefined),
@@ -279,7 +290,7 @@ function EngagementMemos({ projectId, engagementBase }: { projectId: string; eng
                 addDisabledReason={m.memos !== null && !m.storage ? 'Connect Google Drive or OneDrive for this client to add memos.' : null}
                 onAdd={() => setAdding(true)}
                 openHref={openHref}
-                findActions={m.findActions}
+                findActions={findActions}
                 apply={m.apply}
             />
             <AddMemoSheet open={adding} onOpenChange={setAdding} onSave={save} />

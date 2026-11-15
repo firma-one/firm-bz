@@ -788,6 +788,10 @@
   font-weight: 600;
   color: #009669;
 }
+/* A memo's minutes: the same box, sized to its few lines rather than a reply's. */
+.mk-brio-draft--short {
+  min-height: 0;
+}
 .mk-brio-blank {
   padding: 0 3px;
   border-radius: 3px;
@@ -802,7 +806,7 @@
   transition: opacity 600ms var(--mk-ease), transform 700ms var(--mk-ease);
 }
 
-/* Call-note actions and RAID suggestions: a checkbox or a type badge, then the line. */
+/* RAID suggestions, from a memo or the daily check: a type badge (or a checkbox), then the line. */
 .mk-brio-row {
   display: flex;
   align-items: flex-start;

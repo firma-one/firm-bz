@@ -84,8 +84,9 @@ function PrivacyPolicyPageView() {
             documents, the search runs in your own storage provider — Google Drive, OneDrive or SharePoint — and
             we receive only which files matched. Our own index holds names and structure, not document text.
             Files indexed before October 2026 may still carry a short extract from the start of the document,
-            left by how search used to work; we are removing those. The one line of a file we do keep is from an
-            internal memo, when you apply an action item from it (see section 05).
+            left by how search used to work; we are removing those. What we do keep from a file comes from an
+            internal memo: the minutes Brio writes from it and, where an action item was applied from it, the line
+            it came from, both encrypted (see section 05).
           </Clause>
           <Clause icon={BarChart3} title="Usage telemetry">
             Aggregated data on how you interact with the platform, to improve performance. We use Google
@@ -144,7 +145,8 @@ function PrivacyPolicyPageView() {
             The sensitive fields we do hold are encrypted with AES-256-GCM before they are written to our
             database, each with its own initialization vector: your workspace, firm, client and engagement
             names and descriptions, client contact details, the text of comments, the words a <RaidTerm>RAID entry</RaidTerm>
-            or an applied action item keeps from the message or memo it came from, and your storage
+            or an applied action item keeps from the message or memo it came from, the minutes Brio writes from a
+            memo, and your storage
             provider&apos;s access tokens. Keys are held outside the database and are versioned, so they can be
             rotated without losing access to older data.
           </Clause>
@@ -166,8 +168,8 @@ function PrivacyPolicyPageView() {
       <Section index={4}>
         <LegalLead>
           {BRAND_NAME} includes an AI assistant, Brio. It answers questions about your work, drafts replies and
-          updates for you to edit, identifies action items and <RaidTerm>RAID entries</RaidTerm> for you to apply or accept, and can
-          propose changes to how your files are organized.
+          updates for you to edit, writes the minutes of a meeting from its memo, suggests <RaidTerm>RAID entries</RaidTerm> and
+          action items for you to accept or apply, and can propose changes to how your files are organized.
         </LegalLead>
         <Clauses>
           <Clause icon={Server} title="What is sent">
@@ -181,7 +183,7 @@ function PrivacyPolicyPageView() {
           <Clause icon={FolderOpen} title="Text Brio reads">
             <strong>Brio never opens the files you deliver.</strong> It reads text your team and your client
             wrote only for the features that need it. It reads an internal memo when the memo is added, to
-            identify its action items and <RaidTerm>RAID entries</RaidTerm>, and again whenever someone asks it to; a firm can turn
+            write the meeting&apos;s minutes and suggest its <RaidTerm>RAID entries</RaidTerm>, and again whenever someone asks it to; a firm can turn
             off the first in its settings. To draft a reply, it reads that one conversation&apos;s shared
             messages, never internal notes. To suggest RAID entries, it reads an engagement&apos;s new messages,
             internal notes included, with each author&apos;s first name and role.
@@ -205,16 +207,17 @@ function PrivacyPolicyPageView() {
             Brio proposes and a person decides. It can rename and move files and create folders, only ever after
             you approve each change, and it never deletes anything. Every such change is recorded in your
             engagement&apos;s audit trail, attributed both to the assistant and to the person who approved it.
-            Action items it identifies wait for someone to apply them, <RaidTerm>RAID entries</RaidTerm> it suggests wait for someone
-            to accept them, and a draft goes nowhere until a person sends it.
+            <RaidTerm>RAID entries</RaidTerm> it suggests wait for someone to accept them, action items for someone to apply
+            them, and a draft or a meeting&apos;s minutes go nowhere until a person sends them.
           </Clause>
           <Clause icon={BarChart3} title="What we keep">
             Conversations with Brio are not stored on our servers. They are saved in your browser, on the device
             you used, for up to 30 days unless you pin them, and you can delete any of them, or all of them, from
             the assistant panel at any time. Clearing your browser data removes them too. Briefs and engagement
-            summaries Brio writes are stored, so they can be shown again. We do not keep a memo&apos;s text: what
-            Brio identified in a memo points to its lines by position, and when you apply an action item, we keep
-            the line it came from, encrypted, as its citation. A <RaidTerm>RAID entry</RaidTerm> suggested from a discussion keeps the
+            summaries Brio writes are stored, so they can be shown again, and so are the minutes it writes from a
+            memo, kept with the memo and encrypted. We do not keep a memo&apos;s text: what Brio suggests from a
+            memo points to its lines by position, and when an action item is applied, we keep the line it came
+            from, encrypted, as its citation. A <RaidTerm>RAID entry</RaidTerm> suggested from a discussion keeps the
             words of the message it came from, encrypted; one suggested from a memo links to the memo instead. When you rate an
             answer, we record the rating and the category you pick, never the question you asked or the answer
             you received. We also record how many AI requests an account makes, to apply plan limits and bill
@@ -330,8 +333,8 @@ function PrivacyPolicyEmbedded() {
                   <span className="font-medium text-purple-700">
                     We do not store the actual content of your files.
                   </span>{" "}
-                  The one line of a file we keep is from an internal memo, when you apply an action
-                  item from it.
+                  What we keep from a file comes from an internal memo: the minutes Brio writes from
+                  it and, where an action item was applied from it, the line it came from.
                 </span>
               </li>
               <li className="flex items-start gap-3">
@@ -456,8 +459,8 @@ function PrivacyPolicyEmbedded() {
             <p className="mb-4 text-slate-600">
               <BrandName gradient={false} className="inline [font-size:inherit] [line-height:inherit]" />{" "}
               includes an AI assistant, Brio. It answers questions, drafts replies and updates for
-              you to edit, identifies action items and <RaidTerm>RAID entries</RaidTerm> for you to apply or accept, and
-              can propose changes to how your files are organized.
+              you to edit, writes the minutes of a meeting from its memo, suggests <RaidTerm>RAID entries</RaidTerm> and
+              action items for you to accept or apply, and can propose changes to how your files are organized.
             </p>
             <ul className="ml-1 mt-2 space-y-3">
               <li className="flex items-start gap-3">
@@ -511,8 +514,9 @@ function PrivacyPolicyEmbedded() {
                   <strong>Nothing without your approval:</strong> Brio can rename and move files and
                   create folders, only ever after you approve each change. It never deletes
                   anything, and every change is recorded in your audit trail against both the
-                  assistant and the person who approved it. Action items and <RaidTerm>RAID entries</RaidTerm> wait for a
-                  person to apply or accept them.
+                  assistant and the person who approved it. <RaidTerm>RAID entries</RaidTerm> and action items wait for a
+                  person to accept or apply them, and a meeting&apos;s minutes reach no one until a person
+                  sends them.
                 </span>
               </li>
               <li className="flex items-start gap-3">
@@ -522,8 +526,9 @@ function PrivacyPolicyEmbedded() {
                 <span>
                   <strong>What we keep:</strong> conversations are not stored on our servers. They are saved in
                   your browser for up to 30 days, and you can delete them there. Briefs and summaries
-                  Brio writes are stored. We do not keep a memo&apos;s text, except the line an applied
-                  action item came from, encrypted, as its citation. When you rate an answer we record the rating
+                  Brio writes are stored, and so are the minutes it writes from a memo, encrypted. We do
+                  not keep a memo&apos;s text, except the line an applied action item came from,
+                  encrypted, as its citation. When you rate an answer we record the rating
                   and the category you pick, never the question or the answer. We also count AI
                   requests to apply plan limits.
                 </span>

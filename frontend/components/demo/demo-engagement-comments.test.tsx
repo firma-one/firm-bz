@@ -76,17 +76,30 @@ describe('Memos on /tour', () => {
         expect(fetch).not.toHaveBeenCalled()
     })
 
-    it('Find actions answers with canned proposals, and an applied one is noted on the memo', async () => {
+    it('the newest call waits with its minutes and RAID suggestions, and accepting one takes it off the memo', async () => {
+        await openMemos()
+        const pane = screen.getByRole('region', { name: 'Memo' })
+        await within(pane).findByRole('heading', { name: 'Weekly check-in' }, { timeout: 2000 })
+        const brio = screen.getByRole('region', { name: 'Brio on this memo' })
+        expect(await within(brio).findByText(/suggests \d+ for RAID/, undefined, { timeout: 2000 })).toBeTruthy()
+        const before = within(brio).getAllByRole('button', { name: /^Accept / }).length
+        fireEvent.click(within(brio).getByRole('button', { name: 'Accept Chase the signed change order' }))
+        await waitFor(() => expect(within(brio).getAllByRole('button', { name: /^Accept / })).toHaveLength(before - 1), { timeout: 3000 })
+        // The minutes list it now among their action items.
+        fireEvent.click(within(brio).getByRole('tab', { name: 'Summary' }))
+        expect(within(brio).getByText(/Chase the signed change order ·/)).toBeTruthy()
+        expect(fetch).not.toHaveBeenCalled()
+    })
+
+    it('the kickoff call shows its minutes, with the Actions accepted from it', async () => {
         await openMemos()
         fireEvent.click(screen.getByTestId('memo-row-tour-memo-kickoff'))
         const pane = screen.getByRole('region', { name: 'Memo' })
         await within(pane).findByRole('heading', { name: 'Kickoff call' }, { timeout: 2000 })
         expect(within(pane).getAllByText('Dana Whitfield:')[0].tagName).toBe('STRONG')
-
-        const actions = screen.getByRole('region', { name: 'Action items' })
-        fireEvent.click(within(actions).getByRole('button', { name: 'Identify action items in Kickoff call' }))
-        fireEvent.click(await within(actions).findByRole('button', { name: 'Accept 1 selected' }, { timeout: 3000 }))
-        await waitFor(() => expect(within(screen.getByTestId('memo-row-tour-memo-kickoff')).getByText('1 action item accepted')).toBeTruthy(), { timeout: 3000 })
+        const brio = screen.getByRole('region', { name: 'Brio on this memo' })
+        expect(await within(brio).findByText(/wrote the minutes/, undefined, { timeout: 2000 })).toBeTruthy()
+        expect(within(brio).getByText(/Dana to give access to the shared finance folder ·/)).toBeTruthy()
         expect(fetch).not.toHaveBeenCalled()
     })
 

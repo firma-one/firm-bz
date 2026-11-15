@@ -2,9 +2,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { NextRequest, NextResponse } from 'next/server'
 
 /**
- * Find actions on an internal memo: the route reads the memo's text from storage itself, and only a
- * memo of this engagement that sits in its memos folder. Storage and the model are stubbed: nothing
- * here reaches Google Drive, OneDrive or Anthropic.
+ * The sparkle on an internal memo: the route reads the memo's text from storage itself, and only a memo
+ * of this engagement that sits in its memos folder, then has Brio read it for its minutes and RAID
+ * suggestions (lib/memos/memo-review.ts readMemoWithBrio, stubbed here and tested on its own). Storage
+ * and the model are stubbed: nothing here reaches Google Drive, OneDrive or Anthropic.
  */
 
 const MEMO_ID = '11111111-1111-4111-8111-111111111111'
@@ -24,6 +25,12 @@ const h = vi.hoisted(() => ({
     recordAiUsage: vi.fn(async () => {}),
     update: vi.fn<(args: { where: { id: string }; data: { settings: Record<string, unknown> } }) => Promise<object>>(async () => ({})),
     audits: [] as Array<Record<string, unknown>>,
+    readMemo: vi.fn(),
+}))
+
+vi.mock('@/lib/memos/memo-review', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('@/lib/memos/memo-review')>()),
+    readMemoWithBrio: h.readMemo,
 }))
 
 // Masking has its own tests (lib/ai/pseudonymize, masked-client, known-entities): no vault here.
@@ -138,33 +145,39 @@ beforeEach(() => {
     h.getRenderableContent.mockImplementation(async () => ({ stream: Buffer.from(h.text, 'utf-8'), mimeType: 'text/markdown', fileName: 'memo.md' }))
     h.recordAiUsage.mockClear()
     h.audits.length = 0
+    h.readMemo.mockReset().mockResolvedValue({ status: 'reviewed', minutes: true, raidSuggested: 3 })
 })
 
-describe('Find actions on an internal memo', () => {
-    it('reads the memo from storage, not from the browser, and answers what was applied before', async () => {
+describe('The sparkle on an internal memo', () => {
+    it('reads the memo from storage, not from the browser, and has Brio read it for minutes and RAID, the person\'s 2 credits', async () => {
         const res = await post({ memoDocumentId: MEMO_ID, today: '2026-11-12', notes: 'ignored when a memo is named' })
         expect(res.status).toBe(200)
         expect(h.getRenderableContent).toHaveBeenCalledWith('conn-1', 'memo-file', 'native')
-        const prompt = h.create.mock.calls[0][0].messages[0].content as string
-        expect(prompt).toContain('I need to chase the brokerage 1099-B, still missing')
-        expect(prompt).not.toContain('ignored when a memo is named')
-        const { data } = await res.json()
-        // Titled differently this time, but the same line on the same day: shown as done.
-        expect(data.alreadyApplied).toEqual(['reminder-1'])
-        expect(h.recordAiUsage).toHaveBeenCalledWith(expect.objectContaining({ feature: 'notesProposals' }))
-
-        // They wait on the memo (§13), with no word of it kept: the quote is a place in the memo, not text.
-        const stored = h.update.mock.calls.at(-1)![0].data.settings as { memo: { review: { by: string; proposals: Array<Record<string, unknown>> } } }
-        expect(stored.memo.review.by).toBe('person')
-        expect(stored.memo.review.proposals[0]).toMatchObject({ kind: 'reminder', title: 'Chase the 1099-B', quoteAt: { at: expect.any(Number) } })
-        expect(JSON.stringify(stored.memo.review)).not.toContain('brokerage 1099-B, still missing')
+        expect(h.readMemo).toHaveBeenCalledWith(expect.objectContaining({
+            engagementId: 'p1',
+            firmId: 'f1',
+            userId: 'u1',
+            by: 'person',
+            memo: expect.objectContaining({ id: MEMO_ID, title: 'Weekly check-in', date: '2026-11-10', text: expect.stringContaining('I need to chase the brokerage 1099-B, still missing') }),
+        }))
+        expect(JSON.stringify(h.readMemo.mock.calls[0][0])).not.toContain('ignored when a memo is named')
+        expect((await res.json()).data).toEqual({ memoRead: { minutes: true, raidSuggested: 3 } })
+        // The action items' own call isn't made for a memo any more.
+        expect(h.create).not.toHaveBeenCalled()
 
         // The audit trail says Brio read it, at this person's asking, and what it found: never the words.
         expect(h.audits).toEqual([expect.objectContaining({
             event: 'DOCUMENT_AI_REVIEWED', document: MEMO_ID, actor: 'u1', client: 'c1',
-            meta: expect.objectContaining({ trigger: 'person', agent: 'Brio', summary: expect.stringMatching(/ · asked for$/) }),
+            meta: expect.objectContaining({ trigger: 'person', agent: 'Brio', summary: 'Minutes · 3 RAID suggestions · asked for' }),
         })])
         expect(JSON.stringify(h.audits)).not.toContain('brokerage')
+    })
+
+    it('says so when nothing usable came back, and still records the read', async () => {
+        h.readMemo.mockResolvedValue({ status: 'no_answer' })
+        const res = await post({ memoDocumentId: MEMO_ID })
+        expect(res.status).toBe(502)
+        expect(h.audits).toEqual([expect.objectContaining({ meta: expect.objectContaining({ summary: 'nothing usable came back · asked for' }) })])
     })
 
     it('404 for another engagement\'s memo, without reading it', async () => {
@@ -172,7 +185,7 @@ describe('Find actions on an internal memo', () => {
         expect(res.status).toBe(404)
         expect((await res.json()).error).toMatch(/not found in this engagement/)
         expect(h.getRenderableContent).not.toHaveBeenCalled()
-        expect(h.create).not.toHaveBeenCalled()
+        expect(h.readMemo).not.toHaveBeenCalled()
     })
 
     it('404 for a file of this engagement that isn\'t a memo, without reading it', async () => {
@@ -195,7 +208,7 @@ describe('Find actions on an internal memo', () => {
         const res = await post({ memoDocumentId: MEMO_ID })
         expect(res.status).toBe(413)
         expect((await res.json()).error).toMatch(/too long for Brio to read at once/)
-        expect(h.create).toHaveBeenCalledTimes(1)
+        expect(h.readMemo).toHaveBeenCalledTimes(1)
     })
 
     it('still holds typed notes to 12,000 characters', async () => {
@@ -219,6 +232,6 @@ describe('Find actions on an internal memo', () => {
         h.text = '   \n'
         const res = await post({ memoDocumentId: MEMO_ID })
         expect(res.status).toBe(400)
-        expect(h.create).not.toHaveBeenCalled()
+        expect(h.readMemo).not.toHaveBeenCalled()
     })
 })

@@ -151,13 +151,13 @@ export function AiCreditsRow({ usage }: { usage: BillingPlanUsage | null | undef
     // with rather than taking new hues (the palette above has no more to spare): the firm assistant
     // and Your brief's rewrites with firm briefs, drafts, notes and the RAID check with the
     // engagement's other writing, Reviewers' questions with the engagement chat. Every
-    // credit-spending feature is in a row, so the rows still add up to the total. Your brief's morning
-    // brief is free (weight 0) and never has credits to show.
+    // credit-spending feature is in a row, so the rows still add up to the total. Every AI call is one
+    // credit since 2026-11-15, Your brief's morning brief and a memo's minutes included.
     const sumOf = (keys: readonly (keyof typeof ai.byFeature)[]) => keys.reduce((n, k) => n + (ai.byFeature[k] ?? 0), 0)
     const featureRows: Array<{ key: string; keys: readonly (keyof typeof ai.byFeature)[]; label: string; fill: string }> = [
-        { key: 'brief', keys: ['brief', 'firmChat', 'dayBriefRewrite'], label: 'Briefs and assistant', fill: chart('slate') },
+        { key: 'brief', keys: ['brief', 'firmChat', 'dayBrief', 'dayBriefRewrite'], label: 'Briefs and assistant', fill: chart('slate') },
         { key: 'searchInterpret', keys: ['searchInterpret'], label: 'Firm Doc Search', fill: chart('teal') },
-        { key: 'summary', keys: ['summary', 'statusUpdate', 'replyDraft', 'nudgeDraft', 'notesProposals', 'raidCheck', 'memoRaid'], label: 'Engagement summaries and drafts', fill: chart('purple') },
+        { key: 'summary', keys: ['summary', 'statusUpdate', 'replyDraft', 'nudgeDraft', 'notesProposals', 'raidCheck', 'memoRaid', 'memoMinutes'], label: 'Engagement summaries and drafts', fill: chart('purple') },
         { key: 'chat', keys: ['chat', 'reviewerChat'], label: 'Engagement assistant chat', fill: chart('pink') },
         { key: 'filesAgent', keys: ['filesAgent'], label: 'Files agent', fill: chart('brown') },
     ]

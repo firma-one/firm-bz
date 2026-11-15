@@ -26,6 +26,7 @@ const h = vi.hoisted(() => {
         executeRaw: vi.fn(async () => 1),
         queryRaw: vi.fn(async () => [] as unknown[]),
         readMemo: vi.fn(),
+        loadDeliverables: vi.fn(async () => [] as unknown[]),
     }
 })
 
@@ -73,6 +74,11 @@ vi.mock('@/lib/files/file-creator', () => ({
     ]),
 }))
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn() } }))
+// A memo's read lists the engagement's deliverables (new work is told from work already set up).
+vi.mock('@/lib/ai/notes-proposals', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('@/lib/ai/notes-proposals')>()),
+    loadNotesDeliverables: h.loadDeliverables,
+}))
 
 import {
     buildRaidContext,
@@ -81,7 +87,11 @@ import {
     runRaidCheck,
     runScheduledRaidCheck,
     validateRaidSuggestions,
+    validateSkipped,
     RAID_MAX_TOKENS,
+    RAID_MEMO_MAX_TOKENS,
+    RAID_MEMO_TOOL,
+    RAID_THREAD_TOOL,
     RAID_TOOL,
     type RaidCheckMemo,
     type RaidCheckMessage,
@@ -94,10 +104,10 @@ const MEMO = '33333333-3333-4333-8333-333333333333'
 const MEMO_TEXT = '# Call with Dana\n\n- Asked about the rental depreciation. Dana: "We can scope that separately."\n- Partnership K-1s should arrive by Nov 20.'
 const DANA = "Thanks! I'll chase the 1099-B and send it before the end of the month. Also, is the pricing in 4.2 current?"
 
-const toolAnswer = (suggestions: unknown[]) => ({
+const toolAnswer = (suggestions: unknown[], skipped?: unknown[]) => ({
     stop_reason: 'tool_use',
     usage: { input_tokens: 3000, output_tokens: 400 },
-    content: [{ type: 'tool_use', id: 't1', name: 'record_raid_suggestions', input: { suggestions } }],
+    content: [{ type: 'tool_use', id: 't1', name: 'record_raid_suggestions', input: { suggestions, ...(skipped ? { skipped } : {}) } }],
 })
 
 beforeEach(() => {
@@ -122,6 +132,7 @@ beforeEach(() => {
     h.queryRaw.mockReset().mockResolvedValue([])
     h.readMemo.mockReset().mockImplementation(async (_e: string, id: string) =>
         h.memoText.has(id) ? { ok: true, text: h.memoText.get(id), memo: {} } : { ok: false, status: 502, error: 'Google Drive is unreachable.' })
+    h.loadDeliverables.mockReset().mockResolvedValue([])
 })
 
 // ── Validation ────────────────────────────────────────────────────────────────────────────────
@@ -208,15 +219,85 @@ describe("Brio's priority", () => {
         expect(out.suggestions.map((x) => x.priority)).toEqual(['HIGH', 'MEDIUM', 'MEDIUM'])
     })
 
-    it('never gives an Assumption or a Decision one, whatever the model says', () => {
-        const out = validateRaidSuggestions({ suggestions: [s({ type: 'ASSUMPTION', priority: 'HIGH' })] }, ctx)
-        expect(out.suggestions[0].priority).toBeNull()
+    it('never gives an Action or a Decision one, whatever the model says; an Assumption is dropped', () => {
+        const memo = (p: Record<string, unknown>) => s({ sourceKind: 'MEMO', sourceRef: 'N1', priority: 'HIGH', ...p })
+        const out = validateRaidSuggestions({
+            suggestions: [
+                memo({ type: 'ACTION', quote: 'Partnership K-1s should arrive by Nov 20.' }),
+                memo({ type: 'DECISION', quote: 'We can scope that separately.' }),
+                memo({ type: 'ASSUMPTION', quote: 'Asked about the rental depreciation.' }),
+            ],
+        }, { ...ctx, mode: 'memo', today: '2026-11-12' })
+        expect(out.suggestions.map((x) => [x.type, x.priority])).toEqual([['ACTION', null], ['DECISION', null]])
+        expect(out.dropped).toBe(1)
+        // Nor from a thread: nothing new is an Assumption.
+        expect(validateRaidSuggestions({ suggestions: [s({ type: 'ASSUMPTION', priority: 'HIGH' })] }, ctx)).toEqual({ suggestions: [], dropped: 1 })
     })
 
     it('asks for one in the tool, and says how to judge it', () => {
         const item = RAID_TOOL.input_schema.properties.suggestions.items
         expect(item.required).toContain('priority')
         expect(item.properties.priority.anyOf[0]).toEqual({ type: 'string', enum: ['HIGH', 'MEDIUM', 'LOW'] })
+    })
+})
+
+describe('what each read may suggest', () => {
+    const memoCtx = { ...ctx, mode: 'memo' as const, today: '2026-11-12' }
+    const memo = (p: Record<string, unknown>) => s({ type: 'ACTION', sourceKind: 'MEMO', sourceRef: 'N1', priority: null, dueDate: null, followUp: null, ...p })
+
+    it('a thread read suggests Risks, Issues and Decisions: an Action is dropped', () => {
+        expect(validateRaidSuggestions({ suggestions: [s({ type: 'ACTION' })] }, ctx)).toEqual({ suggestions: [], dropped: 1 })
+        expect(RAID_THREAD_TOOL.input_schema.properties.suggestions.items.properties.type.enum).toEqual(['RISK', 'ISSUE', 'DECISION'])
+        expect(RAID_MEMO_TOOL.input_schema.properties.suggestions.items.properties.type.enum).toEqual(['RISK', 'ACTION', 'ISSUE', 'DECISION'])
+    })
+
+    it("a memo read keeps an Action with the day it was promised", () => {
+        const out = validateRaidSuggestions({ suggestions: [memo({ title: 'Dana to send the K-1s', quote: 'Partnership K-1s should arrive by Nov 20.', dueDate: '2026-11-20' })] }, memoCtx)
+        expect(out.dropped).toBe(0)
+        expect(out.suggestions[0]).toMatchObject({ type: 'ACTION', sourceKind: 'MEMO', sourceRef: MEMO, dueDate: '2026-11-20', followUp: null, priority: null })
+    })
+
+    it('gives an Action with a past, impossible, missing or far-off date the first working day of next week', () => {
+        const out = validateRaidSuggestions({
+            suggestions: [
+                memo({ quote: 'Partnership K-1s should arrive by Nov 20.', dueDate: '2026-11-01' }),
+                memo({ quote: 'We can scope that separately.', dueDate: '2026-02-30' }),
+                memo({ quote: 'Asked about the rental depreciation.', dueDate: null }),
+                memo({ quote: 'Call with Dana', dueDate: '2029-01-01' }),
+            ],
+        }, memoCtx)
+        // Thursday 2026-11-12: next week starts Monday 2026-11-16.
+        expect(out.suggestions.map((x) => x.dueDate)).toEqual(['2026-11-16', '2026-11-16', '2026-11-16', '2026-11-16'])
+    })
+
+    it('keeps followUp on an Action only, and a due date on nothing else', () => {
+        const out = validateRaidSuggestions({
+            suggestions: [
+                memo({ title: 'Set up the Depreciation Schedule deliverable', quote: 'Asked about the rental depreciation.', dueDate: '2026-11-16', followUp: 'DELIVERABLE' }),
+                memo({ quote: 'Partnership K-1s should arrive by Nov 20.', dueDate: '2026-11-20', followUp: 'SOMEDAY' }),
+                memo({ type: 'DECISION', quote: 'We can scope that separately.', dueDate: '2026-11-20', followUp: 'PREPARE' }),
+            ],
+        }, memoCtx)
+        expect(out.suggestions.map((x) => [x.type, x.dueDate, x.followUp])).toEqual([
+            ['ACTION', '2026-11-16', 'DELIVERABLE'],
+            ['ACTION', '2026-11-20', null],
+            ['DECISION', null, null],
+        ])
+    })
+})
+
+describe('validateSkipped', () => {
+    it("keeps the memo's lines Brio left out, each really in the memo and with a reason", () => {
+        const out = validateSkipped({
+            skipped: [
+                { quote: 'Asked about the rental depreciation.', reason: 'a question,   nobody took it on' },
+                { quote: 'Maybe we could try short videos', reason: 'an idea' },
+                { quote: 'Partnership K-1s should arrive by Nov 20.', reason: '' },
+                'not a line',
+            ],
+        }, MEMO_TEXT)
+        expect(out).toEqual([{ quote: 'Asked about the rental depreciation.', reason: 'a question, nobody took it on' }])
+        expect(validateSkipped({}, MEMO_TEXT)).toEqual([])
     })
 })
 
@@ -248,7 +329,7 @@ describe('buildRaidContext', () => {
 // ── The check ─────────────────────────────────────────────────────────────────────────────────
 
 const ANSWER = [
-    { type: 'ASSUMPTION', title: 'Dana sends the brokerage 1099-B by Nov 30', sourceKind: 'THREAD', sourceRef: 'M1', quote: "I'll chase the 1099-B and send it before the end of the month.", attachToItemId: null },
+    { type: 'RISK', title: 'The brokerage 1099-B may not arrive before the end of the month', sourceKind: 'THREAD', sourceRef: 'M1', quote: "I'll chase the 1099-B and send it before the end of the month.", attachToItemId: null },
     { type: 'DECISION', title: 'Rental depreciation is scoped separately', sourceKind: 'MEMO', sourceRef: 'N1', quote: 'We can scope that separately.', attachToItemId: null },
     { type: 'RISK', title: 'Scope may be pushed back', sourceKind: 'THREAD', sourceRef: 'M2', quote: 'they may push back on scope', attachToItemId: null },
     { type: 'ISSUE', title: 'Invented', sourceKind: 'THREAD', sourceRef: 'M1', quote: 'The client is furious', attachToItemId: null },
@@ -264,9 +345,15 @@ describe('runRaidCheck', () => {
 
         const rows = savedRows()
         expect(rows.map((r) => [r.type, r.status, r.sourceKind, r.sourceRef])).toEqual([
-            ['ASSUMPTION', 'SUGGESTED', 'THREAD', M1],
+            ['RISK', 'SUGGESTED', 'THREAD', M1],
             ['RISK', 'SUGGESTED', 'THREAD', M2],
         ])
+        // A Risk has no due date and is no follow-up.
+        expect(rows.map((r) => [r.priority, r.dueDate, r.followUp])).toEqual([['MEDIUM', null, null], ['MEDIUM', null, null]])
+        // The daily read's own tool and prompt: no Actions from a thread.
+        const request = h.create.mock.calls[0][0] as { tools: unknown[]; max_tokens: number }
+        expect(request.tools).toEqual([RAID_THREAD_TOOL])
+        expect(request.max_tokens).toBe(RAID_MAX_TOKENS)
         expect(h.meter).toHaveBeenCalledWith(expect.objectContaining({ feature: 'raidCheck', firmId: 'f1', userId: 'u-alex' }), { inputTokens: 3000, outputTokens: 400 })
         // The check notes when it ran and the fingerprint of what it covered, so the log can say "Up to date".
         expect(h.executeRaw).toHaveBeenCalledWith(expect.stringContaining("'fingerprint'"), NOW.toISOString(), expect.stringMatching(/^[0-9a-f]{32}$/), 'p1')
@@ -356,13 +443,30 @@ describe('runMemoRaidCheck', () => {
     it('reads the one memo, charged as memoRaid to the firm with no user, and leaves the log\'s last check alone', async () => {
         h.create.mockResolvedValue(toolAnswer(ANSWER))
         const out = await runMemoRaidCheck({ engagementId: 'p1', firmId: 'f1', memo, now: NOW })
-        expect(out).toMatchObject({ ok: true, suggested: 1 })
+        expect(out).toMatchObject({ ok: true, suggested: 1, skipped: [] })
         expect(savedRows().map((r) => [r.type, r.status, r.sourceKind, r.sourceRef])).toEqual([['DECISION', 'SUGGESTED', 'MEMO', MEMO]])
         expect(h.guard).toHaveBeenCalledWith({ firmId: 'f1', userId: null, feature: 'memoRaid' }, { vault: null })
         const request = h.create.mock.calls[0][0] as { messages: Array<{ content: string }> }
         expect(request.messages[0].content).toContain('We can scope that separately.')
         expect(request.messages[0].content).not.toContain('Between us')
         expect(h.executeRaw).not.toHaveBeenCalled()
+    })
+
+    it('saves an Action with its due date, lists the deliverables for the read, and answers the lines it skipped', async () => {
+        h.loadDeliverables.mockResolvedValue([{ id: 'd1', docId: 'TAX-1', name: '2026 Return', stage: 'in_progress', dueDate: '2026-12-15' }])
+        h.create.mockResolvedValue(toolAnswer(
+            [{ type: 'ACTION', title: 'Dana to send the partnership K-1s', sourceKind: 'MEMO', sourceRef: 'N1', quote: 'Partnership K-1s should arrive by Nov 20.', attachToItemId: null, priority: null, dueDate: '2026-11-20', followUp: null }],
+            [{ quote: 'Asked about the rental depreciation.', reason: 'a question, nobody took it on' }],
+        ))
+        const out = await runMemoRaidCheck({ engagementId: 'p1', firmId: 'f1', memo, now: NOW, userId: 'u-alex' })
+        expect(out).toEqual({ ok: true, suggested: 1, dropped: 0, skipped: [{ quote: 'Asked about the rental depreciation.', reason: 'a question, nobody took it on' }] })
+        expect(savedRows()[0]).toMatchObject({ type: 'ACTION', priority: null, dueDate: new Date('2026-11-20T00:00:00Z'), followUp: null, createdBy: 'u-alex' })
+        expect(h.loadDeliverables).toHaveBeenCalledWith('p1')
+        expect(h.guard).toHaveBeenCalledWith({ firmId: 'f1', userId: 'u-alex', feature: 'memoRaid' }, { vault: null })
+        const request = h.create.mock.calls[0][0] as { tools: unknown[]; max_tokens: number; messages: Array<{ content: string }> }
+        expect(request.tools).toEqual([RAID_MEMO_TOOL])
+        expect(request.max_tokens).toBe(RAID_MEMO_MAX_TOKENS)
+        expect(request.messages[0].content).toContain('TAX-1 | "2026 Return" | In progress | due 2026-12-15')
     })
 
     it("never stores a memo's words: its suggestion keeps no quote and nothing of the memo's text", async () => {

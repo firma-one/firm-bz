@@ -93,7 +93,7 @@ export type InboxItem = {
     actionLabel?: string
 }
 
-export type InboxEntity = "firm" | "client" | "engagement" | "deliverable" | "document" | "comment" | "invitation" | "member" | "storage"
+export type InboxEntity = "firm" | "client" | "engagement" | "deliverable" | "document" | "comment" | "invitation" | "member" | "storage" | "action"
 
 /**
  * A reminder's subject from its entity key, "platform.<table>[.<column>]" (the keys
@@ -111,6 +111,8 @@ export function reminderEntity(entityKey: string, action: string): InboxEntity |
         case "client_invitations":
         case "firm_invitations": return "invitation"
         case "connectors": return "storage"
+        // An Action in an engagement's RAID log (lib/raid/raid-action-reminders.ts).
+        case "engagement_raid_items": return "action"
         default: return null
     }
 }
@@ -126,6 +128,7 @@ const OPEN_LABEL: Record<InboxEntity, string> = {
     invitation: "Go to invitation",
     member: "Go to members",
     storage: "Go to storage",
+    action: "Go to RAID",
 }
 
 export function openLabel(entity: InboxEntity | null): string {

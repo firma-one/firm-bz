@@ -155,6 +155,15 @@ async function markReminderDoneOrThrow(reminderId: string): Promise<void> {
                 logger.warn('Reminder done: could not record it on the comment', error as Error)
             })
         }
+
+        // An Action's reminder: Done closes the Action in the RAID log too (Deepak, 2026-11-15). Never
+        // blocks the Done itself.
+        if (item.entityKey === 'platform.engagement_raid_items') {
+            const { closeActionFromReminder } = await import('@/lib/raid/raid-action-reminders')
+            await closeActionFromReminder(userId, item.entityValue).catch((error) => {
+                logger.warn('Reminder done: could not close the RAID action', error as Error)
+            })
+        }
     })
 }
 

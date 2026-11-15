@@ -34,6 +34,8 @@ export const AI_EFFORT = {
     dayBrief: 'low',
     proposals: 'medium',
     raid: 'medium',
+    /** A memo's minutes: a fixed shape, and judging what was said in the meeting from the writer's asides. */
+    minutes: 'medium',
 } as const satisfies Record<string, 'low' | 'medium' | 'high'>
 
 let cached: Anthropic | null = null

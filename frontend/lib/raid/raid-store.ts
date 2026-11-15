@@ -14,9 +14,12 @@ import {
     RAID_TYPES,
     autoLineFor,
     hasPriority,
+    isActionOverdue,
     isAutoSource,
     liveStatusFor,
+    nextWeekStart,
     overviewSectionOf,
+    parseDueDate,
     parseSignalKey,
     parsePriority,
     priorityOf,
@@ -29,6 +32,7 @@ import {
     type RaidStatus,
     type RaidType,
 } from './raid-shared'
+import { syncActionReminder, type ActionReminderState } from './raid-action-reminders'
 
 /**
  * The RAID log in the database (.claude/plans/brio-features-round-2.md, §9): reading it for the tab
@@ -106,6 +110,8 @@ const ITEM_SELECT = {
     status: true,
     priority: true,
     prioritySetBy: true,
+    dueDate: true,
+    followUp: true,
     sourceKind: true,
     sourceRef: true,
     signalKey: true,
@@ -249,9 +255,12 @@ export async function loadRaidLog(engagementId: string): Promise<{ items: RaidIt
             sources: [sourceOf(r), ...extras],
             internalSource: r.internalSource,
             autoLine: isAutoSource(r.sourceKind as RaidSourceKind) ? autoLineFor(r.signalKey) : null,
-            overdue: parseSignalKey(r.signalKey)?.kind === 'overdue',
+            overdue: parseSignalKey(r.signalKey)?.kind === 'overdue'
+                || isActionOverdue({ type: r.type as RaidType, status: r.status as RaidStatus, dueDate: dayOf(r.dueDate) }),
             priority: priorityOf({ type: r.type as RaidType, priority: r.priority as RaidPriority | null }),
             prioritySetByPerson: !!r.prioritySetBy,
+            dueDate: r.type === 'ACTION' ? dayOf(r.dueDate) : null,
+            followUp: r.type === 'ACTION' ? r.followUp : null,
             attachedTo: target && target.status !== 'SUGGESTED' ? { id: target.id, type: target.type as RaidType, title: target.title } : null,
             raisedAt: r.raisedAt.toISOString(),
             closedAt: r.closedAt ? r.closedAt.toISOString() : null,
@@ -280,6 +289,55 @@ export function lastCheckedAtOf(settings: unknown): string | null {
 }
 
 // ── Writing ───────────────────────────────────────────────────────────────────────────────────
+
+/** A DATE column as YYYY-MM-DD, or null. */
+function dayOf(value: Date | null | undefined): string | null {
+    return value ? value.toISOString().slice(0, 10) : null
+}
+
+/** A YYYY-MM-DD day as the DATE column takes it. */
+function dateOf(day: string | null): Date | null {
+    return day ? new Date(`${day}T00:00:00Z`) : null
+}
+
+/** How far out a due date may be: two years, as Brio's dates are held to. */
+const DUE_DATE_MAX_YEARS = 2
+
+/**
+ * A due date from a request: YYYY-MM-DD, for an Action only, and not more than two years out. A past date
+ * is fine (an overdue Action can be edited). Undefined when the request didn't send one; null clears it.
+ */
+function checkedDueDate(type: RaidType, raw: unknown, now: Date = new Date()): string | null | undefined {
+    if (raw === undefined) return undefined
+    if (raw === null || raw === '') return null
+    if (type !== 'ACTION') throw userFacing('Only Actions have a due date.', 'invalid')
+    const day = parseDueDate(raw)
+    if (!day) throw userFacing('Choose a due date.', 'invalid')
+    const limit = new Date(now)
+    limit.setUTCFullYear(limit.getUTCFullYear() + DUE_DATE_MAX_YEARS)
+    if (day > limit.toISOString().slice(0, 10)) throw userFacing(`Choose a due date within ${DUE_DATE_MAX_YEARS} years.`, 'invalid')
+    return day
+}
+
+/**
+ * Who an Action is given to when no one is chosen: the person adding or accepting it, when they can own
+ * entries here (a Lead or a Contributor · Full Access). A firm admin who isn't on the engagement leaves it
+ * unowned, to give on the RAID tab.
+ */
+async function defaultOwner(engagementId: string, actor: RaidActor): Promise<string | null> {
+    const member = await prisma.engagementMember.findFirst({
+        where: { engagementId, userId: actor.userId, role: { in: [...RAID_OWNER_ROLES] } },
+        select: { userId: true },
+    })
+    return member ? actor.userId : null
+}
+
+/** The fields the reminder sync reads (lib/raid/raid-action-reminders.ts). */
+const REMINDER_SELECT = { id: true, type: true, status: true, ownerUserId: true, dueDate: true, title: true, firmId: true, engagementId: true } as const
+
+function reminderState(row: ActionReminderState): ActionReminderState {
+    return { id: row.id, type: row.type, status: row.status, ownerUserId: row.ownerUserId, dueDate: row.dueDate, title: row.title, firmId: row.firmId, engagementId: row.engagementId }
+}
 
 function cleanTitle(raw: unknown): string {
     const title = typeof raw === 'string' ? raw.replace(/\s+/g, ' ').trim() : ''
@@ -320,9 +378,10 @@ function checkedPriority(type: RaidType, raw: unknown): RaidPriority | undefined
     return priority
 }
 
+/** One of the four a person chooses from. An Assumption is never created now, only read. */
 function checkedType(raw: unknown): RaidType {
     if (typeof raw === 'string' && (RAID_TYPES as readonly string[]).includes(raw)) return raw as RaidType
-    throw userFacing('Choose Risk, Assumption, Issue or Decision.', 'invalid')
+    throw userFacing('Choose Risk, Action, Issue or Decision.', 'invalid')
 }
 
 async function findItem(engagementId: string, itemId: unknown) {
@@ -332,7 +391,10 @@ async function findItem(engagementId: string, itemId: unknown) {
     return row
 }
 
-/** A person's entry: Open, or Recorded for a decision. */
+/**
+ * A person's entry: Open, or Recorded for a decision. An Action is the adder's unless they give it to
+ * someone else, and is due the start of next week unless they chose a day.
+ */
 export async function addRaidItem(params: {
     engagementId: string
     firmId: string
@@ -342,13 +404,18 @@ export async function addRaidItem(params: {
     notes?: unknown
     ownerUserId?: unknown
     priority?: unknown
+    dueDate?: unknown
 }): Promise<{ id: string }> {
     const type = checkedType(params.type)
     const title = cleanTitle(params.title)
     const notes = cleanNotes(params.notes)
-    const ownerUserId = params.ownerUserId === undefined ? null : await checkedOwner(params.engagementId, params.ownerUserId)
+    const isAction = type === 'ACTION'
+    const ownerUserId = params.ownerUserId !== undefined
+        ? await checkedOwner(params.engagementId, params.ownerUserId)
+        : isAction ? await defaultOwner(params.engagementId, params.actor) : null
     // A Risk or an Issue a person adds is theirs to grade: Medium unless they chose otherwise.
     const priority = hasPriority(type) ? checkedPriority(type, params.priority) ?? 'MEDIUM' : null
+    const dueDate = checkedDueDate(type, params.dueDate)
     const row = await prisma.engagementRaidItem.create({
         data: {
             firmId: params.firmId,
@@ -360,15 +427,17 @@ export async function addRaidItem(params: {
             status: liveStatusFor(type),
             priority,
             prioritySetBy: priority ? params.actor.userId : null,
+            dueDate: isAction ? dateOf(dueDate ?? nextWeekStart()) : null,
             sourceKind: 'MANUAL',
             internalSource: false,
             raisedAt: new Date(),
             createdBy: params.actor.userId,
             updatedBy: params.actor.userId,
         },
-        select: { id: true },
+        select: REMINDER_SELECT,
     })
-    return row
+    await syncActionReminder(null, reminderState(row))
+    return { id: row.id }
 }
 
 /**
@@ -376,13 +445,26 @@ export async function addRaidItem(params: {
  * priority or the one the person chose on the card. One that adds to an entry merges into that entry's
  * sources instead, and the suggestion row goes. If that entry has since gone, the suggestion joins the
  * log on its own.
+ *
+ * On a memo the person may change its type, title, due date or priority before accepting
+ * (.claude/plans/raid-actions-memo-minutes.md). An accepted Action is the accepter's until it's given to
+ * someone else on the RAID tab, and is due the day Brio read, or the start of next week.
  */
-export async function acceptRaidSuggestion(engagementId: string, actor: RaidActor, itemId: unknown, options: { priority?: unknown; title?: unknown } = {}): Promise<{ id: string; mergedInto: string | null }> {
+export async function acceptRaidSuggestion(
+    engagementId: string,
+    actor: RaidActor,
+    itemId: unknown,
+    options: { priority?: unknown; title?: unknown; type?: unknown; dueDate?: unknown } = {},
+): Promise<{ id: string; mergedInto: string | null }> {
     const item = await findItem(engagementId, itemId)
     if (item.status !== 'SUGGESTED') throw userFacing('This suggestion was already accepted or dismissed. Refresh the log.', 'conflict')
-    const chosen = checkedPriority(item.type as RaidType, options.priority)
+    const type = options.type === undefined ? item.type as RaidType : checkedType(options.type)
+    const retyped = type !== item.type
+    const chosen = checkedPriority(type, options.priority)
     // The title as the person edited it on the card, if they did.
     const title = options.title === undefined ? null : cleanTitle(options.title)
+    const isAction = type === 'ACTION'
+    const chosenDue = checkedDueDate(type, options.dueDate)
 
     const target = item.attachedToId
         ? await prisma.engagementRaidItem.findFirst({ where: { id: item.attachedToId, engagementId, status: { in: ['OPEN', 'RECORDED', 'CLOSED'] } } })
@@ -410,17 +492,27 @@ export async function acceptRaidSuggestion(engagementId: string, actor: RaidActo
         return { id: target.id, mergedInto: target.id }
     }
 
-    await prisma.engagementRaidItem.update({
+    // A Risk or an Issue keeps Brio's grade unless the person picked one; one made a Risk or an Issue on
+    // the card starts at Medium. Anything else has none.
+    const priority = !hasPriority(type) ? null : chosen ?? (item.priority as RaidPriority | null) ?? 'MEDIUM'
+    const updated = await prisma.engagementRaidItem.update({
         where: { id: item.id },
         data: {
-            status: liveStatusFor(item.type as RaidType),
+            type,
+            status: liveStatusFor(type),
             attachedToId: null,
             updatedBy: actor.userId,
             ...(title && title !== item.title ? { title } : {}),
-            // Brio's grade stays Brio's; one the person picked on the card is theirs.
-            ...(chosen && chosen !== item.priority ? { priority: chosen, prioritySetBy: actor.userId } : {}),
+            priority,
+            // Brio's grade stays Brio's; one the person picked on the card, or one they made by retyping, is theirs.
+            prioritySetBy: !priority ? null : (chosen && chosen !== item.priority) || retyped ? actor.userId : item.prioritySetBy,
+            dueDate: isAction ? dateOf(chosenDue ?? dayOf(item.dueDate) ?? nextWeekStart()) : null,
+            followUp: isAction ? item.followUp : null,
+            ownerUserId: isAction ? item.ownerUserId ?? await defaultOwner(engagementId, actor) : item.ownerUserId,
         },
+        select: REMINDER_SELECT,
     })
+    await syncActionReminder(null, reminderState(updated))
     return { id: item.id, mergedInto: null }
 }
 
@@ -436,7 +528,12 @@ export async function dismissRaidSuggestion(engagementId: string, actor: RaidAct
  * an Issue), and the title of an entry a person or Brio wrote. The sync's entries take their titles from
  * the engagement's data, and their priority from its grade until a person sets one here.
  */
-export async function editRaidItem(engagementId: string, actor: RaidActor, itemId: unknown, patch: { title?: unknown; notes?: unknown; ownerUserId?: unknown; priority?: unknown }): Promise<void> {
+export async function editRaidItem(
+    engagementId: string,
+    actor: RaidActor,
+    itemId: unknown,
+    patch: { title?: unknown; notes?: unknown; ownerUserId?: unknown; priority?: unknown; dueDate?: unknown },
+): Promise<void> {
     const item = await findItem(engagementId, itemId)
     if (item.status === 'SUGGESTED' || item.status === 'DISMISSED') throw userFacing('Accept the suggestion first, then edit it.', 'conflict')
 
@@ -454,17 +551,26 @@ export async function editRaidItem(engagementId: string, actor: RaidActor, itemI
         data.priority = priority
         data.prioritySetBy = actor.userId
     }
-    await prisma.engagementRaidItem.update({ where: { id: item.id }, data })
+    const dueDate = checkedDueDate(item.type as RaidType, patch.dueDate)
+    if (dueDate !== undefined) data.dueDate = dateOf(dueDate)
+    const updated = await prisma.engagementRaidItem.update({ where: { id: item.id }, data, select: REMINDER_SELECT })
+    await syncActionReminder(reminderState(item), reminderState(updated))
 }
 
-/** Closes an entry. A person's close is final while its signal lasts: the sync won't reopen it. */
+/**
+ * Closes an entry: a closed Action reads "Done". A person's close is final while its signal lasts: the
+ * sync won't reopen it.
+ */
 export async function closeRaidItem(engagementId: string, actor: RaidActor, itemId: unknown, now: Date = new Date()): Promise<void> {
     const item = await findItem(engagementId, itemId)
     if (item.status !== 'OPEN' && item.status !== 'RECORDED') throw userFacing('Only an open entry or a recorded decision can be closed.', 'conflict')
-    await prisma.engagementRaidItem.update({
+    const verb = item.type === 'ACTION' ? 'Done' : 'Closed'
+    const updated = await prisma.engagementRaidItem.update({
         where: { id: item.id },
-        data: { status: 'CLOSED', closedAt: now, closedBy: actor.userId, closedReason: `Closed by ${actor.firstName} · ${shortDay(now)}`, updatedBy: actor.userId },
+        data: { status: 'CLOSED', closedAt: now, closedBy: actor.userId, closedReason: `${verb} by ${actor.firstName} · ${shortDay(now)}`, updatedBy: actor.userId },
+        select: REMINDER_SELECT,
     })
+    await syncActionReminder(reminderState(item), reminderState(updated))
 }
 
 /**
@@ -477,8 +583,10 @@ export async function reopenRaidItem(engagementId: string, actor: RaidActor, ite
     if (isAutoSource(item.sourceKind as RaidSourceKind) && !item.closedBy) {
         throw userFacing('This entry closed itself when the engagement changed. It opens again on its own if that changes back.', 'conflict')
     }
-    await prisma.engagementRaidItem.update({
+    const updated = await prisma.engagementRaidItem.update({
         where: { id: item.id },
         data: { status: liveStatusFor(item.type as RaidType), closedAt: null, closedBy: null, closedReason: null, updatedBy: actor.userId },
+        select: REMINDER_SELECT,
     })
+    await syncActionReminder(reminderState(item), reminderState(updated))
 }

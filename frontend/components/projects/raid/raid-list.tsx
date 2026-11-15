@@ -85,7 +85,7 @@ const ROW_GRID = {
     },
 } as const
 
-export function RaidRow({ type, priority, title, context, place, owner, day, href, testId }: {
+export function RaidRow({ type, priority, title, context, place, owner, day, dayLabel = 'Raised', late = false, href, testId }: {
     type: RaidType
     /** Shown in a column of its own when given: the bars and the word, a dash for none. */
     priority?: RaidPriority | null
@@ -96,8 +96,12 @@ export function RaidRow({ type, priority, title, context, place, owner, day, hre
     place?: ReactNode
     /** The owner's first name; none says "No owner". */
     owner: string | null | undefined
-    /** When it was raised: "Nov 12". */
+    /** When it was raised: "Nov 12". An Action shows when it's due instead ("Fri, Mar 6"). */
     day: string
+    /** What the day is, on hover: "Raised", or "Due" for an Action. */
+    dayLabel?: string
+    /** An Action past its due date: the day in the danger tone. */
+    late?: boolean
     href: string
     testId?: string
 }) {
@@ -132,7 +136,7 @@ export function RaidRow({ type, priority, title, context, place, owner, day, hre
                         <UserRound className={icon} aria-hidden />
                         <span className="truncate">{owner ?? 'No owner'}</span>
                     </span>
-                    <span className="flex min-w-0 items-center gap-1" title="Raised">
+                    <span className={cn('flex min-w-0 items-center gap-1', late && 'font-medium text-danger')} title={dayLabel}>
                         <CalendarDays className={icon} aria-hidden />
                         <span className="truncate">{day}</span>
                     </span>
