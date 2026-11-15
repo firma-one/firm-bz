@@ -18,6 +18,8 @@ import {
     readStatusUpdates,
     type ChangeLine,
 } from '@/lib/ai/status-update'
+import { loadNudgeStatuses } from '@/lib/ai/nudge-status'
+import type { NudgeStatus } from '@/lib/ai/nudge-draft'
 
 /**
  * The client status update (.claude/plans/brio-features-round-2.md, §3.1): what the composer shows,
@@ -175,6 +177,18 @@ export async function getNudgeRecipients(
     return asResult('getNudgeRecipients', async () => {
         await requireLead(engagementId)
         return clientSideRecipients(engagementId)
+    })
+}
+
+/**
+ * The last nudge on each deliverable waiting in review, and what came of it, for Waiting on
+ * Reviewers. Leads only; reads this engagement's comments only, whatever ids are passed.
+ */
+export async function getNudgeStatuses(engagementId: string, deliverableIds: string[]): Promise<ActionResult<NudgeStatus[]>> {
+    return asResult('getNudgeStatuses', async () => {
+        await requireLead(engagementId)
+        const ids = Array.isArray(deliverableIds) ? deliverableIds.filter((id): id is string => typeof id === 'string').slice(0, 200) : []
+        return loadNudgeStatuses(engagementId, ids)
     })
 }
 

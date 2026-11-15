@@ -19,7 +19,9 @@ vi.mock('@/utils/supabase/server', () => ({
     createClient: async () => ({ auth: { getUser: async () => ({ data: { user: session.user }, error: null }) } }),
 }))
 vi.mock('@/lib/prisma', () => ({ prisma }))
-vi.mock('@/lib/logger', () => ({ logger: { error: vi.fn() } }))
+vi.mock('@/lib/logger', () => ({ logger: { error: vi.fn(), warn: vi.fn() } }))
+const nudgeStatus = vi.hoisted(() => ({ recordCommentReminderDone: vi.fn(async () => {}) }))
+vi.mock('@/lib/ai/nudge-status', () => nudgeStatus)
 vi.mock('@/lib/inngest/client', () => ({ safeInngestSend: vi.fn() }))
 vi.mock('@/lib/reminders/reminder-store', () => store)
 vi.mock('@/lib/reminders/reminder-service', () => ({ computeDueReminders: vi.fn(), upsertFollowUpReminder: vi.fn() }))
@@ -47,6 +49,29 @@ describe('markReminderDone', () => {
         expect(store.saveReminderItems).toHaveBeenCalledWith('u-session', [other])
         expect(prisma.engagement.update).not.toHaveBeenCalled()
         expect(prisma.client.update).not.toHaveBeenCalled()
+    })
+})
+
+describe('markReminderDone on a comment\'s reminder', () => {
+    const comment = { ...due, id: 'r-comment', entityKey: 'platform.doc_comments', entityValue: 'm1', action: 'Review comment', dateKey: null, dateValue: null }
+
+    it('records that it was ticked off, so a nudge shows as acknowledged', async () => {
+        store.loadReminderItems.mockResolvedValue([comment, other])
+        expect(await markReminderDone('r-comment')).toEqual({ ok: true, data: undefined })
+        expect(store.saveReminderItems).toHaveBeenCalledWith('u-session', [other])
+        expect(nudgeStatus.recordCommentReminderDone).toHaveBeenCalledWith('u-session', 'm1')
+    })
+
+    it('records nothing for other reminders', async () => {
+        await markReminderDone('r-due')
+        expect(nudgeStatus.recordCommentReminderDone).not.toHaveBeenCalled()
+    })
+
+    it('still marks it done when the record fails', async () => {
+        store.loadReminderItems.mockResolvedValue([comment])
+        nudgeStatus.recordCommentReminderDone.mockRejectedValueOnce(new Error('relation does not exist'))
+        expect(await markReminderDone('r-comment')).toEqual({ ok: true, data: undefined })
+        expect(store.saveReminderItems).toHaveBeenCalledWith('u-session', [])
     })
 })
 

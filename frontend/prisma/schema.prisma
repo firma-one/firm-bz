@@ -993,6 +993,21 @@ model DocCommentRead {
   @@schema("platform")
 }
 
+/// A comment's reminder ticked off by the person it reminded (their Inbox's Done), and when. The
+/// reminder itself is removed from their list, so this is what remains of it: Waiting on Reviewers
+/// reads it to know a nudge was acknowledged (.claude/plans/brio-features-round-2.md, §3.7).
+model DocCommentReminderDone {
+  messageId    String   @db.Uuid
+  userId       String   @db.Uuid
+  engagementId String   @db.Uuid
+  doneAt       DateTime @default(now()) @db.Timestamptz(6)
+
+  @@id([messageId, userId])
+  @@index([engagementId])
+  @@map("doc_comment_reminder_done")
+  @@schema("platform")
+}
+
 /// What a RAID log entry is (.claude/plans/brio-features-round-2.md, section 9).
 enum RaidItemType {
   RISK

@@ -158,6 +158,14 @@ Pricing copy changes with it: the "Credits included" tooltip in `config/pricing.
 - **Pairs with (non-AI):** a reason field when a deliverable moves back from in review ("requested
   changes"), which today sends fixed text. Optional in this round.
 - **Route:** `POST /api/projects/[projectId]/documents/[documentId]/ai-nudge-draft`.
+- **After a nudge (2026-11-15, Deepak's call):** the row stays (the deliverable is still waiting) and
+  says "Nudged Dana today" in place of the button, from the moment it is sent. With no response after
+  3 days (`NUDGE_AGAIN_DAYS`), "Nudge again" comes back beside it. A reply from them on the deliverable
+  ("Dana replied today", linking the discussion) or the nudge ticked off in their Inbox ("Dana marked
+  the nudge done") stops further nudges while it stays in review; opening the discussion alone doesn't
+  count. A nudge is any comment reminding one of the engagement's Reviewers or Limited Access
+  contributors, so earlier ones count. Done is recorded in `doc_comment_reminder_done`, since the
+  reminder itself is removed (`lib/ai/nudge-status.ts`).
 
 ## 4. Order of work after the mock is approved
 

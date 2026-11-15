@@ -146,6 +146,15 @@ async function markReminderDoneOrThrow(reminderId: string): Promise<void> {
 
         // Remove node from array
         await saveItems(userId, items.filter((r) => r.id !== reminderId))
+
+        // A comment's reminder leaves a note that it was ticked off, so a nudge can show it was
+        // acknowledged (lib/ai/nudge-status.ts). Never blocks the Done itself.
+        if (item.entityKey === 'platform.doc_comments') {
+            const { recordCommentReminderDone } = await import('@/lib/ai/nudge-status')
+            await recordCommentReminderDone(userId, item.entityValue).catch((error) => {
+                logger.warn('Reminder done: could not record it on the comment', error as Error)
+            })
+        }
     })
 }
 

@@ -10,7 +10,65 @@ import type { DeliverableProgress } from '@/lib/insights/engagement-insights'
 /** How long a deliverable sits in review before a nudge is offered. */
 export const NUDGE_MIN_DAYS = 5
 
+/** How long after a nudge, with no response, another is offered. */
+export const NUDGE_AGAIN_DAYS = 3
+
 const DAY_MS = 86_400_000
+
+/**
+ * The last nudge on a deliverable and what came of it (lib/ai/nudge-status.ts). A nudge is a comment
+ * on the deliverable that reminds a Reviewer or Limited Access contributor; they responded when they
+ * replied on it afterwards, or ticked its reminder off in their Inbox.
+ */
+export interface NudgeStatus {
+    deliverableId: string
+    nudgedAt: string
+    recipientId: string
+    recipientName: string
+    /** Their first comment on the deliverable after the nudge. */
+    repliedAt: string | null
+    /** When they ticked the nudge's reminder off. */
+    doneAt: string | null
+}
+
+/**
+ * What a Waiting on Reviewers row offers, given its last nudge:
+ * - due: never nudged; Draft a nudge.
+ * - nudged: nudged under NUDGE_AGAIN_DAYS ago with no response; says so, nothing to press.
+ * - again: nudged NUDGE_AGAIN_DAYS or more ago with no response; Nudge again.
+ * - replied / done: they responded; says how, and no more nudges while it stays in review.
+ */
+export type NudgeRowState =
+    | { kind: 'due' }
+    | { kind: 'nudged' | 'again'; at: string; name: string }
+    | { kind: 'replied' | 'done'; at: string; name: string }
+
+export function nudgeRowState(status: NudgeStatus | undefined, now: Date = new Date()): NudgeRowState {
+    if (!status) return { kind: 'due' }
+    const name = firstName(status.recipientName)
+    if (status.repliedAt) return { kind: 'replied', at: status.repliedAt, name }
+    if (status.doneAt) return { kind: 'done', at: status.doneAt, name }
+    const days = calendarDaysBetween(new Date(status.nudgedAt), now)
+    return { kind: days >= NUDGE_AGAIN_DAYS ? 'again' : 'nudged', at: status.nudgedAt, name }
+}
+
+/** "today", "yesterday", "3 days ago": calendar days in the viewer's own time zone. */
+export function daysAgoWords(iso: string, now: Date = new Date()): string {
+    const days = calendarDaysBetween(new Date(iso), now)
+    if (days <= 0) return 'today'
+    if (days === 1) return 'yesterday'
+    return `${days} days ago`
+}
+
+function calendarDaysBetween(from: Date, to: Date): number {
+    const a = new Date(from.getFullYear(), from.getMonth(), from.getDate()).getTime()
+    const b = new Date(to.getFullYear(), to.getMonth(), to.getDate()).getTime()
+    return Math.round((b - a) / DAY_MS)
+}
+
+function firstName(name: string): string {
+    return name.trim().split(/\s+/)[0] || name
+}
 
 export interface NudgeCandidate {
     deliverableId: string
