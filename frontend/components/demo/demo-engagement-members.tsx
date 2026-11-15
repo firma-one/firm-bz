@@ -6,6 +6,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
 import { Tag } from '@/components/ui/tag'
+import { InternalMemberTag } from '@/components/ui/internal-only-tag'
 import { StatusPill } from '@/components/ui/status-pill'
 import { Hint } from '@/components/ui/tooltip'
 import {
@@ -25,11 +26,21 @@ interface DemoEngagementMember {
     addedDaysAgo: number
 }
 
+/** A role that sees Internal only items, with the Internal badge after it, as member-list.tsx draws it. */
+function Internal({ children }: { children: ReactNode }) {
+    return (
+        <span className="flex items-center gap-1.5">
+            {children}
+            <InternalMemberTag />
+        </span>
+    )
+}
+
 /** The app's engagement roles, tagged as member-list.tsx tags them. */
 const DEMO_ENGAGEMENT_MEMBERS: DemoEngagementMember[] = [
-    { name: 'Alex Jordan', email: 'alex@beacongrowth.com', role: <Tag color="purple">Lead</Tag>, addedDaysAgo: 88 },
-    { name: 'Sam Rivera', email: 'sam@beacongrowth.com', role: <Tag color="gray">Contributor · Full Access</Tag>, addedDaysAgo: 85 },
-    { name: 'Jordan Lee', email: 'jordan@beacongrowth.com', role: <Tag color="gray">Contributor · Full Access</Tag>, addedDaysAgo: 60 },
+    { name: 'Alex Jordan', email: 'alex@beacongrowth.com', role: <Internal><Tag color="purple">Lead</Tag></Internal>, addedDaysAgo: 88 },
+    { name: 'Sam Rivera', email: 'sam@beacongrowth.com', role: <Internal><Tag color="gray">Contributor · Full Access</Tag></Internal>, addedDaysAgo: 85 },
+    { name: 'Jordan Lee', email: 'jordan@beacongrowth.com', role: <Internal><Tag color="gray">Contributor · Full Access</Tag></Internal>, addedDaysAgo: 60 },
     { name: 'Morgan Ellis', email: 'morgan@client-example.com', role: <Tag color="blue">Reviewer</Tag>, addedDaysAgo: 41 },
 ]
 

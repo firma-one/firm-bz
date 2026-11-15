@@ -29,6 +29,21 @@ function groupOf(text: string) {
 }
 
 describe('MemberList', () => {
+    it('marks the people who see Internal only items, Leads and Full Access, and no one else', () => {
+        const all = [
+            ...members,
+            { id: 'm3', role: 'eng_member', createdAt: '2026-09-03', user: { name: 'Kim Park', email: 'kim@acme.test', avatarUrl: null } },
+        ]
+        render(<MemberList members={all} invitations={invitations} personas={personas} onRefresh={() => {}} />)
+        const row = (text: string) => screen.getByText(text).closest('tr') as HTMLElement
+        expect(within(row('Pat Lee')).getByText('Internal')).toBeTruthy()
+        expect(within(row('Kim Park')).getByText('Internal')).toBeTruthy()
+        expect(within(row('Sam Roy')).queryByText('Internal')).toBeNull()
+        expect(within(row('new@client.test')).queryByText('Internal')).toBeNull()
+        // The same lock as the Internal only badge.
+        expect(row('Pat Lee').querySelector('svg.lucide-lock')).not.toBeNull()
+    })
+
     it('groups people and invitations under their role', () => {
         render(<MemberList members={members} invitations={invitations} personas={personas} onRefresh={() => {}} />)
         // The first row of each group is its header.

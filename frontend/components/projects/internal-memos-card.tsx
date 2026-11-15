@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { AlertCircle, Check, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Tag } from '@/components/ui/tag'
+import { InternalOnlyTag } from '@/components/ui/internal-only-tag'
 import { useToast } from '@/components/ui/toast'
 import {
     FindActionsButton,
@@ -116,7 +116,7 @@ export function InternalMemosView({
                 <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                         <h2 id={headingId} className="text-ui font-semibold text-fg">Internal memos</h2>
-                        <Tag color="gray">Internal only</Tag>
+                        <InternalOnlyTag />
                     </div>
                     <p className="mt-0.5 text-small text-fg-muted">
                         Call and meeting notes, one file each in “Internal Memos” in {storagePhrase}. Only Leads and Full Access contributors see them.

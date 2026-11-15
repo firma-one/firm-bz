@@ -7,7 +7,7 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { Tag } from '@/components/ui/tag'
+import { InternalOnlyTag } from '@/components/ui/internal-only-tag'
 import { Checkbox } from '@/components/ui/checkbox'
 import { failureReason } from '@/lib/files/action-failure'
 import { parseVtt } from '@/lib/memos/vtt'
@@ -275,7 +275,7 @@ export function AddMemoSheet({
                 <div className="flex flex-col gap-1 border-b border-line px-4 pb-3 pt-4">
                     <div className="flex items-center gap-2">
                         <SheetTitle className="text-h3 text-fg">{edit ? 'Edit memo' : 'Add internal memo'}</SheetTitle>
-                        <Tag color="gray">Internal only</Tag>
+                        <InternalOnlyTag />
                     </div>
                     {edit ? (
                         <SheetDescription className="text-small text-fg-muted">

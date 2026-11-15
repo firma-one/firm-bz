@@ -7,7 +7,7 @@ import { RaidPriorityPicker } from './raid/raid-priority'
 import { RaidTypeBadge } from './raid/raid-tab'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Tag } from '@/components/ui/tag'
+import { InternalOnlyTag } from '@/components/ui/internal-only-tag'
 import { Brio } from '@/components/ui/brio'
 import { ThinkingDots } from '@/components/brio/brio-typing'
 import { Hint } from '@/components/ui/tooltip'
@@ -826,7 +826,7 @@ function MemoPane({
                 className="flex min-w-0 flex-[999_1_480px] flex-col border-t border-line sm:border-t-0 @[1040px]:min-h-0 @[1040px]:border-r"
             >
                 <div className="flex flex-none flex-wrap items-center gap-2 border-b border-line px-6 py-3">
-                    <Tag color="gray">Internal only</Tag>
+                    <InternalOnlyTag />
                     <span className="min-w-0 truncate text-small text-fg-muted" title={memo.fileName}>{memo.fileName}</span>
                     <span className="flex-1" />
                     {onEdit && !readOnly && (

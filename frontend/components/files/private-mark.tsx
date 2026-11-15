@@ -1,6 +1,6 @@
 'use client'
 
-import { FolderLock, Lock } from 'lucide-react'
+import { FolderLock, Lock, Folder } from 'lucide-react'
 import { Hint } from '@/components/ui/tooltip'
 
 /**
@@ -41,6 +41,21 @@ export function InternalOnlyFolderIcon() {
         <Hint label="Internal only. Hidden from Limited Access contributors and Reviewers.">
             <span role="img" aria-label="Internal only folder" className="inline-flex shrink-0">
                 <FolderLock className="h-4 w-4 fill-surface-muted text-fg-muted" aria-hidden />
+            </span>
+        </Hint>
+    )
+}
+
+/**
+ * A plain folder's icon in the Files table: one outside any deliverable, which only the firm sees.
+ * Not a lock (that marks the exception, a folder made Internal only inside a deliverable); the hint
+ * says it, in the badge's words.
+ */
+export function InternalFolderIcon() {
+    return (
+        <Hint label="Internal only">
+            <span role="img" aria-label="Internal folder" className="inline-flex shrink-0">
+                <Folder className="h-4 w-4 fill-surface-muted text-fg-muted" aria-hidden />
             </span>
         </Hint>
     )

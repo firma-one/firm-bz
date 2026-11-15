@@ -3,7 +3,6 @@
 import { failureFrom, failureReason } from '@/lib/files/action-failure'
 import React from 'react'
 import {
-    Folder,
     Share2,
     Lock,
     Link2,
@@ -31,7 +30,7 @@ import type { EngagementRoleSlug } from '@/lib/deliverable-stage-roles'
 import { FileAssigneeCell, FileDueDateCell, FileStatusCell } from '@/components/projects/file-property-cells'
 import { fileStage } from '@/lib/files/file-stage'
 import { BlockedTag } from '@/components/files/blocked-tag'
-import { InternalOnlyFolderIcon, PrivateMark } from '@/components/files/private-mark'
+import { InternalFolderIcon, InternalOnlyFolderIcon, PrivateMark } from '@/components/files/private-mark'
 import { MissingDueWarning } from '@/components/files/missing-due-warning'
 import { needsDueDate } from '@/lib/ui/due-date'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -426,7 +425,8 @@ function EngagementFileRowInner({
                 <div className="flex-shrink-0 w-4 h-4 flex items-center justify-center">
                     {/* A deliverable folder and the folders inside one wear folder-plus (inside ones a shade lighter);
                         documents keep their file-type icons; a folder that only contains a deliverable keeps the
-                        shared-folder mark; an internal only folder wears folder-lock */}
+                        shared-folder mark; an internal only folder wears folder-lock; any other folder is the firm's
+                        alone and says so on hover */}
                     {isFolder && file.isDeliverable ? (
                         <DeliverableIcon hint />
                     ) : isFolder && shownInternalOnly ? (
@@ -436,7 +436,8 @@ function EngagementFileRowInner({
                     ) : isFolder && showBadge ? (
                         <SharedFolderIcon fillLevel={1} tooltip="Contains a deliverable" />
                     ) : isFolder ? (
-                        <Folder className="h-4 w-4 fill-surface-muted text-fg-muted flex-shrink-0" />
+                        // Outside any deliverable: the firm's alone, as its hint says. No lock; that marks the exception.
+                        <InternalFolderIcon />
                     ) : (
                         <DocumentIcon mimeType={file.mimeType} className="h-4 w-4" />
                     )}

@@ -4,7 +4,7 @@
 
 import { useState } from 'react'
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet'
-import { Tag } from '@/components/ui/tag'
+import { InternalOnlyTag } from '@/components/ui/internal-only-tag'
 import { useToast } from '@/components/ui/toast'
 import { InternalMemosView } from '@/components/projects/internal-memos-card'
 import { AddMemoSheet, type AddMemoInput, type AddMemoOutcome } from '@/components/projects/add-memo-sheet'
@@ -52,7 +52,7 @@ export function DemoInternalMemos({ engagement, today }: { engagement: DemoEngag
                         <>
                             <div className="flex items-center gap-2 border-b border-line px-4 pb-3 pt-4">
                                 <SheetTitle className="min-w-0 truncate text-h3 text-fg">{opened.fileName}</SheetTitle>
-                                <Tag color="gray">Internal only</Tag>
+                                <InternalOnlyTag />
                             </div>
                             <SheetDescription className="sr-only">The memo as it reads in the engagement&apos;s Internal Memos folder.</SheetDescription>
                             <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">

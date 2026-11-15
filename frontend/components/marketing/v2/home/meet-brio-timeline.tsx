@@ -16,6 +16,7 @@
  * state.
  */
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { Lock } from 'lucide-react';
 import { Brio } from '@/components/ui/brio';
 import { FILES_AGENT_PUBLIC } from '../config';
 import type { DemoDates } from '../demo-dates';
@@ -241,7 +242,12 @@ function ActionsStory({ D, e, live }: { D: DemoDates; e: number; live: boolean }
     <>
       <CardHead title="3 action items" meta="Internal memo" />
       <span className="mk-brio-memo">
-        Call with Dana <span className="mk-brio-tag">Internal only</span>
+        Call with Dana{' '}
+        {/* With the lock the app's Internal only badge carries (components/ui/internal-only-tag.tsx). */}
+        <span className="mk-brio-tag mk-brio-tag--lock">
+          <Lock aria-hidden="true" />
+          Internal only
+        </span>
       </span>
       {rows.map((row, i) => (
         <span key={row.kind} className="mk-brio-row" style={rise(e >= 300 + i * 350)}>

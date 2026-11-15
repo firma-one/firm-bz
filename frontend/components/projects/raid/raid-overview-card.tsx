@@ -3,7 +3,7 @@
 import { useEffect, useId, useState } from 'react'
 import { AlertCircle, ArrowRight, ChevronRight } from 'lucide-react'
 import { Button, buttonVariants } from '@/components/ui/button'
-import { Tag } from '@/components/ui/tag'
+import { InternalOnlyTag } from '@/components/ui/internal-only-tag'
 import { failureFrom, failureReason } from '@/lib/files/action-failure'
 import {
     firstNameOf,
@@ -62,7 +62,7 @@ export function RaidOverviewView({ log, engagementBase, loadError, onRetry }: {
                 after={(
                     <>
                         <RaidInfo />
-                        <Tag color="gray">Internal only</Tag>
+                        <InternalOnlyTag />
                         {overview && (
                             <RaidCountLine
                                 parts={[
