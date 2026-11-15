@@ -31,7 +31,7 @@ import { EngagementCommentsTab } from './engagement-comments-tab'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { hasInternalDiscussions, parseDiscussionsSubTab, discussionsHref, DiscussionsBarPortal } from './discussions-switch'
 import { PERSONA_CAPABILITY_MAP } from '@/lib/permissions/persona-map'
-import { memoReviewOf, type MemoListItem, type MemoReviewPayload } from '@/lib/memos/memo-shared'
+import { anchorQuote, memoMatchText, memoReviewOf, type MemoListItem, type MemoReviewPayload } from '@/lib/memos/memo-shared'
 
 const MEMO: MemoListItem = {
     id: '11111111-1111-4111-8111-111111111111',
@@ -303,19 +303,27 @@ describe('Memos', () => {
 
     it('a memo added earlier shows its action items and RAID suggestions waiting, without a click (§13)', async () => {
         const stored = memoReviewOf({ proposals: [FOUND.proposals[0]] as never, skipped: [], dropped: 0 }, TEXT, 'auto')
-        waiting = { ...NOTHING_WAITING, review: stored, raid: [{ id: 'raid-1', type: 'RISK', title: 'The K-1s may arrive late', priority: 'MEDIUM' }] }
+        waiting = {
+            ...NOTHING_WAITING,
+            review: stored,
+            // Its line's place only, as stored: the pane fills the words in from the memo it read.
+            raid: [{ id: 'raid-1', type: 'RISK', title: 'The K-1s may arrive late', priority: 'MEDIUM', quoteAt: anchorQuote(memoMatchText(TEXT), 'We will send the K-1s by end of next week.') }],
+        }
         listing.memos = [{ ...MEMO, toReview: 2, reviewedAt: stored.at }, OLDER]
         await openMemos()
         expect(within(screen.getByTestId(`memo-row-${MEMO.id}`)).getByText('2 to review')).toBeTruthy()
 
         const actions = screen.getByRole('region', { name: 'Action items' })
         expect(await within(actions).findByText(/identified 1 action item/)).toBeTruthy()
-        // Its quote, filled in from the memo the pane read: only its place was stored.
-        expect(within(actions).getByText('“We will send the K-1s by end of next week.”')).toBeTruthy()
+        // Its quote, filled in from the memo the pane read: only its place was stored. The RAID suggestion
+        // below came from the same line, so it cites it too.
+        expect(within(actions).getAllByText('“We will send the K-1s by end of next week.”')).toHaveLength(2)
         expect(calls.some((c) => c.url.endsWith('/ai-notes-proposals'))).toBe(false)
 
         const raid = within(actions).getByRole('region', { name: 'RAID suggestions' })
         expect(within(raid).getByText('The K-1s may arrive late')).toBeTruthy()
+        // The line it came from, as an action item cites its own.
+        expect(within(raid).getByText('“We will send the K-1s by end of next week.”')).toBeTruthy()
         // Brio's priority, to keep or change before accepting; kept as it is, nothing more is sent.
         expect(within(raid).getByRole('combobox', { name: 'Priority of The K-1s may arrive late' }).textContent).toContain('Medium')
         fireEvent.click(within(raid).getByRole('button', { name: 'Accept' }))

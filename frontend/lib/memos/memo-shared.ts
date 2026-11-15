@@ -446,7 +446,8 @@ export interface MemoReview {
     bodyHash?: string
 }
 
-function anchorOf(raw: unknown): QuoteAnchor | null {
+/** A stored anchor read back, or null when it isn't one (an older row, or none). */
+export function anchorOf(raw: unknown): QuoteAnchor | null {
     const a = recordOf(raw)
     return typeof a.at === 'number' && typeof a.length === 'number' && typeof a.hash === 'string' && a.at >= 0 && a.length > 0
         ? { at: a.at, length: a.length, hash: a.hash }
@@ -602,6 +603,8 @@ export interface MemoRaidSuggestion {
     title: string
     /** Risks and Issues: Brio's priority, to keep or change before accepting. Null otherwise. */
     priority: 'HIGH' | 'MEDIUM' | 'LOW' | null
+    /** Where the line it came from sits in the memo, never its words: the pane fills them in. Null on older ones. */
+    quoteAt: QuoteAnchor | null
 }
 
 /** What GET …/memos/[documentId]/review answers: what waits on the memo, quotes still anchors. */

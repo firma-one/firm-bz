@@ -3,7 +3,7 @@ import { blockIfEngagementCompleted } from '@/lib/engagement-access'
 import { memoFailureResponse, memoRouteAccess } from '@/lib/memos/memo-access'
 import { MEMO_NOT_FOUND, dismissMemoReview, findMemo } from '@/lib/memos/memo-store'
 import { notesEngagementRef } from '@/lib/memos/memo-review'
-import { appliedStoredIds, appliedStoredOn, type MemoRaidSuggestion, type MemoReviewPayload } from '@/lib/memos/memo-shared'
+import { anchorOf, appliedStoredIds, appliedStoredOn, type MemoRaidSuggestion, type MemoReviewPayload } from '@/lib/memos/memo-shared'
 import { priorityOf, type RaidType } from '@/lib/raid/raid-shared'
 import { prisma } from '@/lib/prisma'
 
@@ -37,7 +37,7 @@ export async function GET(
             prisma.engagementRaidItem.findMany({
                 where: { engagementId: projectId, status: 'SUGGESTED', sourceKind: 'MEMO', sourceRef: found.id },
                 orderBy: { raisedAt: 'asc' },
-                select: { id: true, type: true, title: true, priority: true },
+                select: { id: true, type: true, title: true, priority: true, quoteAt: true },
             }),
         ])
         const data: MemoReviewPayload = {
@@ -52,6 +52,8 @@ export async function GET(
                 type: r.type as MemoRaidSuggestion['type'],
                 title: r.title,
                 priority: priorityOf({ type: r.type as RaidType, priority: r.priority }),
+                // Where its line sits in the memo, never the words: the pane shows them from the memo it has open.
+                quoteAt: anchorOf(r.quoteAt),
             })),
         }
         return NextResponse.json({ data }, { headers: { 'Cache-Control': 'private, no-store' } })

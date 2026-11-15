@@ -35,7 +35,9 @@ import {
     boldSpeakers,
     byNewestMemo,
     memoBodyHash,
+    memoMatchText,
     memoMetaLine,
+    quoteFromAnchor,
     resolveMemoReview,
     splitMemoMarkdown,
     type MemoListItem,
@@ -817,7 +819,7 @@ function MemoPane({
     const shown = found ?? waiting
     const shownKey = found ? `run-${round}` : `waiting-${waitingPayload?.review?.at ?? ''}`
     const raidItems = waitingPayload?.raid ?? []
-    const raidSection = raidItems.length > 0 ? <MemoRaidSuggestions items={raidItems} onAct={actRaid} /> : null
+    const raidSection = raidItems.length > 0 ? <MemoRaidSuggestions items={raidItems} memoText={memoText} onAct={actRaid} /> : null
 
     return (
         <>
@@ -960,10 +962,14 @@ function MemoPane({
  * A memo's RAID suggestions (§13), under its action items: each accepted into the RAID log or dismissed
  * here, through the log's own route. Nothing of the memo's text is kept with them.
  */
-function MemoRaidSuggestions({ items, onAct }: {
+function MemoRaidSuggestions({ items, memoText, onAct }: {
     items: MemoRaidSuggestion[]
+    /** The memo as the pane has it, to show each suggestion's line from (its place is all that's stored). */
+    memoText: string | null
     onAct: (item: MemoRaidSuggestion, action: 'accept' | 'dismiss', priority?: RaidPriority) => Promise<void>
 }) {
+    const matchText = memoText !== null ? memoMatchText(memoText) : null
+    const quoteOf = (item: MemoRaidSuggestion) => (matchText !== null ? quoteFromAnchor(matchText, item.quoteAt) : null)
     const [acting, setActing] = useState<string | null>(null)
     // A suggestion's priority as changed here, before it's accepted.
     const [chosen, setChosen] = useState<Record<string, RaidPriority>>({})
@@ -988,6 +994,12 @@ function MemoRaidSuggestions({ items, onAct }: {
                         <RaidTypeBadge type={item.type} />
                         <div className="min-w-0 flex-1">
                             <p className="text-small text-fg">{item.title}</p>
+                            {/* The line it came from, as an action item cites its own. */}
+                            {quoteOf(item) && (
+                                <p className="mt-1.5 border-l-2 border-line-strong pl-2 text-small italic text-fg-muted">
+                                    “{quoteOf(item)}”
+                                </p>
+                            )}
                             {item.priority && (
                                 <div className="mt-0.5 flex items-center gap-1.5 text-caption text-fg-muted">
                                     <span>Priority</span>

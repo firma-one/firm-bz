@@ -19,6 +19,7 @@ import {
     byNewestMemo,
     cleanMemoTitle,
     memoFileName,
+    anchorQuote,
     memoMarkdown,
     memoMatchText,
     memoReviewOf,
@@ -207,7 +208,11 @@ export function cannedMemos(engagement: DemoEngagement, now: Date): DemoMemo[] {
         ? {
             ...m,
             review: memoReviewOf(m.found(now), demoMemoText(m), 'auto', new Date(m.createdAt)),
-            raid: [{ id: 'tour-raid-weekly-1', type: 'RISK', title: 'The signed change order may hold up the launch', priority: 'MEDIUM' }],
+            // Its line's place in the memo, as the app stores it: the pane shows the words from the memo.
+            raid: [{
+                id: 'tour-raid-weekly-1', type: 'RISK', title: 'The signed change order may hold up the launch', priority: 'MEDIUM',
+                quoteAt: anchorQuote(memoMatchText(demoMemoText(m)), 'I need to chase the signed change order, still missing'),
+            }],
         }
         : m))
 }

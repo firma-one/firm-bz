@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { memoMatchText, quoteFromAnchor } from '@/lib/memos/memo-shared'
 
 /**
  * The RAID log's Brio check: what Brio is shown, what of its answer survives, what is saved (never a
@@ -366,6 +367,14 @@ describe('runMemoRaidCheck', () => {
         for (const line of MEMO_TEXT.split('\n').map((l) => l.replace(/^[#\- ]+/, '').trim()).filter((l) => l.length > 10)) {
             expect(stored).not.toContain(line)
         }
+    })
+
+    it("keeps where its line sits in the memo, so the memo's pane can cite it, and the place finds the line again", async () => {
+        h.create.mockResolvedValue(toolAnswer(ANSWER))
+        await runMemoRaidCheck({ engagementId: 'p1', firmId: 'f1', memo, now: NOW })
+        const anchor = savedRows()[0].quoteAt as { at: number; length: number; hash: string }
+        expect(anchor).toEqual({ at: expect.any(Number), length: expect.any(Number), hash: expect.any(String) })
+        expect(quoteFromAnchor(memoMatchText(MEMO_TEXT), anchor)).toBe('We can scope that separately.')
     })
 
     it('reads nothing for a completed engagement or an empty memo', async () => {

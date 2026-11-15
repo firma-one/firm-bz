@@ -11,6 +11,7 @@ import { RAID_PRIORITIES, RAID_TYPES, hasPriority, parsePriority, type RaidPrior
 import { extraSourcesOf, lastCheckedAtOf } from './raid-store'
 import { fingerprintConversation, loadConversationStamps } from './raid-fingerprint'
 import { vaultForEngagement } from '@/lib/ai/known-entities'
+import { anchorQuote, memoMatchText, type QuoteAnchor } from '@/lib/memos/memo-shared'
 
 /**
  * The RAID log's Brio check (.claude/plans/brio-features-round-2.md, §9): once a day for an engagement
@@ -107,6 +108,8 @@ export interface RaidSuggestion {
     sourceRef: string
     /** Verbatim from that source. Saved for a thread only. */
     quote: string
+    /** A memo source: where the quote sits in the memo (never its words), for the memo's pane to show it. */
+    quoteAt: QuoteAnchor | null
     /** The log entry it adds to. */
     attachToItemId: string | null
     internal: boolean
@@ -324,6 +327,7 @@ export function validateRaidSuggestions(
             sourceKind: message ? 'THREAD' : 'MEMO',
             sourceRef: source.id,
             quote,
+            quoteAt: memo ? anchorQuote(memoMatchText(memo.text), quote) : null,
             attachToItemId: attachTo?.id ?? null,
             internal: message ? message.internal : true,
             raisedAt: message ? message.createdAt : new Date(`${memo!.date}T00:00:00Z`),
@@ -350,6 +354,8 @@ export function suggestionRows(params: { engagementId: string; firmId: string; u
         signalKey: null,
         internalSource: s.internal,
         quote: s.sourceKind === 'THREAD' ? s.quote : null,
+        // A memo's words are never kept here; only where the line sits, for the memo's pane.
+        ...(s.sourceKind === 'MEMO' && s.quoteAt ? { quoteAt: { ...s.quoteAt } } : {}),
         attachedToId: s.attachToItemId,
         priority: s.priority,
         raisedAt: s.raisedAt,

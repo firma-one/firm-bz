@@ -1097,6 +1097,10 @@ model EngagementRaidItem {
   internalSource Boolean        @default(false)
   /// The comment's words, for THREAD sources only. Never set for a MEMO source.
   quote          String?
+  /// MEMO sources only: where Brio's quote sits in the memo, never its words ({ at, length, hash },
+  /// lib/memos/memo-shared.ts QuoteAnchor). The memo's own pane fills the words in from the memo it
+  /// has open, as it does for action items, and shows nothing once the memo no longer says it there.
+  quoteAt        Json?
   /// Sources merged in when a suggestion was accepted onto this entry:
   /// [{ kind: 'THREAD' | 'MEMO', ref, quote? (THREAD only), internal, at }].
   extraSources   Json           @default("[]")
