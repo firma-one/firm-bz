@@ -53,7 +53,6 @@ import { useSecureOpenDocument } from '@/lib/use-secure-open-document'
 import { logger } from '@/lib/logger'
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
 import { splitFolderOrdinal } from '@/lib/display-names'
-import { DocumentDocCommentsPane } from '@/components/projects/document-doc-comments-pane'
 import { LocatedDocumentPreview } from './pane-preview'
 import { folderPathLabels } from '@/lib/files/engagement-root'
 import { formatDistanceToNow } from 'date-fns'
@@ -997,7 +996,7 @@ function SharesListView({
                           <MessagesSquare className="h-4 w-4" />
                         </button>
                       </TooltipTrigger>
-                      <TooltipContent side="top" className="text-xs">Comments</TooltipContent>
+                      <TooltipContent side="top" className="text-xs">Discussions</TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
                 )}
@@ -1340,7 +1339,7 @@ function ShareCard({
                       <MessagesSquare className="h-4 w-4" />
                     </button>
                   </TooltipTrigger>
-                  <TooltipContent side="top" className="text-xs">Comments</TooltipContent>
+                  <TooltipContent side="top" className="text-xs">Discussions</TooltipContent>
                 </Tooltip>
               </TooltipProvider>
             )}
@@ -2088,22 +2087,10 @@ export function EngagementSharesTab({
 
   const detailShare = detailShareId ? shares.find((s) => s.id === detailShareId) : null
 
+  // A card's comment button opens the deliverable's own Details on its Comments tab, the one comments pane.
   const handleOpenComments = useCallback(
-    (share: ShareRecord) => {
-      rightPane.setTitle('Comments')
-      rightPane.setHeaderSubtitle(share.documentName)
-      rightPane.setHeaderIcon(<MessagesSquare className="h-4 w-4" />)
-      rightPane.setContent(
-        <DocumentDocCommentsPane
-          engagementId={share.projectId}
-          documentId={share.documentId}
-          documentName={share.documentName}
-          documentMimeType={share.documentMimeType ?? undefined}
-          orgSlug={orgSlug}
-        />
-      )
-    },
-    [rightPane]
+    (share: ShareRecord) => handleOpenDeliverableDetail(share, 'comments'),
+    [handleOpenDeliverableDetail]
   )
 
   const handleOpenPreview = useCallback(

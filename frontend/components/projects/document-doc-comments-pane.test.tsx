@@ -10,6 +10,10 @@ vi.mock('@/lib/right-pane-context', () => ({
 }))
 vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ addToast: vi.fn() }) }))
 
+vi.mock('@/components/files/document-preview-pane', () => ({
+    DocumentPreviewPane: ({ document }: { document: { id: string; name: string } }) => <div data-testid="preview">{document.id}</div>,
+}))
+
 import { DocumentDocCommentsPane } from './document-doc-comments-pane'
 
 const MEMBERS = [
@@ -25,6 +29,8 @@ let existing: any[] = []
 let readOnly = false
 /** messageId → its reminder records, as the reminders endpoint returns them. */
 let reminders: Record<string, { userId: string; reminderId: string; dateValue: string | null }[]> = {}
+/** What the subtasks route answers (the pane loads a deliverable's documents itself); null = a plain file. */
+let subtasksAnswer: { status: number; body: unknown } | null = null
 
 beforeEach(() => {
     posted = []
@@ -32,6 +38,7 @@ beforeEach(() => {
     existing = []
     readOnly = false
     reminders = {}
+    subtasksAnswer = null
     vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => { cb(0); return 0 })
     // jsdom has no scrolling.
     Element.prototype.scrollIntoView = vi.fn()
@@ -45,6 +52,11 @@ beforeEach(() => {
         }
         if (method !== 'GET') posted.push({ method, body })
         if (url.includes('/members')) return json({ members: MEMBERS })
+        if (url.includes('/subtasks')) {
+            if (!subtasksAnswer) return json({ subtasks: [] })
+            const { status, body } = subtasksAnswer
+            return { ok: status < 400, status, json: async () => body } as Response
+        }
         if (url.includes('filter=mentions')) return json({ mentions: [] })
         if (url.includes('/reminders')) return json({ reminders: reminders[new URL(url, 'http://x').searchParams.get('messageId') ?? ''] ?? [] })
         if (method === 'POST') return json({ message: { id: 'm-new', createdAt: new Date().toISOString(), authorUserId: 'me', authorEmail: 'me@firm.com', content: body.content } })
@@ -295,5 +307,61 @@ describe('DocumentDocCommentsPane — document tags', () => {
         type(box, 'issue #4')
         expect(screen.queryByRole('listbox', { name: 'Tag a document' })).toBeNull()
         expect(screen.queryByRole('button', { name: 'Tag a document' })).toBeNull()
+    })
+})
+
+/**
+ * The Files comments pane, its #doc-comment: deep link and the Shares tab open the pane with no
+ * documents passed in. "#" offered nothing there in production (2026-11-17): the pane now loads the
+ * deliverable's documents itself, and a chip opens the document over the thread.
+ */
+describe('DocumentDocCommentsPane — tags where the host passes no documents', () => {
+    const SUBTASKS = [
+        { documentId: 'doc-a', docId: 'FRM-217', fileName: 'Final creatives.pdf', mimeType: 'application/pdf', breadcrumb: ['General', 'Deliverables Neha'] },
+        { documentId: 'doc-b', docId: 'FRM-233', fileName: 'Founder post.docx', mimeType: null, breadcrumb: [] },
+    ]
+    const deliverable = { documentId: 'd1', fileName: 'Deliverables Neha' }
+
+    it('loads the deliverable’s documents and lists them at "#FRM-"', async () => {
+        subtasksAnswer = { status: 200, body: { subtasks: SUBTASKS, deliverable } }
+        renderPane()
+        const box = await screen.findByLabelText('Comment') as HTMLTextAreaElement
+        await settle()
+        expect(screen.getByRole('button', { name: 'Tag a document' })).toBeTruthy()
+        type(box, '#FRM-')
+        const menu = await screen.findByRole('listbox', { name: 'Tag a document' })
+        expect(menu.textContent).toContain('Final creatives.pdf')
+        expect(menu.textContent).toContain('Founder post.docx')
+        fireEvent.keyDown(box, { key: 'Enter' })
+        expect(box.value).toBe('#FRM-217 ')
+    })
+
+    it('opens a posted tag’s document in the pane, and goes back to the thread', async () => {
+        subtasksAnswer = { status: 200, body: { subtasks: SUBTASKS, deliverable } }
+        existing = [{ id: 'm1', createdAt: new Date().toISOString(), authorUserId: 'u1', authorEmail: 'ana@firm.com', content: '#FRM-217 these are the final creatives' }]
+        renderPane()
+        fireEvent.click(await screen.findByRole('button', { name: /FRM-217/ }))
+        const region = await screen.findByRole('region', { name: 'Preview of Final creatives.pdf' })
+        expect(screen.getByTestId('preview').textContent).toBe('doc-a')
+        expect(region.textContent).toContain('Deliverables Neha')
+        fireEvent.click(screen.getByRole('button', { name: 'Back to comments' }))
+        expect(screen.queryByRole('region', { name: /Preview of/ })).toBeNull()
+        expect(screen.getByLabelText('Comment')).toBeTruthy()
+    })
+
+    it('says why when the documents don’t load, with a retry', async () => {
+        subtasksAnswer = { status: 500, body: { error: 'Storage is not connected' } }
+        renderPane()
+        const box = await screen.findByLabelText('Comment') as HTMLTextAreaElement
+        await settle()
+        type(box, '#FRM-')
+        const menu = await screen.findByRole('listbox', { name: 'Tag a document' })
+        expect(menu.textContent).toContain("Couldn't load this deliverable's documents")
+        expect(menu.textContent).toContain('Storage is not connected')
+        subtasksAnswer = { status: 200, body: { subtasks: SUBTASKS, deliverable } }
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+        await settle()
+        type(box, '#FRM-2')
+        expect((await screen.findByRole('listbox', { name: 'Tag a document' })).textContent).toContain('Final creatives.pdf')
     })
 })

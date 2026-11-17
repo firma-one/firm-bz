@@ -1002,7 +1002,7 @@ export function DeliverableDetailPanel({
 
   const TABS: { id: Tab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
     { id: 'details', label: 'Details', icon: Info },
-    { id: 'comments', label: 'Comments', icon: MessagesSquare },
+    { id: 'comments', label: 'Discussions', icon: MessagesSquare },
       ...(canManage ? [{ id: 'delivery' as Tab, label: 'Settings', icon: SettingsIcon }] : []),
   ]
 

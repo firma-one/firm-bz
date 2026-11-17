@@ -218,7 +218,7 @@ describe('a preview over the details', () => {
     it('comes back to the discussion it was opened from, with the thread never remounted', async () => {
         const { panePreview } = openPanel()
         await screen.findAllByRole('button', { name: 'Preview' })
-        fireEvent.click(screen.getAllByRole('button', { name: /^Comments/ })[0])
+        fireEvent.click(screen.getAllByRole('button', { name: /^Discussions/ })[0])
         const mounts = thread.mounts
         expect(mounts).toBeGreaterThan(0)
 

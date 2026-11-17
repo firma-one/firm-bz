@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { formatDistanceToNowStrict } from 'date-fns'
-import { AtSign, Eye, Hash, Lock, MessagesSquare, Send, Smile, Sparkles, Square } from 'lucide-react'
+import { ArrowLeft, AtSign, Eye, Hash, Lock, LockOpen, MessagesSquare, Send, Smile, Sparkles, Square } from 'lucide-react'
 import { PersonAvatar } from '@/components/ui/property-cells'
 import { DocumentIcon } from '@/components/ui/document-icon'
 import { Hint } from '@/components/ui/tooltip'
@@ -115,7 +115,7 @@ export function DemoDeliverableComments({ documents, thread, onPost, focusDocId,
     resolved?: boolean
 }) {
     const [comments, setComments] = useState<Comment[]>(() => thread ?? sampleThread(documents, new Date()))
-    // The visitor is the firm's lead, so the Reply / Internal note choice is theirs, as in the app.
+    // The visitor is the firm's lead, so the Internal only switch is theirs, as in the app.
     const [internalMode, setInternalMode] = useState(false)
     const [visibility, setVisibility] = useState<Visibility[]>([])
     const [scope, setScope] = useState<'file' | 'all'>(focusDocId ? 'file' : 'all')
@@ -140,6 +140,8 @@ export function DemoDeliverableComments({ documents, thread, onPost, focusDocId,
     const endRef = useRef<HTMLDivElement>(null)
 
     const docByDocId = useMemo(() => new Map(documents.map((d) => [d.docId, d])), [documents])
+    /** A tagged document opened from its chip: shown over the thread, as the app's pane does. */
+    const [previewDoc, setPreviewDoc] = useState<DemoTaggableDocument | null>(null)
 
     // ── The sample reply draft, as the app's composer offers Brio's ─────────────
     // The visitor is the firm's lead, so it's offered on a discussion the client side spoke last in.
@@ -274,6 +276,10 @@ export function DemoDeliverableComments({ documents, thread, onPost, focusDocId,
                 const d = docByDocId.get(docId)
                 return d && { docId: d.docId, fileName: d.name, mimeType: d.mimeType }
             }}
+            onOpenDocument={(doc) => {
+                const d = docByDocId.get(doc.docId)
+                if (d) setPreviewDoc(d)
+            }}
         />
     )
 
@@ -299,7 +305,26 @@ export function DemoDeliverableComments({ documents, thread, onPost, focusDocId,
     const list = tag ? docs : mention ? people : []
 
     return (
-        <div className="flex min-h-0 flex-1 flex-col gap-3 p-4">
+        <div className="relative flex min-h-0 flex-1 flex-col gap-3 p-4">
+            {previewDoc && (
+                <div role="region" aria-label={`Preview of ${previewDoc.name}`} className="absolute inset-0 z-30 flex flex-col bg-surface">
+                    <div className="flex shrink-0 items-center gap-1.5 border-b border-line px-2 py-1.5">
+                        <button type="button" onClick={() => setPreviewDoc(null)} className="inline-flex h-7 items-center gap-1 rounded-control px-1.5 text-small text-fg-muted hover:bg-surface-hover hover:text-fg">
+                            <ArrowLeft className="h-3.5 w-3.5" />
+                            Back to comments
+                        </button>
+                        <span className="min-w-0 flex-1 truncate text-right text-caption text-fg-subtle" title={previewDoc.name}>
+                            {previewDoc.docId} · {previewDoc.name}
+                        </span>
+                    </div>
+                    {/* The tour has no files to show: the app previews the document here. */}
+                    <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
+                        <DocumentIcon mimeType={previewDoc.mimeType} className="h-8 w-8" />
+                        <p className="text-small font-medium text-fg">{previewDoc.name}</p>
+                        <p className="text-caption text-fg-muted">In the app, the document&apos;s preview opens here, beside its discussion.</p>
+                    </div>
+                </div>
+            )}
             {/* As in the app: the file's comments or the whole thread, and who sees what */}
             <div className="@container/filter-bar flex shrink-0 flex-nowrap items-center gap-2">
                 {focusDocId && (
@@ -425,27 +450,6 @@ export function DemoDeliverableComments({ documents, thread, onPost, focusDocId,
                     send()
                 }}
             >
-                {/* Who sees it: everyone on the engagement, or the firm's team only */}
-                <div role="radiogroup" aria-label="Who sees this comment" className="inline-flex self-start rounded-control border border-line p-0.5 text-caption">
-                    <button
-                        type="button"
-                        role="radio"
-                        aria-checked={!internalMode}
-                        onClick={() => setInternalMode(false)}
-                        className={cn('rounded-[4px] px-2 py-0.5 transition-colors', !internalMode ? 'bg-surface-muted text-fg' : 'text-fg-muted hover:text-fg')}
-                    >
-                        Reply
-                    </button>
-                    <button
-                        type="button"
-                        role="radio"
-                        aria-checked={internalMode}
-                        onClick={() => setInternalMode(true)}
-                        className={cn('inline-flex items-center gap-1 rounded-[4px] px-2 py-0.5 transition-colors', internalMode ? 'bg-surface-muted text-fg' : 'text-fg-muted hover:text-fg')}
-                    >
-                        <Lock className="h-3 w-3" /> Internal note
-                    </button>
-                </div>
                 <div ref={composerRef} className={cn(
                     'relative rounded-control border border-line-strong bg-surface focus-within:border-action/60 focus-within:ring-2 focus-within:ring-action/20',
                     internalMode && 'border-dashed bg-surface-subtle',
@@ -508,6 +512,20 @@ export function DemoDeliverableComments({ documents, thread, onPost, focusDocId,
                         <Hint label="Tag a document (#)">
                             <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => start('#')} aria-label="Tag a document" className="flex h-7 w-7 items-center justify-center rounded-control text-fg-subtle hover:bg-surface-hover hover:text-fg-muted">
                                 <Hash className="h-3.5 w-3.5" />
+                            </button>
+                        </Hint>
+                        {/* Who sees it, as in the app: a lock that marks this comment internal only. */}
+                        <Hint label={internalMode ? 'Internal only · only Leads and Full Access contributors see it. Click to reply to everyone' : 'Make it internal only · only Leads and Full Access contributors will see it'}>
+                            <button
+                                type="button"
+                                role="switch"
+                                aria-checked={internalMode}
+                                aria-label="Internal only"
+                                onMouseDown={(e) => e.preventDefault()}
+                                onClick={() => setInternalMode((on) => !on)}
+                                className={cn('flex h-7 w-7 items-center justify-center rounded-control hover:bg-surface-hover', internalMode ? 'bg-surface-muted text-fg' : 'text-fg-subtle hover:text-fg-muted')}
+                            >
+                                {internalMode ? <Lock className="h-3.5 w-3.5" /> : <LockOpen className="h-3.5 w-3.5" />}
                             </button>
                         </Hint>
                         {awaiting && !drafting && (

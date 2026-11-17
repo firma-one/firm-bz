@@ -30,7 +30,7 @@ const MIME_BY_TYPE: Record<string, string> = {
 type Tab = 'details' | 'comments' | 'delivery'
 const TABS: { id: Tab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
     { id: 'details', label: 'Details', icon: Info },
-    { id: 'comments', label: 'Comments', icon: MessagesSquare },
+    { id: 'comments', label: 'Discussions', icon: MessagesSquare },
     { id: 'delivery', label: 'Settings', icon: SettingsIcon },
 ]
 

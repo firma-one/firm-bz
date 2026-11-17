@@ -45,22 +45,29 @@ afterEach(() => vi.unstubAllGlobals())
 const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 20)) })
 
 describe('internal notes in the thread', () => {
-    it("offers the firm a Reply / Internal note choice, and posts an internal note as one", async () => {
+    it("offers the firm an Internal only switch, and posts an internal note as one", async () => {
         render(<DocumentDocCommentsPane engagementId="e1" documentId="deliv-1" documentName="Deck" />)
         await settle()
-        fireEvent.click(screen.getByRole('radio', { name: /Internal note/ }))
+        const lock = screen.getByRole('switch', { name: 'Internal only' })
+        expect(lock.getAttribute('aria-checked')).toBe('false')
+        fireEvent.click(lock)
+        expect(lock.getAttribute('aria-checked')).toBe('true')
         const box = screen.getByLabelText('Internal note') as HTMLTextAreaElement
         expect(box.placeholder).toMatch(/only Leads and Full Access contributors/)
         fireEvent.change(box, { target: { value: 'Pricing needs partner sign-off' } })
         await act(async () => { fireEvent.submit(box.closest('form')!) })
         expect(posted[0]).toEqual({ content: 'Pricing needs partner sign-off', internal: true })
+        // It stays on after posting, so a run of notes doesn't slip out as a reply.
+        expect(lock.getAttribute('aria-checked')).toBe('true')
+        fireEvent.click(lock)
+        expect(screen.getByLabelText('Comment')).toBeTruthy()
     })
 
     it('gives a client no such choice', async () => {
         myRole = 'eng_viewer'
         render(<DocumentDocCommentsPane engagementId="e1" documentId="deliv-1" documentName="Deck" />)
         await settle()
-        expect(screen.queryByRole('radio', { name: /Internal note/ })).toBeNull()
+        expect(screen.queryByRole('switch', { name: 'Internal only' })).toBeNull()
     })
 
     it('marks an internal note in the thread', async () => {
