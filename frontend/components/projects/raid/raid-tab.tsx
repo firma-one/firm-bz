@@ -120,8 +120,35 @@ export function RaidTypeBadge({ type, decorative = false, small = false }: {
  * a query of the page's own (`?tab=…`, raid-shared.ts), it moves in the page as the tour's tabs do: a
  * full load would start the tour over, its panel open again.
  */
-export function RaidLink({ href, ...rest }: ComponentProps<'a'> & { href: string }) {
-    return href.startsWith('?') ? <Link href={href} {...rest} /> : <a href={href} {...rest} />
+export function RaidLink({ href, onClick, className, children, ...rest }: ComponentProps<'a'> & { href: string }) {
+    // The full load takes a moment (the engagement page renders on the server), and a link that did
+    // nothing visible read as broken: it shows a spinner from the click until the page goes.
+    const [opening, setOpening] = useState(false)
+    useEffect(() => {
+        // Coming back with the browser's Back button can restore this page as it was left.
+        const reset = () => setOpening(false)
+        window.addEventListener('pageshow', reset)
+        return () => window.removeEventListener('pageshow', reset)
+    }, [])
+    if (href.startsWith('?')) return <Link href={href} onClick={onClick} className={className} {...rest}>{children}</Link>
+    return (
+        <a
+            {...rest}
+            href={href}
+            aria-busy={opening || undefined}
+            className={cn(className, opening && 'cursor-progress')}
+            onClick={(e) => {
+                onClick?.(e)
+                // A new tab or window leaves this page where it is.
+                if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+                setOpening(true)
+            }}
+        >
+            {opening && <Loader2 className="mr-1 h-3 w-3 shrink-0 animate-spin" aria-hidden />}
+            {children}
+            {opening && <span className="sr-only"> · opening</span>}
+        </a>
+    )
 }
 
 /** Where an entry came from, linked to it when it can be: the thread, the memo, the item on the Board. */

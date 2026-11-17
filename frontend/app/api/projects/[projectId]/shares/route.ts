@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { resolveEngagementConnectorId } from '@/lib/connectors/resolve-client-connector'
+import { engagementRootFolderIds } from '@/lib/connectors/engagement-root-folders'
 import { createClient } from '@/utils/supabase/server'
 import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
 import { prisma } from '@/lib/prisma'
@@ -38,18 +38,11 @@ export async function GET(
     const canView = await canViewProject(ctx.firmId, ctx.clientId, ctx.projectId)
     if (!canView) return NextResponse.json({ error: "You don't have access to this engagement." }, { status: 403 })
 
-    // Resolve generalFolderId from connector settings for the "General" breadcrumb fallback
+    // The General folder, for the "General" breadcrumb fallback: from the engagement's own connector
+    // (its client's), asked of its adapter. Reading settings.projectFolderSettings found none on OneDrive.
     let generalFolderId: string | null = null
     try {
-      // The engagement's own connector (its client's), never the legacy Firm.connectorId, which new firms don't set.
-      const project = await prisma.engagement.findUnique({ where: { id: projectId }, select: { slug: true } })
-      const connectorId = await resolveEngagementConnectorId(projectId)
-      const projectSlug = project?.slug
-      if (connectorId && projectSlug) {
-        const connector = await (prisma as any).connector.findUnique({ where: { id: connectorId }, select: { settings: true } })
-        const ps = (connector?.settings as any)?.projectFolderSettings?.[projectSlug]
-        generalFolderId = ps?.generalFolderId ?? null
-      }
+      generalFolderId = (await engagementRootFolderIds(projectId)).generalFolderId
     } catch { /* non-critical */ }
 
     // Return documents that were explicitly shared via:
