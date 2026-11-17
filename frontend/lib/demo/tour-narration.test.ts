@@ -117,9 +117,10 @@ describe('tour narration', () => {
         expect(gapAfter('inbox-1', 'Inbox')).toBeGreaterThanOrEqual(sentence)
         expect(gapAfter('home-1', 'off')).toBeGreaterThanOrEqual(clause)
         expect(gapAfter('home-1', 'pages')).toBeGreaterThanOrEqual(comma)
-        // "Overview shows business insights: revenue pipeline, …" and "… in two lists: Delivery (overdue …"
+        // "Overview shows business insights: revenue pipeline, …" and "The engagement in one row: its health score, the time left, …"
         expect(gapAfter('firm-overview-1', 'insights')).toBeGreaterThanOrEqual(clause)
-        expect(gapAfter('engagement-overview-2', 'Delivery')).toBeGreaterThanOrEqual(comma)
+        expect(gapAfter('engagement-overview-2', 'row')).toBeGreaterThanOrEqual(clause)
+        expect(gapAfter('engagement-overview-2', 'score')).toBeGreaterThanOrEqual(comma)
         // Between words with no mark, no pause.
         expect(gapAfter('home-1', 'picks')).toBeLessThan(0.05)
     })

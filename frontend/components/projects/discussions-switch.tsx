@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useId, useRef, useSt
 import { createPortal } from 'react-dom'
 import { useSearchParams } from 'next/navigation'
 import { AccessLock } from '@/components/ui/access-lock'
-import { cn } from '@/lib/utils'
+import { SUB_TAB_COUNT, SUB_TABS_ROW, subTabClass } from '@/components/ui/sub-tabs'
 
 /*
  * Discussions › Threads | Memos (.claude/plans/brio-features-round-2.md, §8 and §9). RAID was a third
@@ -138,7 +138,7 @@ export interface DiscussionsSwitchOption {
     internal?: boolean
 }
 
-/** The segmented switch: Threads {n} | Memos {n} 🔒 | RAID {n} 🔒. Arrow keys move between its tabs. */
+/** The switch: Threads {n} · Memos {n} 🔒 · RAID {n} 🔒, as sub-tabs. Arrow keys move between its tabs. */
 export function DiscussionsSwitch({
     value,
     onChange,
@@ -167,7 +167,7 @@ export function DiscussionsSwitch({
         refs.current[options[to].id]?.focus()
     }
     return (
-        <div role="tablist" aria-label="Discussions" className="inline-flex shrink-0 overflow-hidden rounded-control border border-line-strong">
+        <div role="tablist" aria-label="Discussions" className={SUB_TABS_ROW}>
             {options.map((o, i) => {
                 const selected = value === o.id
                 return (
@@ -183,15 +183,11 @@ export function DiscussionsSwitch({
                         onClick={() => onChange(o.id)}
                         onKeyDown={(e) => onKeyDown(e, i)}
                         data-demo-tour={o.id === 'memos' ? 'discussions-memos-tab' : undefined}
-                        className={cn(
-                            'inline-flex h-7 items-center gap-1.5 px-3 text-small font-medium transition-colors',
-                            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-action/30',
-                            i > 0 && 'border-l border-line-strong',
-                            selected ? 'bg-surface-selected text-fg' : 'bg-surface text-fg-muted hover:bg-surface-hover hover:text-fg',
-                        )}
+                        // The page's sub-tabs, one look with the Files tab's views (components/ui/sub-tabs.ts).
+                        className={subTabClass(selected)}
                     >
                         {o.label}
-                        {o.count != null && o.count > 0 ? <span className="tabular-nums text-fg-subtle">{o.count}</span> : null}
+                        {o.count != null && o.count > 0 ? <span className={SUB_TAB_COUNT}>{o.count}</span> : null}
                         {o.internal && <AccessLock label={INTERNAL_ONLY_LABEL} />}
                     </button>
                 )

@@ -13,7 +13,7 @@ import { LoadingAnnouncement, ShimmerBar, ShimmerBlock } from "@/components/ui/s
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { FilterMenuLabel, FilterMenuRow, FilterPill, summarizePicks } from "@/components/ui/filter-pill"
 import { CoffeeIcon, type CoffeeIconHandle } from "@/components/ui/coffee-icon"
-import { SquarePlus, Upload, FolderUp, X, Folder, File as FileIcon, ArrowUp, ArrowDown, ChevronRight, Search, List as ListIcon, LayoutGrid, ChevronDown, User, FileText, FileSpreadsheet, Presentation, ListChecks, PenTool, Map as MapIcon, LayoutTemplate, FileCode, AlertCircle, ShieldCheck, Maximize2, Minimize2, CheckCircle2, XCircle, Trash2, Layout, Code, Laptop, RefreshCw, Info, Share2, Layers, Building2, Briefcase, Lock, FolderLock, Inbox, Sparkles, Link2, ExternalLink, MessagesSquare, CircleChevronLeft, Download, MoreVertical, Clock, Copy, FolderInput, Loader2, Pencil, Type, Plus, CircleDot, FolderPlus } from 'lucide-react'
+import { SquarePlus, Upload, FolderUp, X, Folder, File as FileIcon, ArrowUp, ArrowDown, ChevronRight, Search, List as ListIcon, LayoutGrid, ChevronDown, User, FileText, FileSpreadsheet, Presentation, ListChecks, PenTool, Map as MapIcon, LayoutTemplate, FileCode, AlertCircle, ShieldCheck, Maximize2, Minimize2, CheckCircle2, XCircle, Trash2, Layout, Code, Laptop, RefreshCw, Info, Share2, Layers, Building2, Briefcase, Lock, FolderLock, Inbox, Sparkles, Link2, ExternalLink, CircleChevronLeft, Download, MoreVertical, Clock, Copy, FolderInput, Loader2, Pencil, Type, Plus, CircleDot, FolderPlus } from 'lucide-react'
 import { ClientIcon } from '@/components/ui/client-icon'
 import Fuse from 'fuse.js'
 import { config } from "@/lib/config"
@@ -23,15 +23,14 @@ import { DeliverableIcon } from '@/components/ui/deliverable-icon'
 import { DocumentActionMenu } from '@/components/ui/document-action-menu'
 import { DocumentPreviewPanelContent } from '@/components/files/document-edit-sheet'
 import { DocumentPreviewPane } from '@/components/files/document-preview-pane'
-import { assignablePeople, isAssetDetailsPaneContent } from '@/components/files/asset-details-pane'
-import { isDeliverableDetailPaneContent } from '@/components/projects/shares/deliverable-detail-panel'
+import { assignablePeople, isAssetDetailsPaneContent, openAssetDetailsPane } from '@/components/files/asset-details-pane'
+import { isDeliverableDetailPaneContent, openDeliverableDetailPane } from '@/components/projects/shares/deliverable-detail-panel'
 import { StatusIcon } from '@/components/ui/status-icon'
 import type { PersonOption } from '@/components/ui/property-cells'
 import { fileStage } from '@/lib/files/file-stage'
 import { ACTIVITY_STAGES, type ActivityStatus } from '@/lib/sharing-settings'
 import { statusOf } from '@/lib/ui/status'
 import { evictPreview } from '@/lib/preview-cache'
-import { DocumentDocCommentsPane } from '@/components/projects/document-doc-comments-pane'
 import { formatFileSize } from '@/lib/utils'
 import { clientTabPath, firmSettingsPath } from '@/lib/navigation/firm-paths'
 import { DriveFile } from '@/lib/types'
@@ -396,6 +395,9 @@ export function EngagementFileList({ projectId, initialFolderData, connectorRoot
     // than the folders would leave the list on "Loading files" for good.
     const deeplinkRunSkippedRef = useRef(false)
     const [deeplinkRerun, setDeeplinkRerun] = useState(0)
+    /** A comment deep link's document, whose row opens its Details on the Discussions tab once it's listed. */
+    const [discussionsRequest, setDiscussionsRequest] = useState<{ externalId: string; projectDocumentId: string; fileName: string | null; isFolder: boolean } | null>(null)
+    const clearDiscussionsRequest = useCallback(() => setDiscussionsRequest(null), [])
 
     // True from mount until the deeplink hash is resolved — suppresses the file list so the root folder never flashes.
     // Always start false (SSR-safe). useLayoutEffect sets it to true synchronously on the client
@@ -478,30 +480,6 @@ export function EngagementFileList({ projectId, initialFolderData, connectorRoot
         if (!isInfoPane) setActiveInfoDocId(null)
         if (!rightPane.content) setActivePreviewDocId(null)
     }, [rightPane.content, rightPane.title])
-
-    /** Same behavior as DocumentActionMenu → Comment (direct right pane; no URL hash). */
-    const openCommentsForFile = useCallback(
-        (file: DriveFile) => {
-            if (!rightPane.hasRightPane) return
-            setActiveCommentDocId(file.id)
-            const docIdForComments = file.projectDocumentId || file.id
-            rightPane.setTitle('Comments')
-            rightPane.setHeaderActions(null)
-            rightPane.setHeaderIcon(<MessagesSquare className="h-4 w-4" />)
-            rightPane.setHeaderSubtitle('Append-only. Visible to all project members.')
-            rightPane.setContent(
-                <DocumentDocCommentsPane
-                    engagementId={projectId}
-                    documentId={docIdForComments}
-                    documentName={file.name}
-                    documentMimeType={file.mimeType}
-                    orgSlug={orgSlug}
-                />
-            )
-            rightPane.setExpanded?.(false)
-        },
-        [rightPane, projectId]
-    )
 
     const openPreviewForFile = useCallback(
         (fileId: string, file: DriveFile) => {
@@ -1415,10 +1393,9 @@ export function EngagementFileList({ projectId, initialFolderData, connectorRoot
             // land it a second time. navigateToItem always lands somewhere (its last resort is the root).
             lastHandledDeeplinkHashRef.current = hash
 
-            // Navigate to the file's folder so it's visible and highlighted in the list.
-            // navigateToItem is awaited but the file list re-render it triggers is async,
-            // so the comments pane below may open slightly before the row appears — intentional,
-            // since the comment is the primary destination and the highlight is best-effort.
+            // Navigate to the file's folder so it's visible and highlighted in the list. Its row then
+            // opens its own Details on the Discussions tab (openDetailsOnDiscussions), the one comments
+            // pane: a comment link used to open a separate, older Comments pane here (Deepak, 2026-11-17).
             await navigateToItem({
                 id: externalId, name: fileName ?? 'Document',
                 mimeType: 'application/octet-stream', webViewLink: '', iconLink: '',
@@ -1428,20 +1405,7 @@ export function EngagementFileList({ projectId, initialFolderData, connectorRoot
 
             setDeeplinkResolving(false)
 
-            setActiveCommentDocId(externalId)
-            rightPane.setTitle('Comments')
-            rightPane.setHeaderActions(null)
-            rightPane.setHeaderIcon(<MessagesSquare className="h-4 w-4" />)
-            rightPane.setHeaderSubtitle('Append-only. Visible to all engagement members.')
-            rightPane.setContent(
-                <DocumentDocCommentsPane
-                    engagementId={projectId}
-                    documentId={documentIdParam}
-                    documentName={fileName ?? undefined}
-                    orgSlug={orgSlug}
-                />
-            )
-            rightPane.setExpanded?.(false)
+            setDiscussionsRequest({ externalId, projectDocumentId: documentIdParam, fileName, isFolder })
             lastHandledDeeplinkHashRef.current = hash
         }
 
@@ -1775,7 +1739,7 @@ export function EngagementFileList({ projectId, initialFolderData, connectorRoot
             const body = await res.json().catch(() => ({})) as { warning?: string }
             addToast(body.warning
                 ? { type: 'warning', title: 'Promoted, with a problem', message: body.warning, duration: 12000 }
-                : { type: 'success', title: 'Promoted to deliverable', message: `"${doc.name}" added to the Board.` })
+                : { type: 'success', title: 'Promoted to deliverable', message: `"${doc.name}" added to Deliverables.` })
             await refreshShareStateAndFiles()
         } catch (e) {
             addToast({ type: 'error', title: "Couldn't make it a deliverable", message: failureReason(e) })
@@ -1797,7 +1761,7 @@ export function EngagementFileList({ projectId, initialFolderData, connectorRoot
             const body = await res.json().catch(() => ({})) as { warning?: string }
             addToast(body.warning
                 ? { type: 'warning', title: 'Demoted, with a problem', message: body.warning, duration: 12000 }
-                : { type: 'success', title: 'Demoted to folder', message: `"${doc.name}" removed from the Board.` })
+                : { type: 'success', title: 'Demoted to folder', message: `"${doc.name}" removed from Deliverables.` })
             await refreshShareStateAndFiles()
         } catch (e) {
             addToast({ type: 'error', title: 'Demote failed', message: failureReason(e) })
@@ -2557,6 +2521,47 @@ const handleRefresh = async () => {
         if (index >= 0) rowWindow.scrollToIndex(index)
     }, [sortedFiles, rowWindow])
     scrollRowIntoViewRef.current = scrollRowIntoView
+
+    // A comment link whose document isn't listed once the folder has loaded (a filter or search hides
+    // it): its Discussions open from here, read only, rather than not at all.
+    useEffect(() => {
+        const request = discussionsRequest
+        if (!request || loading || isLoadingFolders || deeplinkResolving) return
+        if (sortedFiles.some((f) => f.id === request.externalId)) return
+        const timer = window.setTimeout(() => {
+            setDiscussionsRequest(null)
+            if (!rightPane.hasRightPane) return
+            setActiveInfoDocId(request.externalId)
+            const isEC = restrictToSharedOnly ? canEdit : viewAsPersonaSlug === 'eng_ext_collaborator'
+            const isGuest = restrictToSharedOnly ? !canEdit : viewAsPersonaSlug === 'eng_viewer'
+            if (request.isFolder) {
+                openDeliverableDetailPane(rightPane, {
+                    documentId: request.projectDocumentId,
+                    projectId,
+                    docId: null,
+                    fileName: request.fileName ?? '',
+                    activityStatus: 'to_do',
+                    canManage: false,
+                    readOnly: true,
+                    isExternalViewer: isGuest,
+                    isExternalCollaborator: isEC,
+                    roleSlug: roleSlug ?? undefined,
+                    orgSlug,
+                    onClose: () => rightPane.clearPane(),
+                    initialTab: 'comments',
+                })
+                return
+            }
+            openAssetDetailsPane(rightPane, {
+                document: { id: request.externalId, projectDocumentId: request.projectDocumentId, name: request.fileName ?? 'Document' },
+                projectId,
+                orgSlug,
+                isExternalUser: isEC || isGuest,
+                initialTab: 'discussions',
+            })
+        }, 600)
+        return () => window.clearTimeout(timer)
+    }, [discussionsRequest, loading, isLoadingFolders, deeplinkResolving, sortedFiles, rightPane, projectId, orgSlug, roleSlug, restrictToSharedOnly, canEdit, viewAsPersonaSlug])
 
     /** Notion-style column header: muted small text with a column-type icon. */
     return (
@@ -3421,7 +3426,6 @@ const handleRefresh = async () => {
                                     isActionMenuOpen={actionMenuOpenFileId === file.id}
                                     onActionMenuOpenChange={handleActionMenuOpenChange}
                                     isProcessing={processingFileIds.has(file.id) || isRegrantingId === file.id}
-                                    onOpenComments={openCommentsForFile}
                                     onOpenRename={openRenameModal}
                                     onDuplicate={handleDuplicate}
                                     onOpenCopyMove={openCopyMoveModal}
@@ -3436,6 +3440,8 @@ const handleRefresh = async () => {
                                     onOpenCommentPane={openCommentPane}
                                     onOpenInfoPane={openInfoPane}
                                     onOpenPreviewPane={openPreviewPane}
+                                    openDetailsOnDiscussions={discussionsRequest?.externalId === file.id}
+                                    onDetailsOpened={clearDiscussionsRequest}
                                     onAddToast={addRowToast}
                                     connectorAccountEmail={connectorAccountEmail}
                                     isOneDriveClient={isOneDriveClient}

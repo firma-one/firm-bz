@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
-import { AtSign, Search, ArrowUpRight, MessagesSquare, Reply, CheckCircle2, RotateCcw } from 'lucide-react'
+import { AtSign, Search, ArrowUpRight, MessagesSquare, Reply, CheckCircle2, RotateCcw, Lock } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { cn, formatFullDate } from '@/lib/utils'
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
@@ -764,8 +764,9 @@ function InternalTag() {
   return (
     <span
       title="Only Leads and Full Access contributors see this"
-      className="inline-flex h-4 shrink-0 items-center rounded-[4px] bg-tag-gray-bg px-1 text-[10px] font-semibold leading-none text-tag-gray-fg"
+      className="inline-flex h-4 shrink-0 items-center gap-0.5 rounded-[4px] bg-tag-gray-bg px-1 text-[10px] font-semibold leading-none text-tag-gray-fg"
     >
+      <Lock className="h-2.5 w-2.5" aria-hidden />
       Internal
     </span>
   )

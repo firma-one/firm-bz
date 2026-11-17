@@ -2,42 +2,19 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { nudgeGreeting } from '@/lib/ai/nudge-draft'
-import {
-    AlertTriangle,
-    Archive,
-    ClipboardCheck,
-    Eye,
-    FileQuestion,
-    FileType,
-    FileWarning,
-    FolderMinus,
-    FolderOpen,
-    FolderTree,
-    HardDrive,
-    Heart,
-    Inbox,
-    MessagesSquare,
-    RefreshCw,
-    Users,
-} from 'lucide-react'
-import { InsightCard } from '@/components/dashboard/insight-card'
-import { ActionList, attentionCount, type ActionItem } from '@/components/dashboard/action-list'
-import { DATA } from '@/components/projects/insight-rings'
+import { AlertTriangle, ClipboardCheck, UserPlus } from 'lucide-react'
 import { DeliverablesTimeline } from '@/components/projects/deliverables-timeline'
-import {
-    FileOrganizationSection,
-    OverviewDetails,
-    OverviewTop,
-    TeamSection,
-    type OverviewDeliverable,
-    type ReportInputs,
-} from '@/components/projects/engagement-overview-sections'
+import { type OverviewDeliverable, type ReportInputs } from '@/components/projects/engagement-overview-sections'
+import { HealthDetails, NeedsLink, NeedsRow, NeedsYou, StatusRow, type NeedsItem } from '@/components/projects/overview-layout'
+import { RaidStatusCell, raidNeedsItems } from '@/components/projects/overview-raid'
 import { countFilesInFolder, type DemoEngagement } from '@/lib/demo/static-demo-data'
 import { DemoSummaryCard } from '@/components/demo/demo-summary-card'
 import { WaitingOnClient } from '@/components/projects/waiting-on-client'
-import { DemoRaidOverviewCard } from '@/components/demo/demo-raid'
+import { demoRaidLog, TOUR_ME } from '@/components/demo/demo-raid'
+import { DEMO_INVITEE } from '@/components/demo/demo-engagement-members'
 import { getDemoDeliverables } from '@/lib/demo/demo-deliverables'
 import { useRingAnchor } from '@/components/projects/ring-anchor'
+import { nudgeCandidates } from '@/lib/ai/nudge-draft'
 
 const DAY = 86400000
 
@@ -143,143 +120,109 @@ export function DemoEngagementOverview({ engagement }: { engagement: DemoEngagem
         approvedCount: m.approved,
     }
 
-    const delivery: ActionItem[] = [
-        { key: 'overdue', label: 'Overdue deliverables', count: m.overdue, severity: 'critical', icon: AlertTriangle, sub: 'past due date, not yet approved' },
-        { key: 'in-review', label: 'In review — awaiting approval', count: m.inReview, severity: 'info', icon: Eye, sub: 'ready for your review' },
-        { key: 'reworked', label: 'Awaiting rework', count: 0, severity: 'warning', icon: RefreshCw },
-        { key: 'planning', label: 'Planning gaps', count: m.planningGaps, severity: 'warning', icon: ClipboardCheck, sub: 'missing due dates or assignees' },
-        { key: 'threads', label: 'Unanswered comments', count: 0, severity: 'warning', icon: MessagesSquare },
-        { key: 'invites', label: 'Pending invitations', count: 1, severity: 'info', icon: Users, sub: 'awaiting acceptance' },
+    // Needs you, as the app builds it (engagement-insights-dashboard.tsx), over the sample.
+    const raidLog = useMemo(() => demoRaidLog(), [])
+    const nowMsNeeds = today?.getTime() ?? 0
+    const ref = (d: { docId: string | null; name: string }) => (d.docId ? `${d.docId} · ${d.name}` : d.name)
+    const mine: NeedsItem[] = today ? [
+        ...raidNeedsItems(raidLog, TOUR_ME, '', nowMsNeeds),
+        ...m.deliverables.filter((d) => d.isOverdue).map((d) => ({
+            key: `overdue-${d.id}`,
+            icon: <AlertTriangle className="h-4 w-4 text-danger" />,
+            title: ref(d),
+            context: 'Past its due date and not approved',
+            action: <NeedsLink href="?tab=board">Open</NeedsLink>,
+        })),
+        ...(m.planningGaps > 0 ? [{
+            key: 'planning',
+            icon: <ClipboardCheck className="h-4 w-4 text-status-waiting-icon" />,
+            title: `${m.planningGaps} planning gaps`,
+            context: [
+                m.docTotal - m.docWithDueDate > 0 ? `${m.docTotal - m.docWithDueDate} documents without a due date` : null,
+                m.docTotal - m.docWithAssignee > 0 ? `${m.docTotal - m.docWithAssignee} without an assignee` : null,
+            ].filter(Boolean).join(' · '),
+            meta: '−6 on health',
+            action: <NeedsLink href="?tab=board">Fix in Deliverables</NeedsLink>,
+        }] : []),
+    ] : []
+    const passed = [
+        ...(m.overdue === 0 ? ['nothing overdue'] : []),
+        'no rework waiting', 'every comment answered', 'no intake to review', 'no sensitive files',
     ]
-    const housekeeping: ActionItem[] = [
-        { key: 'sensitive', label: 'Sensitive files', count: 0, severity: 'critical', icon: FileWarning },
-        { key: 'poorly-named', label: 'Poorly named files', count: 0, severity: 'warning', icon: FileType },
-        { key: 'duplicates', label: 'Duplicate files', count: 0, severity: 'warning', icon: FileWarning },
-        { key: 'stale', label: 'Stale files', count: 0, severity: 'warning', icon: Archive },
-        { key: 'large', label: 'Large files', count: 0, severity: 'warning', icon: HardDrive },
-        { key: 'orphaned', label: 'Orphaned files', count: 0, severity: 'info', icon: FileQuestion },
-        { key: 'empty-folders', label: 'Empty folders', count: 0, severity: 'info', icon: FolderMinus },
-        { key: 'deep-folders', label: 'Deep folder nesting', count: 0, severity: 'info', icon: FolderTree },
-    ]
-    const folderCount = engagement.folders.length
-    const artifacts = m.files.length + folderCount
+    // In review for six days, so the sample has something to nudge about.
+    const reviewDeliverables = m.deliverables.map((d) => ({
+        ...d,
+        stageSince: d.stage === 'in_review' && today ? new Date(today.getTime() - 6 * DAY).toISOString() : null,
+    }))
+    const nudgeable = today ? nudgeCandidates(reviewDeliverables, today).length : 0
 
     return (
         <div className="flex min-w-0 flex-col gap-10 pb-6">
-            <div className="flex flex-col gap-4" data-demo-tour="engagement-action-center">
-                <div className="flex items-center gap-2 border-b border-line pb-2">
-                    <Inbox className="h-4 w-4 shrink-0 text-fg-subtle" />
-                    <h2 className="truncate text-h3 text-fg">Action Center</h2>
-                    {attentionCount(delivery, housekeeping) > 0 && (
-                        <span className="text-small tabular-nums text-fg-subtle">{attentionCount(delivery, housekeeping)}</span>
-                    )}
-                </div>
-                <ActionList
-                    groups={[
-                        { title: 'Delivery', items: delivery },
-                        { title: 'Housekeeping', items: housekeeping },
-                    ]}
-                />
-                {/* As the app: deliverables in review for a while, with Brio's nudge to the Reviewer. */}
-                <div data-demo-tour="overview-waiting-reviewer">
-                    <WaitingOnClient
-                        projectId="tour"
-                        engagementBase=""
-                        deliverables={m.deliverables.map((d) => ({
-                            ...d,
-                            // In review for six days, so the sample has something to nudge about.
-                            stageSince: d.stage === 'in_review' && today ? new Date(today.getTime() - 6 * DAY).toISOString() : null,
-                        }))}
-                        demo={{
-                            recipients: [{ userId: 'tour-reviewer', name: 'Dana Whitfield', role: 'Reviewer' }],
-                            // Opens as the app's does: the person tagged by their member name, then Brio's words.
-                            draft: (c, name) => `${nudgeGreeting(name)}A quick check-in on ${c.name}${c.docId ? ` (${c.docId})` : ''}. It's been with you for review for ${c.daysWaiting} days.\n\nIf anything needs changing, a comment here is the quickest way to get it to us.`,
+            {today ? (
+                <>
+                    {/* 1 · Where it stands */}
+                    <StatusRow report={report} raid={<RaidStatusCell log={raidLog} error={null} engagementBase="" />} />
+
+                    {/* 2 · Needs you */}
+                    <NeedsYou
+                        mine={mine}
+                        othersCount={nudgeable + 1}
+                        passed={passed}
+                        others={(
+                            <>
+                                {/* As the app: deliverables in review for a while, with Brio's nudge to the Reviewer. */}
+                                <WaitingOnClient
+                                    projectId="tour"
+                                    engagementBase=""
+                                    variant="rows"
+                                    deliverables={reviewDeliverables}
+                                    demo={{
+                                        recipients: [{ userId: 'tour-reviewer', name: 'Dana Whitfield', role: 'Reviewer' }],
+                                        // Opens as the app's does: the person tagged by their member name, then Brio's words.
+                                        draft: (c, name) => `${nudgeGreeting(name)}A quick check-in on ${c.name}${c.docId ? ` (${c.docId})` : ''}. It's been with you for review for ${c.daysWaiting} days.\n\nIf anything needs changing, a comment here is the quickest way to get it to us.`,
+                                    }}
+                                />
+                                {/* The invitation the Members tab lists as pending. */}
+                                <NeedsRow
+                                    item={{
+                                        key: 'invites',
+                                        icon: <UserPlus className="h-4 w-4 text-fg-muted" />,
+                                        title: '1 invitation not accepted',
+                                        context: DEMO_INVITEE,
+                                        action: <NeedsLink href="?tab=members">Open</NeedsLink>,
+                                    }}
+                                />
+                            </>
+                        )}
+                    />
+
+                    {/* 3 · Latest update: a sample published two days ago, with a simulated Rewrite with Brio
+                        (components/demo/demo-summary-card.tsx). */}
+                    <DemoSummaryCard
+                        today={today}
+                        input={{
+                            engagementName: engagement.name,
+                            deliverables: m.deliverables,
+                            timePct: m.timePct,
+                            deliveredPct: m.deliveredPct,
+                            daysLeft: engagement.dueDate ? Math.round((new Date(engagement.dueDate).getTime() - today.getTime()) / DAY) : null,
+                            planningGaps: m.planningGaps,
+                            resolvedThreads: 4,
                         }}
                     />
-                </div>
-                {/* As the app: the RAID log's short form under the Action Center. */}
-                <div data-demo-tour="overview-raid-card">
-                    <DemoRaidOverviewCard />
-                </div>
-            </div>
 
-            {/* As the app: internal memos moved to Discussions › Memos (demo-memos.tsx); their card is no longer mounted here. */}
-
-            <InsightCard
-                title="Engagement Health"
-                icon={Heart}
-                theme="green"
-                subtext={`Overall Health ${m.score}/100 · ${m.total} deliverable${m.total === 1 ? '' : 's'}`}
-            >
-                <div className="flex flex-col gap-8 px-6 pt-4 pb-6">
-                    {today ? (
-                        <>
-                            {/* A sample summary beside the cards, as on the app's Overview, with a
-                                simulated Rewrite with Brio (components/demo/demo-summary-card.tsx). */}
-                            <OverviewTop
-                                report={report}
-                                summary={
-                                    <DemoSummaryCard
-                                        today={today}
-                                        input={{
-                                            engagementName: engagement.name,
-                                            deliverables: m.deliverables,
-                                            timePct: m.timePct,
-                                            deliveredPct: m.deliveredPct,
-                                            daysLeft: engagement.dueDate ? Math.round((new Date(engagement.dueDate).getTime() - today.getTime()) / DAY) : null,
-                                            planningGaps: m.planningGaps,
-                                            resolvedThreads: 4,
-                                        }}
-                                    />
-                                }
-                            />
-                            <div className="border-t border-line pt-6" data-demo-tour="engagement-progress">
-                                <DeliverablesTimeline deliverables={m.deliverables} startDate={m.kickoff} dueDate={engagement.dueDate ?? null} nowMs={nowMs} />
-                            </div>
-                        </>
-                    ) : (
-                        // Holds the dated sections' place until the visitor's today is known.
-                        <div className="h-72" aria-hidden />
-                    )}
-                    <div className="border-t border-line pt-6">
-                        <OverviewDetails report={report} />
+                    {/* 4 · Deliverables */}
+                    <div data-demo-tour="engagement-progress">
+                        <DeliverablesTimeline deliverables={m.deliverables} startDate={m.kickoff} dueDate={engagement.dueDate ?? null} nowMs={nowMs} />
                     </div>
-                </div>
-            </InsightCard>
+                </>
+            ) : (
+                // Holds the dated sections' place until the visitor's today is known.
+                <div className="h-[40rem]" aria-hidden />
+            )}
 
-            <InsightCard title="Team Status" icon={Users} theme="blue" count={3} subtext="Members & pending invitations">
-                <div className="px-6 pt-4 pb-2">
-                    <TeamSection
-                        joined={3}
-                        invited={1}
-                        roles={[
-                            { label: 'Lead', hex: DATA.category1, value: 1 },
-                            { label: 'Full Access', hex: DATA.category2, value: 1 },
-                            { label: 'Limited Access', hex: DATA.category3, value: 1 },
-                        ]}
-                        internal={2}
-                        external={1}
-                    />
-                </div>
-            </InsightCard>
-
-            <InsightCard title="File Organization" icon={FolderOpen} theme="blue" subtext={`${m.files.length} files · ${folderCount} folders`}>
-                <div className="px-6 pt-4 pb-2">
-                    <FileOrganizationSection
-                        score={m.folderScore}
-                        penalties={m.folderPenalties}
-                        checks={[
-                            { id: 'folder.poorly_named', label: 'Poorly named', info: 'Default or meaningless names like "Untitled", "New File" or "Copy of".', count: 0, of: artifacts },
-                            { id: 'folder.duplicates', label: 'Duplicates', info: 'Files with the same or nearly the same name (90% or more) and the same extension.', count: 0, of: artifacts },
-                            { id: 'folder.stale_files', label: 'Stale files', info: 'Not modified in the last 6 months.', count: 0, of: m.files.length },
-                            { id: 'folder.large_files', label: 'Large files', info: 'Larger than 50 MB.', count: 0, of: m.files.length },
-                            { id: 'folder.orphaned_files', label: 'Outside any folder', info: 'Files at the root with no parent folder.', count: 0, of: m.files.length },
-                            { id: 'folder.empty_folders', label: 'Empty folders', info: 'Folders with no files or subfolders.', count: 0, of: folderCount },
-                            { id: 'folder.deep_folders', label: 'More than 3 levels deep', info: 'Folders nested more than 3 levels down.', count: 0, of: folderCount },
-                        ]}
-                    />
-                </div>
-            </InsightCard>
+            {/* 5 · Health details */}
+            <HealthDetails report={report} />
         </div>
     )
 }

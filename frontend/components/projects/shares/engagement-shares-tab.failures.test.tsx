@@ -70,7 +70,7 @@ describe('the Board, when its load fails (EM-3)', () => {
     it("says it couldn't load, with the server's words, and never that there are no deliverables", async () => {
         answerFor('GET /shares', { status: 500, json: { error: 'Something went wrong on our side. Try again.' } })
         board()
-        expect(await screen.findByText("Couldn't load the Board")).toBeTruthy()
+        expect(await screen.findByText("Couldn't load the deliverables")).toBeTruthy()
         expect(screen.getByText('Something went wrong on our side. Try again.')).toBeTruthy()
         expect(screen.queryByText('No deliverables yet')).toBeNull()
     })

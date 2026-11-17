@@ -108,18 +108,18 @@ describe('DeliverableDetailPanel', () => {
 
     it('counts and lists the documents on the Board, folding the Not started ones away', async () => {
         panel()
-        await waitFor(() => expect(screen.getByText('1 not on the Board')).toBeTruthy())
+        await waitFor(() => expect(screen.getByText('1 not started')).toBeTruthy())
         expect(screen.getByText('D1')).toBeTruthy()
         expect(screen.queryByText('D3')).toBeNull()
-        fireEvent.click(screen.getByRole('button', { name: '1 not on the Board' }))
+        fireEvent.click(screen.getByRole('button', { name: '1 not started' }))
         expect(screen.getByText('D3')).toBeTruthy()
     })
 
     it('adds a Not started document to the Board at To do', async () => {
         const onStatusChange = vi.fn()
         panel({ activityStatus: 'to_do', onStatusChange })
-        fireEvent.click(await screen.findByRole('button', { name: '1 not on the Board' }))
-        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Add to Board' })) })
+        fireEvent.click(await screen.findByRole('button', { name: '1 not started' }))
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Move to To do' })) })
         expect(stageCalls).toEqual([{ url: '/api/projects/p1/documents/d3/sharing/activity', body: { status: 'to_do' } }])
         // Its deliverable followed: the Board card hears of it.
         expect(onStatusChange).toHaveBeenCalledWith('in_progress')
@@ -137,8 +137,8 @@ describe('DeliverableDetailPanel', () => {
 
     it('changes nothing once the engagement is completed', async () => {
         panel({ readOnly: true, canManage: false })
-        fireEvent.click(await screen.findByRole('button', { name: '1 not on the Board' }))
-        expect(screen.queryByRole('button', { name: 'Add to Board' })).toBeNull()
+        fireEvent.click(await screen.findByRole('button', { name: '1 not started' }))
+        expect(screen.queryByRole('button', { name: 'Move to To do' })).toBeNull()
         expect(screen.getByText('D1')).toBeTruthy()
     })
 
@@ -218,7 +218,7 @@ describe('a preview over the details', () => {
     it('comes back to the discussion it was opened from, with the thread never remounted', async () => {
         const { panePreview } = openPanel()
         await screen.findAllByRole('button', { name: 'Preview' })
-        fireEvent.click(screen.getAllByRole('button', { name: /^Comments/ })[0])
+        fireEvent.click(screen.getAllByRole('button', { name: /^Discussions/ })[0])
         const mounts = thread.mounts
         expect(mounts).toBeGreaterThan(0)
 

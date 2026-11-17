@@ -55,7 +55,7 @@ describe('DemoRaidTab', { timeout: 20_000 }, () => {
         const link = (rowId: string, name: string) => within(screen.getByTestId(rowId)).getByRole('link', { name }).getAttribute('href')
         expect(link('raid-row-raid-pace', 'Health')).toBe('?tab=analytics#ring-pace')
         expect(link('raid-row-raid-planning', 'Health')).toBe('?tab=analytics#ring-planning')
-        expect(link('raid-row-raid-overdue', 'Board')).toBe('?tab=board')
+        expect(link('raid-row-raid-overdue', 'Deliverables')).toBe('?tab=board')
     })
 
     it('dismissing a suggestion drops it', async () => {

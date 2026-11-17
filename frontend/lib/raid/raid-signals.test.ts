@@ -106,7 +106,7 @@ describe('closeReasonFor', () => {
     it.each([
         ['overdue:approved', 'Resolved · approved Nov 14'],
         ['overdue:moved', 'Resolved · due date moved'],
-        ['overdue:gone', 'Resolved · no longer on the Board'],
+        ['overdue:gone', 'Resolved · no longer a deliverable'],
         ['review:approved', 'Resolved · approved Nov 14'],
         ['review:moved', 'Resolved · out of review'],
         ['blocked:doc1', 'Resolved · unblocked Nov 12'],

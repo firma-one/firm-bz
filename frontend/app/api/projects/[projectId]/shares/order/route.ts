@@ -27,7 +27,7 @@ export async function PUT(
     const ctx = await resolveProjectContext(projectId)
     if (!ctx) return NextResponse.json({ error: 'This engagement was not found. It may have been deleted.' }, { status: 404 })
     const canManage = await canManageProject(ctx.orgId, ctx.clientId, ctx.projectId)
-    if (!canManage) return NextResponse.json({ error: "You can't reorder this Board." }, { status: 403 })
+    if (!canManage) return NextResponse.json({ error: "You can't reorder these deliverables." }, { status: 403 })
 
     const completed = await blockIfEngagementCompleted(projectId)
     if (completed) return completed

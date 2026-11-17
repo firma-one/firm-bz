@@ -118,7 +118,6 @@ export interface EngagementFileRowProps {
     /** A file action or a re-grant is running on this row: it wears the progress line. */
     isProcessing: boolean
     // File operation handlers
-    onOpenComments: (file: DriveFile) => void
     onOpenRename: (doc: DriveFile) => void
     onDuplicate: (doc: DriveFile) => void
     onOpenCopyMove: (doc: DriveFile, action: 'copy' | 'move') => void
@@ -133,6 +132,12 @@ export interface EngagementFileRowProps {
     onOpenCommentPane: (docId: string) => void
     onOpenInfoPane: (docId: string) => void
     onOpenPreviewPane: (docId: string, rowFile: DriveFile) => void
+    /**
+     * A comment deep link (#doc-comment:) landed on this row: open its Details on the Discussions tab,
+     * the one comments pane there is, then call `onDetailsOpened`.
+     */
+    openDetailsOnDiscussions?: boolean
+    onDetailsOpened?: () => void
     onAddToast: (toast: { type: string; title: string; message: string }) => void
     /** Connector account email — passed to DocumentActionMenu for Google Drive authuser param. */
     connectorAccountEmail?: string | null
@@ -200,7 +205,6 @@ function EngagementFileRowInner({
     isActionMenuOpen,
     onActionMenuOpenChange,
     isProcessing,
-    onOpenComments,
     onOpenRename,
     onDuplicate,
     onOpenCopyMove,
@@ -215,6 +219,8 @@ function EngagementFileRowInner({
     onOpenCommentPane,
     onOpenInfoPane,
     onOpenPreviewPane,
+    openDetailsOnDiscussions = false,
+    onDetailsOpened,
     onAddToast,
     connectorAccountEmail,
     isOneDriveClient = false,
@@ -280,7 +286,7 @@ function EngagementFileRowInner({
     // A deliverable folder's Details is the Board's own pane for it; any other folder has none on the row.
     const isDeliverableFolder = isFolder && !!file.isDeliverable && !!file.projectDocumentId
     // Details, from the row icon and the ⋮ menu alike: Info edits what this row's own cells may.
-    const openDetails = () => {
+    const openDetails = (tab?: 'discussions') => {
         onOpenInfoPane(file.id)
         if (isDeliverableFolder) {
             // Loaded when opened: the Board's pane module sets up its own storage client on import,
@@ -307,6 +313,8 @@ function EngagementFileRowInner({
                 // The row's Status and Due follow what changes in the pane.
                 onStatusChange: () => onShareSaved?.(),
                 onClose: () => rightPane.clearPane(),
+                // The deliverable's thread is its Comments tab.
+                initialTab: tab === 'discussions' ? 'comments' : undefined,
             }))
             return
         }
@@ -315,6 +323,7 @@ function EngagementFileRowInner({
             projectId,
             orgSlug,
             isExternalUser: isEC || isGuest,
+            initialTab: tab,
             editing: {
                 statusRole: canEditStatus ? roleSlug : null,
                 tracked: isTracked,
@@ -328,6 +337,15 @@ function EngagementFileRowInner({
             },
         })
     }
+
+    // A comment deep link asked for this row's Discussions: open them once, as Details would.
+    const openDetailsRef = React.useRef(openDetails)
+    openDetailsRef.current = openDetails
+    React.useEffect(() => {
+        if (!openDetailsOnDiscussions) return
+        openDetailsRef.current('discussions')
+        onDetailsOpened?.()
+    }, [openDetailsOnDiscussions, onDetailsOpened])
 
     // Rename and Open on the strip follow the ⋮ menu's rules, and say why when they're off.
     const renameOffReason = readOnly
@@ -611,7 +629,7 @@ function EngagementFileRowInner({
                                         aria-label="Details"
                                         aria-pressed={isInfoPaneOpen}
                                         disabled={isIntakeRow}
-                                        onClick={openDetails}
+                                        onClick={() => openDetails()}
                                     >
                                         <Info className="h-4 w-4" />
                                     </button>
@@ -757,7 +775,8 @@ function EngagementFileRowInner({
                             currentFolderType={currentFolderType}
                             onOpenCommentPane={(docId) => onOpenCommentPane(docId)}
                             onOpenInfoPane={(docId) => onOpenInfoPane(docId)}
-                            onOpenDetails={openDetails}
+                            onOpenDetails={() => openDetails()}
+                            onOpenDiscussions={isDeliverableFolder ? () => openDetails('discussions') : undefined}
                             onRenameDocument={canEdit && !readOnly && !locked && !isIntakeRow ? (doc) => onOpenRename(doc as DriveFile) : undefined}
                             onDuplicateDocument={canEdit && !readOnly && !locked && !isIntakeRow ? (doc) => onDuplicate(doc as DriveFile) : undefined}
                             onCopyDocument={generalFolderId && canEdit && !readOnly && !locked && !isIntakeRow ? (doc) => onOpenCopyMove(doc as DriveFile, 'copy') : undefined}

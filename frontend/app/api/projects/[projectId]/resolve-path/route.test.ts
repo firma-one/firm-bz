@@ -11,14 +11,15 @@ vi.mock('@/lib/api/engagement-auth', () => ({ requireProjectView: async () => ({
 vi.mock('@/lib/engagement-access', () => ({ requireEngagementMember: async () => ({ id: 'm1' }) }))
 vi.mock('@/lib/services/search-service', () => ({ SearchService: { resolvePathToProjectRoot: async () => ancestors.value } }))
 vi.mock('@/lib/logger', () => ({ logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() } }))
+// The top folders come from the connector's adapter (engagement-root-folders.test.ts covers that
+// lookup, OneDrive's layout included); here they are given.
+vi.mock('@/lib/connectors/engagement-root-folders', () => ({
+    engagementRootFolderIds: async () => ({ generalFolderId: 'ROOT', confidentialFolderId: 'CONF', stagingFolderId: null }),
+    rootFolderName: (ids: { generalFolderId: string | null; confidentialFolderId: string | null }, id: string) =>
+        id === ids.generalFolderId ? 'General' : id === ids.confidentialFolderId ? 'Confidential' : 'Staging',
+}))
 vi.mock('@/lib/prisma', () => ({
     prisma: {
-        engagement: {
-            findUnique: async () => ({
-                slug: 'eng',
-                client: { connector: { settings: { projectFolderSettings: { eng: { generalFolderId: 'ROOT', confidentialFolderId: 'CONF' } } } } },
-            }),
-        },
         engagementDocument: {
             findFirst: async ({ where }: { where: { externalId: string } }) =>
                 parentOf.has(where.externalId) ? { parentId: parentOf.get(where.externalId) } : null,

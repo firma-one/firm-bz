@@ -2,7 +2,7 @@
 
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { ArrowUpDown, AtSign, BellRing, CalendarClock, Check, Eye, Hash, Link2, Loader2, Lock, MessagesSquare, Send, Smile, Sparkles, Square, Trash2, UserCheck, Users, X } from 'lucide-react'
+import { ArrowLeft, ArrowUpDown, AtSign, BellRing, CalendarClock, Check, Eye, Hash, Link2, Loader2, Lock, LockOpen, MessagesSquare, Send, Smile, Sparkles, Square, Trash2, UserCheck, Users, X } from 'lucide-react'
 import { cn, formatDateTimeWithTZ, formatRelativeTime } from '@/lib/utils'
 import { useRightPane } from '@/lib/right-pane-context'
 import { useAuth } from '@/lib/auth-context'
@@ -38,6 +38,9 @@ import { ThinkingDots, TypingCaret } from '@/components/brio/brio-typing'
 import { BrioDraftLabel } from '@/components/brio/brio-draft-label'
 import { BRIO_DRAFT_FAILED } from '@/lib/ai/brio-failure'
 import { ASSISTANT, BRIO_GREEN } from '@/lib/ai/assistant'
+import { DocumentPreviewPane } from '@/components/files/document-preview-pane'
+import { PreviewLocationStrip } from '@/components/files/preview-location-strip'
+import { folderPathLabels } from '@/lib/files/engagement-root'
 
 /*
  * Comments on a document or deliverable (.claude/plans/board-pane-comments-redesign.md). Shared
@@ -92,11 +95,15 @@ export interface DocumentDocCommentsPaneProps {
   documentName?: string
   documentMimeType?: string
   orgSlug?: string
-  /** The deliverable's documents the viewer may see; given, "#" tags them. */
+  /**
+   * The deliverable's documents the viewer may see, for "#" to tag. Left out, the pane loads them
+   * itself (the subtasks route narrows them to the viewer's real role); a host that already has them
+   * passes them in. Either way a thread on a plain file, not a deliverable, offers no "#".
+   */
   taggableDocuments?: TaggableDocument[]
   /** Called after a comment is posted or deleted, so a list showing this discussion can refresh. */
   onChange?: () => void
-  /** Opens a tagged document (its preview) from a chip in the thread. */
+  /** Opens a tagged document (its preview) from a chip in the thread. Left out, the preview opens over the thread, in this pane. */
   onOpenDocument?: (doc: TaggableDocument) => void
   /** What a new comment starts with — a document's tag ("#QSR-16 ") when the thread is opened from it. */
   initialDraft?: string
@@ -465,14 +472,51 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
 
   // ── Document tags in the composer ──────────────────────────────────────────
 
+  /**
+   * The deliverable's documents, loaded here when the host didn't pass them (or hasn't yet): a pane
+   * opened with no list offered no "#" at all (Deepak, 2026-11-17). Undefined until known; stays so for
+   * a thread on a plain file.
+   */
+  const [loadedTaggable, setLoadedTaggable] = useState<TaggableDocument[] | undefined>(undefined)
+  /** Why the deliverable's documents didn't load: "#" says so rather than offering none. */
+  const [taggableFailed, setTaggableFailed] = useState<string | null>(null)
+  const hostGivesTaggable = taggableDocuments !== undefined
+  const loadTaggable = useCallback(async () => {
+    setTaggableFailed(null)
+    try {
+      const res = await fetch(`/api/projects/${engagementId}/documents/${encodeURIComponent(documentId)}/subtasks`)
+      if (!res.ok) throw await failureFrom(res)
+      const data = await res.json()
+      // No `deliverable` in the answer: this thread is on a plain file, with no documents to tag.
+      if (!data.deliverable) return
+      setLoadedTaggable((data.subtasks ?? []).map((t: TaggableDocument) => ({
+        documentId: t.documentId, docId: t.docId ?? null, fileName: t.fileName, mimeType: t.mimeType ?? null, breadcrumb: t.breadcrumb,
+      })))
+    } catch (e) {
+      setTaggableFailed(failureReason(e))
+    }
+  }, [engagementId, documentId])
+  useEffect(() => {
+    if (hostGivesTaggable) return
+    setLoadedTaggable(undefined)
+    void loadTaggable()
+  }, [hostGivesTaggable, loadTaggable])
+  const taggableList = taggableDocuments ?? loadedTaggable
+  /** "#" opens a menu: there are documents to offer, or a reason there aren't. */
+  const canTag = taggableList !== undefined || (!hostGivesTaggable && !!taggableFailed)
+
+  /** A tagged document opened from its chip, shown over the thread when the host has no preview of its own. */
+  const [previewDoc, setPreviewDoc] = useState<TaggableDocument | null>(null)
+  const openTaggedDocument = onOpenDocument ?? setPreviewDoc
+
   /** The deliverable's documents that have an ID to tag them by. */
-  const taggable = useMemo(() => (taggableDocuments ?? []).filter((d): d is TaggableDocument & { docId: string } => !!d.docId), [taggableDocuments])
+  const taggable = useMemo(() => (taggableList ?? []).filter((d): d is TaggableDocument & { docId: string } => !!d.docId), [taggableList])
   const docByDocId = useMemo(() => new Map(taggable.map((d) => [d.docId, d])), [taggable])
 
   /** Opens, narrows or closes the document menu from where the caret is. */
   const syncTagQuery = useCallback((value: string, caret: number) => {
     const q = findTagQuery(value, caret)
-    if (!q || !taggableDocuments) {
+    if (!q || !canTag) {
       tagDismissedAtRef.current = null
       setTagQuery(null)
       return
@@ -484,7 +528,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
       if (!prev || prev.query !== q.query || prev.start !== q.start) setMenuIndex(0)
       return { ...q, left }
     })
-  }, [taggableDocuments])
+  }, [canTag])
 
   /** Both menus follow the caret; at most one can match it. */
   const syncQueries = (value: string, caret: number) => {
@@ -661,6 +705,8 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
       setTagQuery(null)
       setMentionedUsers([])
       setRemindAt('')
+      // Internal notes are the exception: every post opens the lock again (Deepak, 2026-11-17).
+      setInternalMode(false)
       onChange?.()
       // Notify everyone still mentioned: now, or on the reminder date.
       if (recipients.length > 0) await notifyMentioned(newMsg.id, recipients, dateVal)
@@ -786,7 +832,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
       names={knownNames}
       personFor={personForName}
       docFor={(docId) => docByDocId.get(docId)}
-      onOpenDocument={onOpenDocument}
+      onOpenDocument={openTaggedDocument}
     />
   )
 
@@ -1039,30 +1085,6 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
     <p className="shrink-0 text-small text-fg-muted">This engagement is completed, so it&apos;s read only.</p>
   ) : (
     <form onSubmit={handleSubmit} className="flex shrink-0 flex-col gap-1.5">
-      {/* Who sees it: everyone on the engagement, or the firm's team only. Stays as chosen, so a
-          run of internal notes doesn't slip into a reply. */}
-      {canNote && (
-        <div role="radiogroup" aria-label="Who sees this comment" className="inline-flex self-start rounded-control border border-line p-0.5 text-caption">
-          <button
-            type="button"
-            role="radio"
-            aria-checked={!internalMode}
-            onClick={() => setInternalMode(false)}
-            className={cn('rounded-[4px] px-2 py-0.5 transition-colors', !internalMode ? 'bg-surface-muted text-fg' : 'text-fg-muted hover:text-fg')}
-          >
-            Reply
-          </button>
-          <button
-            type="button"
-            role="radio"
-            aria-checked={internalMode}
-            onClick={() => setInternalMode(true)}
-            className={cn('inline-flex items-center gap-1 rounded-[4px] px-2 py-0.5 transition-colors', internalMode ? 'bg-surface-muted text-fg' : 'text-fg-muted hover:text-fg')}
-          >
-            <Lock className="h-3 w-3" /> Internal note
-          </button>
-        </div>
-      )}
       {/* The reminder, as a chip, before it is sent. */}
       {remindAt && currentMentions.length > 0 && (
         <div className="flex">
@@ -1181,7 +1203,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
               <AtSign className="h-3.5 w-3.5" />
             </button>
           </Hint>
-          {taggableDocuments && (
+          {canTag && (
             <Hint label="Tag a document (#)">
               <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={startTag} aria-label="Tag a document" className="flex h-7 w-7 items-center justify-center rounded-control text-fg-subtle hover:bg-surface-hover hover:text-fg-muted">
                 <Hash className="h-3.5 w-3.5" />
@@ -1223,6 +1245,24 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
               )}
             </PopoverContent>
           </Popover>
+          {/* Who sees it: a lock that marks this comment internal only (the firm's team), beside the
+              composer's other tools. Open is a reply; closed, the box turns dashed and the placeholder
+              says who sees it. It opens again after every post: internal notes are the exception. */}
+          {canNote && (
+            <Hint label={internalMode ? 'Internal only · only Leads and Full Access contributors see it. Click to reply to everyone' : 'Make it internal only · only Leads and Full Access contributors will see it'}>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={internalMode}
+                aria-label="Internal only"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => setInternalMode((on) => !on)}
+                className={cn('flex h-7 w-7 items-center justify-center rounded-control hover:bg-surface-hover', internalMode ? 'bg-surface-muted text-fg' : 'text-fg-subtle hover:text-fg-muted')}
+              >
+                {internalMode ? <Lock className="h-3.5 w-3.5" /> : <LockOpen className="h-3.5 w-3.5" />}
+              </button>
+            </Hint>
+          )}
           {canDraftReply && !drafting && (
             <Hint label={`${ASSISTANT.name} drafts a reply from the thread for you to edit. Internal notes are never used.`}>
               <button
@@ -1295,7 +1335,14 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
             className="absolute bottom-full z-[200] mb-1.5 w-80 overflow-hidden rounded-card border border-line bg-surface p-1 shadow-popover"
             style={{ left: Math.max(0, Math.min(tagQuery.left, (composerRef.current?.clientWidth ?? 320) - 320)) }}
           >
-            {tagCandidates.length === 0 ? (
+            {taggableFailed && taggable.length === 0 ? (
+              <p role="alert" className="px-2 py-1.5 text-small text-fg-muted">
+                Couldn&apos;t load this deliverable&apos;s documents · {taggableFailed}{' '}
+                <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => void loadTaggable()} className="font-medium text-fg hover:underline">
+                  Try again
+                </button>
+              </p>
+            ) : tagCandidates.length === 0 ? (
               <p className="px-2 py-1.5 text-small text-fg-subtle">
                 {taggable.length === 0 ? 'No documents in this deliverable yet' : `No document matches “${tagQuery.query}”`}
               </p>
@@ -1358,7 +1405,26 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
   )
 
   return (
-    <div className="flex h-full min-h-0 min-w-0 flex-col gap-3 p-4">
+    <div className="relative flex h-full min-h-0 min-w-0 flex-col gap-3 p-4">
+      {previewDoc && (
+        <div role="region" aria-label={`Preview of ${previewDoc.fileName}`} className="absolute inset-0 z-30 flex flex-col bg-surface">
+          <div className="flex shrink-0 items-center gap-1.5 border-b border-line px-2 py-1.5">
+            <button type="button" onClick={() => setPreviewDoc(null)} className="inline-flex h-7 items-center gap-1 rounded-control px-1.5 text-small text-fg-muted hover:bg-surface-hover hover:text-fg">
+              <ArrowLeft className="h-3.5 w-3.5" />
+              Back to comments
+            </button>
+            <span className="min-w-0 flex-1 truncate text-right text-caption text-fg-subtle" title={previewDoc.fileName}>
+              {previewDoc.docId ? `${previewDoc.docId} · ` : ''}{previewDoc.fileName}
+            </span>
+          </div>
+          {(previewDoc.breadcrumb?.length ?? 0) > 0 && (
+            <PreviewLocationStrip folderPath={folderPathLabels(previewDoc.breadcrumb ?? [])} filesUrl={null} openLabel="Open" />
+          )}
+          <div className="flex min-h-0 flex-1 flex-col">
+            <DocumentPreviewPane document={{ id: previewDoc.documentId, name: previewDoc.fileName }} projectId={engagementId} />
+          </div>
+        </div>
+      )}
       <TooltipProvider>
         {focusDocId && (
           <div role="radiogroup" aria-label="Which comments" className="inline-flex shrink-0 self-start rounded-control border border-line p-0.5 text-caption">
@@ -1424,7 +1490,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                         </Hint>
                         {msg.isInternal && (
                           <Hint label="Only Leads and Full Access contributors see this">
-                            <span className="inline-flex h-[18px] shrink-0 items-center self-center rounded-[4px] bg-tag-gray-bg px-1.5 text-[11px] font-semibold text-tag-gray-fg">Internal</span>
+                            <span className="inline-flex h-[18px] shrink-0 items-center self-center gap-1 rounded-[4px] bg-tag-gray-bg px-1.5 text-[11px] font-semibold text-tag-gray-fg"><Lock className="h-2.5 w-2.5" aria-hidden />Internal</span>
                           </Hint>
                         )}
                         <span className="shrink-0 whitespace-nowrap text-caption text-fg-subtle">

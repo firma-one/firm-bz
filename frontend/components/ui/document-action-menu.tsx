@@ -14,7 +14,6 @@ import { DocumentPreviewPane } from "@/components/files/document-preview-pane"
 import { useRightPane } from "@/lib/right-pane-context"
 import { openAssetDetailsPane } from "@/components/files/asset-details-pane"
 import { useDueDateSave } from "@/components/files/use-due-date-save"
-import { DocumentDocCommentsPane } from "@/components/projects/document-doc-comments-pane"
 import { GoogleDriveIcon } from "@/components/ui/google-drive-icon"
 import { OneDriveIcon } from "@/components/ui/onedrive-icon"
 import {
@@ -175,6 +174,8 @@ interface DocumentActionMenuProps {
   /** Opens Details in place of the menu's own opener — the Files row passes what its cells may edit. */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onOpenDetails?: (doc: any) => void
+  /** Opens the folder's Details on its Discussions (the deliverable's Comments tab): the menu's Comment. */
+  onOpenDiscussions?: (doc: any) => void
   /** Engagement Lead only: Lock / Unlock version (files). Prefer explicit over showShareModal. */
   isEngagementLead?: boolean
   /** External user (EC or EV): hides Drive Actions and separator for all external users. */
@@ -230,6 +231,7 @@ export function DocumentActionMenu({
   onOpenCommentPane,
   onOpenInfoPane,
   onOpenDetails,
+  onOpenDiscussions,
   isEngagementLead,
   isExternalUser,
   isExternalViewer,
@@ -1008,28 +1010,12 @@ export function DocumentActionMenu({
                   </DropdownMenuItem>
                 )}
 
-                {/* Comments (folders only — files have Comments inside the deliverable detail pane) */}
-                {projectId && document.mimeType?.includes('folder') && (
+                {/* Comment (folders only): the folder's Details on its Discussions, the one comments pane. */}
+                {projectId && document.mimeType?.includes('folder') && onOpenDiscussions && (
                   <DropdownMenuItem
                     onClick={() => {
-                      if (rightPane.hasRightPane) {
-                        onOpenCommentPane?.(document.id)
-                        const docIdForComments = (document as any)?.projectDocumentId || document.id
-                        rightPane.setTitle('Comments')
-                        rightPane.setHeaderActions(null)
-                        rightPane.setHeaderIcon(<DocumentIcon mimeType={document.mimeType} className="h-3.5 w-3.5" />)
-                        rightPane.setHeaderSubtitle('Append-only. Visible to all project members.')
-                        rightPane.setContent(
-                          <DocumentDocCommentsPane
-                            engagementId={projectId}
-                            documentId={docIdForComments}
-                            documentName={document.name}
-                            documentMimeType={document.mimeType}
-                            orgSlug={orgSlug}
-                          />
-                        )
-                        rightPane.setExpanded?.(false)
-                      }
+                      onOpenCommentPane?.(document.id)
+                      onOpenDiscussions(document)
                     }}
                     className="flex cursor-pointer items-center gap-2"
                   >
@@ -1415,7 +1401,7 @@ export function DocumentActionMenu({
         iconVariant="primary"
         title="Promote Folder to Deliverable"
         subtitle={document.name}
-        description="This will share the folder externally and add it to the Board."
+        description="This will share the folder externally and add it to Deliverables."
         extra={
           // A Due property row, as on the engagement header: optional, and the same picker as everywhere.
           <div className="flex items-center gap-2">
@@ -1448,7 +1434,7 @@ export function DocumentActionMenu({
         iconVariant="red"
         title="Demote Deliverable to Folder"
         subtitle={document.name}
-        description="It goes back to being a plain folder and comes off the Board. Limited Access contributors and Reviewers lose their access to it."
+        description="It goes back to being a plain folder and comes off Deliverables. Limited Access contributors and Reviewers lose their access to it."
         confirmLabel="Demote"
         confirmVariant="red"
         onCancel={() => setShowUntagConfirm(false)}

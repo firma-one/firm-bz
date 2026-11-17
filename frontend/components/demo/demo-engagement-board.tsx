@@ -108,7 +108,7 @@ function BoardCard({ card, stage, open, onToggle }: { card: DemoDeliverable; sta
                             <span className="shrink-0 text-caption tabular-nums text-fg-subtle">{done}/{onBoard.length}</span>
                         </>
                     ) : (
-                        <span className="text-caption text-fg-subtle">No documents on the Board yet</span>
+                        <span className="text-caption text-fg-subtle">No documents started yet</span>
                     )}
                 </div>
             </div>

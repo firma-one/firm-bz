@@ -66,7 +66,7 @@ export function EngagementTabsList({ pendingTab, ...c }: EngagementTabsConfig & 
             </TabsTrigger>
             <TabsTrigger value="board" data-demo-tour="engagement-board-tab" className="relative gap-1.5">
                 <LayoutGrid className="h-4 w-4" />
-                Board
+                Deliverables
                 {count(c.sharesCount)}
                 {pending('board')}
             </TabsTrigger>

@@ -28,7 +28,7 @@ const FIRM_VIEWS: Record<string, Crumb> = {
 const ENGAGEMENT_TABS: Record<string, Crumb> = {
     analytics: { label: 'Overview', icon: <BarChart3 /> },
     files: { label: 'Files', icon: <Folder /> },
-    board: { label: 'Board', icon: <LayoutGrid /> },
+    board: { label: 'Deliverables', icon: <LayoutGrid /> },
     comments: { label: 'Discussions', icon: <MessagesSquare /> },
     audit: { label: 'Audit', icon: <ClipboardList /> },
     members: { label: 'Members', icon: <Users /> },

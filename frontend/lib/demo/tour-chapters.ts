@@ -85,9 +85,9 @@ export const TOUR_OUTLINE: TourNode[] = [
         children: [
             { id: 'all-engagements', title: 'All engagements' },
             { id: 'new-engagement', title: 'New engagement' },
-            { id: 'engagement-overview', title: 'Overview, AI summary and progress' },
+            { id: 'engagement-overview', title: 'Overview and what needs you' },
             { id: 'files', title: 'Files', children: [{ id: 'file-details', title: 'Details' }] },
-            { id: 'board', title: 'Board', children: [{ id: 'deliverable-details', title: 'Details' }] },
+            { id: 'board', title: 'Deliverables', children: [{ id: 'deliverable-details', title: 'Details' }] },
             // Memos is a sub-tab of Discussions; RAID follows it, then Audit and Members, as the app's tabs run.
             { id: 'discussions', title: 'Discussions', children: [{ id: 'memos', title: 'Memos' }] },
             { id: 'raid', title: 'RAID' },

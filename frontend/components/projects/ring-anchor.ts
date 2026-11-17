@@ -6,13 +6,29 @@ import { useEffect, useRef } from 'react'
  * Overview (engagement-insights-dashboard.tsx) and the tour's (components/demo/demo-engagement-overview.tsx).
  */
 
+/**
+ * Sent to a closed section (one marked `data-closed-section`, as Health details is while closed) to open
+ * it, when a link points at a chart inside it (overview-layout.tsx).
+ */
+export const OPEN_SECTION_EVENT = 'firma-open-section'
+
 /** Scrolls to a chart, then pulses it briefly so the eye finds what was referenced. */
 export function scrollToRing(ringId: string) {
     const el = document.getElementById(ringId)
     if (!el) return
-    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    el.classList.add('ring-pulse')
-    window.setTimeout(() => el.classList.remove('ring-pulse'), 1400)
+    const go = () => {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        el.classList.add('ring-pulse')
+        window.setTimeout(() => el.classList.remove('ring-pulse'), 1400)
+    }
+    // A chart in a closed section can't be scrolled to: open it, then scroll once it has drawn.
+    const closed = el.closest('[data-closed-section]')
+    if (closed) {
+        closed.dispatchEvent(new CustomEvent(OPEN_SECTION_EVENT))
+        window.setTimeout(go, 0)
+        return
+    }
+    go()
 }
 
 /**

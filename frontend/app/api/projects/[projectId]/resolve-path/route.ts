@@ -4,6 +4,7 @@ import { SearchService } from '@/lib/services/search-service'
 import { logger } from '@/lib/logger'
 import { requireProjectView } from '@/lib/api/engagement-auth'
 import { requireEngagementMember } from '@/lib/engagement-access'
+import { engagementRootFolderIds, rootFolderName } from '@/lib/connectors/engagement-root-folders'
 
 export async function GET(
     request: NextRequest,
@@ -26,18 +27,13 @@ export async function GET(
             return NextResponse.json({ error: 'Not found' }, { status: 404 })
         }
 
-        let path = await SearchService.resolvePathToProjectRoot(authResult.ctx.orgId, fileId)
-
-        const engagement = await prisma.engagement.findUnique({
-            where: { id: projectId },
-            include: { client: { include: { connector: true } } },
-        })
-        const settings = (engagement?.client?.connector?.settings as any) || {}
-        const engagementSlug = engagement?.slug
-        const ps =
-            engagementSlug && settings.projectFolderSettings
-                ? settings.projectFolderSettings[engagementSlug] || {}
-                : {}
+        // The top folders from the connector's adapter, as the Files page gets them: reading
+        // settings.projectFolderSettings here found none on OneDrive (see engagementRootFolderIds).
+        const [ancestors, ps] = await Promise.all([
+            SearchService.resolvePathToProjectRoot(authResult.ctx.orgId, fileId),
+            engagementRootFolderIds(projectId),
+        ])
+        let path = ancestors
         const rootIds = [ps.generalFolderId, ps.confidentialFolderId, ps.stagingFolderId].filter(Boolean) as string[]
 
         let projectRootFolderId: string | null = null
@@ -57,8 +53,7 @@ export async function GET(
             const parentId = doc?.parentId ?? null
             if (parentId && rootIds.includes(parentId)) {
                 projectRootFolderId = parentId
-                const rootName = parentId === ps.generalFolderId ? 'General' : parentId === ps.confidentialFolderId ? 'Confidential' : 'Staging'
-                path = [{ id: parentId, name: rootName }, ...path]
+                path = [{ id: parentId, name: rootFolderName(ps, parentId) }, ...path]
             }
         }
 

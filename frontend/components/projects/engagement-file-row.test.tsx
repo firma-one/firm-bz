@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { cleanup, render, screen, fireEvent, within } from '@testing-library/react'
+import { cleanup, render, screen, fireEvent, within, waitFor } from '@testing-library/react'
 import { TooltipProvider } from '@/components/ui/tooltip'
 
 // The row's quick actions, in order: Bookmark, Details, Rename, Preview, Open, Copy link. Rename and
@@ -9,7 +9,9 @@ vi.mock('@/lib/right-pane-context', () => ({ useRightPane: () => ({}) }))
 const { menuRenders } = vi.hoisted(() => ({ menuRenders: vi.fn() }))
 // Counts renders of the row: the row draws this on every one of them.
 vi.mock('@/components/ui/document-action-menu', () => ({ DocumentActionMenu: () => { menuRenders(); return null } }))
-vi.mock('@/components/files/asset-details-pane', () => ({ openAssetDetailsPane: vi.fn() }))
+const { openAssetDetailsPane, openDeliverableDetailPane } = vi.hoisted(() => ({ openAssetDetailsPane: vi.fn(), openDeliverableDetailPane: vi.fn() }))
+vi.mock('@/components/files/asset-details-pane', () => ({ openAssetDetailsPane }))
+vi.mock('@/components/projects/shares/deliverable-detail-panel', () => ({ openDeliverableDetailPane }))
 vi.mock('@/components/projects/file-property-cells', () => ({ FileAssigneeCell: () => null, FileDueDateCell: () => null, FileStatusCell: () => null }))
 
 import { EngagementFileRow, type EngagementFileRowProps } from './engagement-file-row'
@@ -192,5 +194,36 @@ describe('one row, one render', () => {
         menuRenders.mockClear()
         rerender(draw({ ...ROW, isSelected: true }))
         expect(menuRenders).toHaveBeenCalled()
+    })
+})
+
+/**
+ * A comment deep link (#doc-comment:, from RAID, emails, notifications) lands on the row, which opens
+ * its own Details on the Discussions tab: the one comments pane, never a separate Comments pane.
+ */
+describe('a comment link landing on the row', () => {
+    beforeEach(() => { openAssetDetailsPane.mockReset(); openDeliverableDetailPane.mockReset() })
+
+    it('opens a document’s Details on Discussions, once', () => {
+        const onDetailsOpened = vi.fn()
+        const onOpenInfoPane = vi.fn()
+        renderRow({ openDetailsOnDiscussions: true, onDetailsOpened, onOpenInfoPane })
+        expect(openAssetDetailsPane).toHaveBeenCalledTimes(1)
+        expect(openAssetDetailsPane.mock.calls[0][1]).toMatchObject({ document: FILE, initialTab: 'discussions' })
+        expect(onOpenInfoPane).toHaveBeenCalledWith('f1')
+        expect(onDetailsOpened).toHaveBeenCalledTimes(1)
+    })
+
+    it('opens a deliverable’s Details on its Comments tab', async () => {
+        const deliverable = { ...FOLDER, isDeliverable: true, projectDocumentId: 'del1', docId: 'FRM-49' } as EngagementFileRowProps['file']
+        renderRow({ file: deliverable, openDetailsOnDiscussions: true, onDetailsOpened: vi.fn(), onOpenInfoPane: vi.fn() })
+        await waitFor(() => expect(openDeliverableDetailPane).toHaveBeenCalledTimes(1))
+        expect(openDeliverableDetailPane.mock.calls[0][1]).toMatchObject({ documentId: 'del1', docId: 'FRM-49', initialTab: 'comments' })
+        expect(openAssetDetailsPane).not.toHaveBeenCalled()
+    })
+
+    it('opens nothing on a row the link isn’t for', () => {
+        renderRow({ onOpenInfoPane: vi.fn() })
+        expect(openAssetDetailsPane).not.toHaveBeenCalled()
     })
 })
