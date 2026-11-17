@@ -315,7 +315,7 @@ new `titleAside` slot) opens the page's part of the tour in a new tab.
 
 | Page | Opens |
 |------|-------|
-| Engagement page (`EngagementHeader`; follows the open tab) | Overview → `engagement-overview`, Files → `files`, Board → `board`, Discussions → `discussions`, Members → `engagement-members`, Audit → `engagement-audit`; none on Settings or Wiki |
+| Engagement page (`EngagementHeader`; follows the open tab) | Overview → `engagement-overview`, Files → `files`, Board → `board`, Discussions → `discussions` (on Memos, `view=memos` → `memos`), RAID → `raid`, Audit → `engagement-audit`, Members → `engagement-members`; none on Settings or Wiki |
 | Firm Overview, Clients, Calendar, Audit (`FirmClientsView`) | `firm-overview`, `all-clients`, `calendar`, `firm-audit` |
 | Doc Search (`GlobalSearchView`) | `doc-search` |
 

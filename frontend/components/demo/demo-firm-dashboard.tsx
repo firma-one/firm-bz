@@ -65,7 +65,10 @@ function toClientSummaries(firm: DemoFirm): ClientSummary[] {
  * view opens with its own heading — no tab strip, no firm banner (the header bar names the firm).
  */
 export function DemoFirmDashboard({ firm }: { firm: DemoFirm }) {
-    const tabParam = useSearchParams()?.get('tab') || 'clients'
+    const searchParams = useSearchParams()
+    const tabParam = searchParams?.get('tab') || 'clients'
+    // Settings' own tab, for a tour step that points at one (`section=appsettings`).
+    const settingsSection = searchParams?.get('section') ?? null
     const view = VIEWS[tabParam] ? tabParam : 'clients'
     const meta = VIEWS[view]
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('list')
@@ -119,7 +122,7 @@ export function DemoFirmDashboard({ firm }: { firm: DemoFirm }) {
             {view === 'doc-search' && <DemoFirmDocSearch firm={firm} />}
             {view === 'members' && <DemoFirmMembers />}
             {view === 'audit' && <DemoFirmAudit firm={firm} />}
-            {view === 'settings' && <DemoFirmSettings firm={firm} />}
+            {view === 'settings' && <DemoFirmSettings key={settingsSection ?? 'main'} firm={firm} initialTab={settingsSection} />}
         </div>
     )
 }

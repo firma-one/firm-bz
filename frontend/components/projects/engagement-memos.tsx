@@ -19,7 +19,7 @@ import {
     type NotesEngagementRef,
     type NotesProposalsFound,
 } from '@/components/projects/notes-proposals-panel'
-import { MemoBrioPanel, type MemoSuggestionChanges } from '@/components/projects/memo-brio-panel'
+import { MemoBrioPanel, type MemoBrioTab, type MemoSuggestionChanges } from '@/components/projects/memo-brio-panel'
 import { BRIO_PROPOSALS_FAILED } from '@/lib/ai/brio-failure'
 import { AddMemoSheet, type AddMemoInput, type AddMemoOutcome, type EditMemoContext, type MemoEditInput } from '@/components/projects/add-memo-sheet'
 import { DiscussionsBarPortal } from '@/components/projects/discussions-switch'
@@ -440,6 +440,11 @@ export interface MemosViewProps {
      * it, and what was applied. `onSave` is the caller's. Absent: no Edit.
      */
     onEdit?: (memo: MemoListItem, context: MemoEditOpening) => void
+    /**
+     * Brio's panel opens on this tab: /tour's steps show Summary, then RAID (`brio=`). Changing it opens
+     * the panel afresh on the new tab. Absent: RAID while suggestions wait, else Summary.
+     */
+    brioTab?: MemoBrioTab | null
 }
 
 /** When the memo pane opens the edit sheet: everything but where the edit is saved. */
@@ -505,6 +510,7 @@ export function MemosView({
     actOnRaid,
     identifyingIds,
     onEdit,
+    brioTab,
 }: MemosViewProps) {
     const [query, setQuery] = useState('')
     // While someone works in Brio's panel, the list folds to a rail of date blocks and the panel takes the room.
@@ -548,6 +554,7 @@ export function MemosView({
                     <Button
                         type="button"
                         size="sm"
+                        data-demo-tour="memos-add"
                         onClick={onAdd}
                         disabled={!!addDisabledReason || memos === null}
                         title={addDisabledReason ?? undefined}
@@ -598,6 +605,7 @@ export function MemosView({
                                 identifying={!!identifyingIds?.includes(selected.id)}
                                 onEdit={onEdit ? (context) => onEdit(selected, { ...context, storage, canIdentify: true }) : undefined}
                                 onEngage={() => { if (!foldChosen) setCollapsed(true) }}
+                                brioTab={brioTab}
                             />
                         )}
                     </MemosColumns>
@@ -782,6 +790,7 @@ function MemoPane({
     identifying,
     onEdit,
     onEngage,
+    brioTab,
 }: {
     memo: MemoListItem
     storage: MemoStorageName | null
@@ -800,6 +809,7 @@ function MemoPane({
     onEdit?: (context: Omit<EditMemoContext, 'onSave' | 'storage' | 'canIdentify'>) => void
     /** Someone is working in Brio's panel: the memo list makes room. */
     onEngage?: () => void
+    brioTab?: MemoBrioTab | null
 }) {
     const [content, setContent] = useState<PaneContent>(() => (cached ? { status: 'ready', content: cached } : { status: 'loading' }))
     const [attempt, setAttempt] = useState(0)
@@ -997,6 +1007,8 @@ function MemoPane({
 
             {!readOnly && (
                 <MemoBrioPanel
+                    key={brioTab ?? 'auto'}
+                    initialTab={brioTab ?? undefined}
                     memo={memo}
                     memoText={memoText}
                     payload={waitingPayload}

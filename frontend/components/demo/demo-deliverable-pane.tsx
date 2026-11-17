@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { CalendarClock, ChevronDown, Info, MessagesSquare, Settings as SettingsIcon, XSquare } from 'lucide-react'
 import { DeliverableIcon } from '@/components/ui/deliverable-icon'
 import { DocumentIcon } from '@/components/ui/document-icon'
@@ -54,13 +55,23 @@ function SubtaskLine({ subtask, stage }: { subtask: { id: string; docId: string;
 }
 
 /** Static counterpart to deliverable-detail-panel.tsx, docked the same way layout-right-panel.tsx renders its 'small'/'medium' pane. Details is real (the folder's files as subtasks); Comments works on screen, with @ and # (demo-deliverable-comments.tsx); Settings is inert. */
-export function DemoDeliverablePane({ deliverable, onClose, embedded = false }: {
+export function DemoDeliverablePane({ deliverable, onClose, embedded = false, initialTab = 'details' }: {
     deliverable: DemoDeliverable
     onClose?: () => void
     /** Inside the docked right pane (the tour Board): its header (ID, name, close) is the pane's own. */
     embedded?: boolean
+    /** The tab it opens on: a tour step opens Comments (`dtab=comments`) to show Brio's reply draft. */
+    initialTab?: Tab
 }) {
-    const [activeTab, setActiveTab] = useState<Tab>('details')
+    const [activeTab, setActiveTab] = useState<Tab>(initialTab)
+    // A tour step asks for Comments by URL (`dtab=comments`) while the pane is open: it follows, as it
+    // stays the same pane (the Board doesn't reopen it, so nothing waits on the pane's swap animation).
+    const dtab = useSearchParams()?.get('dtab') ?? null
+    const [followedDtab, setFollowedDtab] = useState(dtab)
+    if (dtab !== followedDtab) {
+        setFollowedDtab(dtab)
+        if (dtab === 'comments') setActiveTab('comments')
+    }
     const [showNotStarted, setShowNotStarted] = useState(false)
     const subtasks = collectSubtasks(deliverable.folder)
     // As in the app's pane: the documents on the Board are the work, Not started ones wait under their own line.

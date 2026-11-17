@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { BarChart3, Briefcase, Building2, CalendarDays, ChevronsUpDown, ClipboardList, Command, Compass, Contact, CreditCard, Folder, Home, Inbox, Info, LayoutGrid, LifeBuoy, List, MessagesSquare, Play, Plus, Search, Settings, StepForward, UserCircle, Users } from 'lucide-react'
+import { BarChart3, Briefcase, Building2, CalendarDays, ChevronsUpDown, ClipboardList, Command, Compass, Contact, CreditCard, Folder, Home, Inbox, Info, LayoutGrid, LifeBuoy, List, MessagesSquare, NotebookPen, Play, Plus, Search, Settings, ShieldAlert, StepForward, UserCircle, Users } from 'lucide-react'
 import { Brio } from '@/components/ui/brio'
 import { ClientIcon } from '@/components/ui/client-icon'
 import { cn } from '@/lib/utils'
@@ -33,6 +33,9 @@ export const TOUR_NODE_ICONS: Record<TourNodeId, ReactNode | null> = {
     board: <LayoutGrid />,
     'deliverable-details': <Info />,
     discussions: <MessagesSquare />,
+    // As the app's own: Memos, internal notes; RAID, the tab's shield.
+    memos: <NotebookPen />,
+    raid: <ShieldAlert />,
     'engagement-members': <Users />,
     'engagement-audit': <ClipboardList />,
     'engagement-settings': <Settings />,

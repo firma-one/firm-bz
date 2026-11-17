@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { useToast } from '@/components/ui/toast'
 import { MemosView, type ApplicableProposal, type MemoContent, type MemoEditOpening, type MemoFound } from '@/components/projects/engagement-memos'
 import { AddMemoSheet, localDay, type AddMemoInput, type AddMemoOutcome, type MemoEditInput } from '@/components/projects/add-memo-sheet'
@@ -31,7 +32,7 @@ import {
     type MemoReview,
     type MemoReviewPayload,
 } from '@/lib/memos/memo-shared'
-import type { MemoSuggestionChanges } from '@/components/projects/memo-brio-panel'
+import type { MemoBrioTab, MemoSuggestionChanges } from '@/components/projects/memo-brio-panel'
 
 /*
  * Internal memos on /tour: three canned calls of the sample engagement, kept in memory. Brio's read
@@ -524,6 +525,9 @@ export function DemoMemosTab({ memos: c, selectedId, onSelect }: {
     onSelect: (memoId: string) => void
 }) {
     const { addToast } = useToast()
+    // A tour step opens Brio's panel on Summary or RAID (`brio=summary`, `brio=raid`).
+    const brioParam = useSearchParams()?.get('brio')
+    const brioTab: MemoBrioTab | null = brioParam === 'summary' || brioParam === 'raid' ? brioParam : null
     const [adding, setAdding] = useState(false)
     const [editing, setEditing] = useState<{ memo: MemoListItem; context: MemoEditOpening; key: number } | null>(null)
     const [editOpen, setEditOpen] = useState(false)
@@ -562,6 +566,7 @@ export function DemoMemosTab({ memos: c, selectedId, onSelect }: {
                 dismissReview={c.dismissReview}
                 actOnRaid={c.actOnRaid}
                 identifyingIds={c.identifyingIds}
+                brioTab={brioTab}
                 onEdit={(memo, context) => {
                     setEditing((prev) => ({ memo, context, key: (prev?.key ?? 0) + 1 }))
                     setEditOpen(true)

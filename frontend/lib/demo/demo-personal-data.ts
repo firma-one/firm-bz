@@ -161,7 +161,27 @@ export function demoReminders(now: Date): ReminderWithContext[] {
             }, now),
         )
 
-    return [...due, ...reviews, ...mention, ...followUps]
+    // An Action from the tour's RAID log (components/demo/demo-raid.tsx, raid-letter): owned by the demo
+    // user and past its due date, so it's their reminder, as an open Action is in the app
+    // (lib/raid/raid-action-reminders.ts), and it leads them to the RAID tab.
+    const first = pairs[0]
+    // Two days ago on the visitor's own calendar, as daysFrom counts.
+    const actionDue = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 2)
+    const actionDueDay = `${actionDue.getFullYear()}-${String(actionDue.getMonth() + 1).padStart(2, '0')}-${String(actionDue.getDate()).padStart(2, '0')}`
+    const actions = first
+        ? [reminder({
+            id: 'rem-action-letter',
+            entityKey: 'platform.engagement_raid_items',
+            action: 'Action',
+            entityName: 'Send Dana the revised engagement letter',
+            clientName: first.client.name,
+            engagementName: first.engagement.name,
+            ctaUrl: `${engagementHref(first.client, first.engagement)}?tab=raid`,
+            date: actionDueDay,
+        }, now)]
+        : []
+
+    return [...due, ...actions, ...reviews, ...mention, ...followUps]
 }
 
 /** The demo user's notifications, newest first; the two newest are unread. */

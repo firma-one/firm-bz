@@ -149,11 +149,14 @@ const TAB_GUIDES: Record<string, TourNodeId> = {
     files: 'files',
     board: 'board',
     comments: 'discussions',
+    raid: 'raid',
     members: 'engagement-members',
     audit: 'engagement-audit',
 }
 
-export function engagementTabGuide(tab: string): TourNodeId | null {
+/** The tab's section; Discussions on its Memos sub-tab (`view=memos`) opens the Memos section. */
+export function engagementTabGuide(tab: string, view?: string | null): TourNodeId | null {
+    if (tab === 'comments' && view === 'memos') return 'memos'
     return TAB_GUIDES[tab] ?? null
 }
 
