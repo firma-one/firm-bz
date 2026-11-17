@@ -3,7 +3,8 @@
 import { useEffect, useCallback, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { Tabs } from "@/components/ui/tabs"
-import { EngagementInsightsDashboard } from './engagement-insights-dashboard'
+import { EngagementInsightsDashboard, filesHealthOf } from './engagement-insights-dashboard'
+import { EngagementFilesViews, FILES_VIEW_PARAM, FilesViewTabs, filesViewOf, type FilesView } from './files-views'
 import type { EngagementRoleSlug } from '@/lib/deliverable-stage-roles'
 import { EngagementFileList, type EngagementFolderData } from './engagement-file-list'
 import { type BreadcrumbItem } from '@/lib/files-folder-session'
@@ -148,6 +149,9 @@ export function EngagementWorkspace({
     const router = useRouter()
     // Discussions keeps its sub-tab in the URL: on Memos, How this works opens the tour's Memos section.
     const discussionsView = useSearchParams().get(DISCUSSIONS_VIEW_PARAM)
+    // The Files tab's view: All files, or Recent and Health for internal viewers (files-views.tsx).
+    const filesViewParam = useSearchParams().get(FILES_VIEW_PARAM)
+    const [healthBadge, setHealthBadge] = useState<number | undefined>(undefined)
     const { viewAsPersonaSlug } = useViewAs()
     // External roles (EC/EV) — including internal users previewing via "view as".
     // Drives the Overview tab: externals get only the deliverables analytics section.
@@ -169,6 +173,7 @@ export function EngagementWorkspace({
     const [liveFileCount, setLiveFileCount] = useState<number | undefined>(undefined)
     useEffect(() => { setLiveFileCount(fileCount) }, [fileCount])
     const [filesNavSlot, setFilesNavSlot] = useState<HTMLDivElement | null>(null)
+    const [overviewNavSlot, setOverviewNavSlot] = useState<HTMLDivElement | null>(null)
     const [pendingTab, setPendingTab] = useState<string | null>(null)
 
     const slugFromPath = pathname?.split('/e/')[1]?.split('/')[0] ?? pathname?.split('/p/')[1]?.split('/')[0] ?? ''
@@ -249,6 +254,11 @@ export function EngagementWorkspace({
         router.push(`${base}/${value}${suffix}`)
     }, [base, router])
 
+    // Recent and Health are internal only, as the Overview sections they came from were.
+    const canSeeFileViews = Boolean(canViewInternalTabs) && !isExternalPersona
+    const filesView: FilesView = canSeeFileViews ? filesViewOf(filesViewParam) : 'all'
+    const filesViewHref = (v: FilesView) => (v === 'all' ? `${base}/files` : `${base}/files?${FILES_VIEW_PARAM}=${v}`)
+
     const handleOpenInFiles = useCallback((folderId: string, breadcrumbs: BreadcrumbItem[], hash?: string) => {
         router.push(`${base}/files${hash ? '#' + hash : ''}`)
     }, [base, router])
@@ -284,6 +294,10 @@ export function EngagementWorkspace({
                     {/* New Document button slot — EngagementFileList portals into this when Files is active */}
                     {currentTab === 'files' && (
                         <div ref={setFilesNavSlot} className="flex shrink-0 items-center pb-1" />
+                    )}
+                    {/* The Overview's toolbar (Refresh, settings, PDF, email) portals into this */}
+                    {currentTab === 'analytics' && (
+                        <div ref={setOverviewNavSlot} className="flex shrink-0 items-center pb-1" />
                     )}
                     {/* Grid / List toggle — only when Shares tab is active */}
                     {currentTab === 'shares' && (() => {
@@ -325,7 +339,28 @@ export function EngagementWorkspace({
                 )}
                 {(currentTab === 'files' || currentTab === 'shares' || currentTab === 'board') ? (
                     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-                        {currentTab === 'files' && (
+                        {currentTab === 'files' && canSeeFileViews && (
+                            <div className="mb-2 shrink-0">
+                                <FilesViewTabs
+                                    view={filesView}
+                                    hrefOf={filesViewHref}
+                                    onSelect={(v) => router.push(filesViewHref(v))}
+                                    healthBadge={healthBadge}
+                                />
+                            </div>
+                        )}
+                        {currentTab === 'files' && filesView !== 'all' && (
+                            <ErrorBoundary context="EngagementFilesViews">
+                                <EngagementFilesViews
+                                    projectId={projectId}
+                                    view={filesView}
+                                    engagementBase={base}
+                                    toHealth={filesHealthOf}
+                                    onHealthBadge={setHealthBadge}
+                                />
+                            </ErrorBoundary>
+                        )}
+                        {currentTab === 'files' && filesView === 'all' && (
                             <ErrorBoundary context="EngagementFileList">
                                 <EngagementSearchProvider projectId={projectId} viewAsPersonaSlug={viewAsPersonaSlug}>
                                     <EngagementFileList
@@ -441,6 +476,7 @@ export function EngagementWorkspace({
                                 firmName={orgName}
                                 clientName={clientName}
                                 engagementName={projectName}
+                                navSlot={overviewNavSlot}
                             />
                         </ErrorBoundary>
                     </div>

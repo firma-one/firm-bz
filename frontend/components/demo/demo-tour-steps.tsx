@@ -303,7 +303,7 @@ export const NODE_STEPS: Record<TourNodeId, TourStep[]> = {
         {
             target: '[data-demo-tour="client-engagements-tab"]',
             title: "A client's engagements",
-            content: <p>Every engagement for this client lives here. Each one is its own client-billable project, with its own Files, Board, Discussions, RAID log<RaidInfo className="ml-0.5" />, audit log, members and settings.</p>,
+            content: <p>Every engagement for this client lives here. Each one is its own client-billable project, with its own Files, Deliverables, Discussions, RAID log<RaidInfo className="ml-0.5" />, audit log, members and settings.</p>,
             route: client,
             placement: 'bottom',
             skipScroll: true,
@@ -313,8 +313,8 @@ export const NODE_STEPS: Record<TourNodeId, TourStep[]> = {
         {
             target: '[data-demo-tour="engagement-add-btn"]',
             title: 'Add an engagement',
-            content: <p>Engagements are client-billable projects, like SEO retainers, paid media campaigns, content sprints, brand audits, or social strategy. Run them as a <strong>Retainer</strong>, <strong>T&amp;M</strong>, or <strong>Fixed Price</strong> engagement. Each has its own Files, Board, Discussions and team.</p>,
-            spoken: 'Engagements are client-billable projects, like SEO retainers, paid media campaigns, content sprints, brand audits, or social strategy. Run them as a Retainer, Time and Materials, or Fixed Price engagement. Each has its own Files, Board, Discussions and team.',
+            content: <p>Engagements are client-billable projects, like SEO retainers, paid media campaigns, content sprints, brand audits, or social strategy. Run them as a <strong>Retainer</strong>, <strong>T&amp;M</strong>, or <strong>Fixed Price</strong> engagement. Each has its own Files, Deliverables, Discussions and team.</p>,
+            spoken: 'Engagements are client-billable projects, like SEO retainers, paid media campaigns, content sprints, brand audits, or social strategy. Run them as a Retainer, Time and Materials, or Fixed Price engagement. Each has its own Files, Deliverables, Discussions and team.',
             route: client,
             placement: 'bottom',
             skipScroll: true,
@@ -330,36 +330,36 @@ export const NODE_STEPS: Record<TourNodeId, TourStep[]> = {
             skipScroll: true,
         },
         {
+            target: '[data-demo-tour="overview-status-row"]',
+            title: 'Where it stands',
+            content: <p>The engagement in one row: its health score, the time left, how many deliverables are approved, what&apos;s due next, and the open Risks, Actions and Issues in its RAID log.</p>,
+            route: engAt({ tab: 'analytics' }),
+            placement: 'bottom',
+        },
+        {
             target: '[data-demo-tour="engagement-action-center"]',
-            title: 'Action Center',
-            content: <p>What needs doing on this engagement, in two lists: <strong>Delivery</strong> (overdue deliverables, ones awaiting approval or rework, planning gaps, unanswered comments) and <strong>Housekeeping</strong> (pending invitations, sensitive, duplicate or stale files).</p>,
+            title: 'Needs you',
+            content: <p>Everything that needs doing on this engagement, in one list: what&apos;s <strong>waiting on you</strong> (your RAID actions, <Brio />&apos;s suggestions, planning gaps, anything overdue) and what&apos;s <strong>waiting on others</strong>. What&apos;s all clear folds into one line.</p>,
             route: engAt({ tab: 'analytics' }),
             placement: 'bottom',
         },
         {
             target: '[data-demo-tour="overview-waiting-reviewer"]',
-            title: 'Waiting on review',
-            content: <p>Deliverables that have sat with the client for a while, each with a nudge <Brio /> drafts for you to edit and send.</p>,
-            route: engAt({ tab: 'analytics' }),
-            placement: 'bottom',
-        },
-        {
-            target: '[data-demo-tour="overview-raid-card"]',
-            title: 'RAID at a glance',
-            content: <p>The engagement&apos;s open Risks, Actions and Issues, and its Decisions so far, with a link to the full log on the RAID tab.</p>,
+            title: 'Waiting on others',
+            content: <p>Deliverables that have sat with the client for a while, each with a nudge <Brio /> drafts for you to edit and send, and invitations not yet accepted.</p>,
             route: engAt({ tab: 'analytics' }),
             placement: 'bottom',
         },
         {
             target: '[data-demo-tour="engagement-ai-summary"]',
-            title: 'AI summary',
+            title: 'Latest update',
             content: <p><Brio /> drafts the engagement&apos;s status summary from its own data, and the status update you send the client. Your team edits and approves both before anything reaches the client.</p>,
             route: engAt({ tab: 'analytics' }),
-            placement: 'left',
+            placement: 'top',
         },
         {
             target: '[data-demo-tour="engagement-progress"]',
-            title: 'Progress',
+            title: 'Deliverables',
             content: <p>Every deliverable on a timeline from kickoff to the due date, with today marked: what&apos;s done, what&apos;s due next and what&apos;s running late.</p>,
             route: engAt({ tab: 'analytics' }),
             placement: 'top',
@@ -414,6 +414,14 @@ export const NODE_STEPS: Record<TourNodeId, TourStep[]> = {
             route: engAt({ tab: 'files', folder: inProgressId }),
             placement: 'left',
         },
+        {
+            target: '[data-demo-tour="files-views"]',
+            title: 'Recent and Health',
+            content: <p>Two more views, for your team only. <strong>Recent</strong> lists what changed this week and who changed it. <strong>Health</strong> scores how tidy the folder is and flags duplicate, stale or sensitive files.</p>,
+            route: engAt({ tab: 'files', view: 'health' }),
+            placement: 'bottom',
+            skipScroll: true,
+        },
     ],
     'file-details': [
         {
@@ -422,7 +430,7 @@ export const NODE_STEPS: Record<TourNodeId, TourStep[]> = {
             content: (
                 <div className="space-y-2">
                     <p>Details has everything about a file: its stage, due date, assignee and type.</p>
-                    <p>When a document is waiting on someone, flag it <strong>Blocked</strong> with a reason and a note. Only Leads and Full Access contributors see the flag, and the Board can filter by it.</p>
+                    <p>When a document is waiting on someone, flag it <strong>Blocked</strong> with a reason and a note. Only Leads and Full Access contributors see the flag, and the Deliverables tab can filter by it.</p>
                 </div>
             ),
             route: engAt({ tab: 'files', folder: inProgressId, details: firstDocumentId }),
@@ -442,8 +450,8 @@ export const NODE_STEPS: Record<TourNodeId, TourStep[]> = {
     board: [
         {
             target: '[data-demo-tour="engagement-board-tab"]',
-            title: 'Deliverables board',
-            content: <p>The Board shows every deliverable as a card in four lanes: To do, In progress, In review and Approved.</p>,
+            title: 'Deliverables',
+            content: <p>Every deliverable is a card in one of four lanes: To do, In progress, In review and Approved.</p>,
             route: engAt({ tab: 'board' }),
             placement: 'bottom',
             skipScroll: true,
@@ -454,7 +462,7 @@ export const NODE_STEPS: Record<TourNodeId, TourStep[]> = {
             content: (
                 <div className="space-y-2">
                     <p>A card&apos;s lane is worked out from its documents&apos; stages: any document in progress puts it In progress, and it&apos;s Approved once they all are.</p>
-                    <p>The bar counts the approved documents. Ones Not started stay off the Board until work begins.</p>
+                    <p>The bar counts the approved documents. Ones Not started stay out of the lanes until work begins.</p>
                 </div>
             ),
             route: engAt({ tab: 'board' }),
@@ -464,7 +472,7 @@ export const NODE_STEPS: Record<TourNodeId, TourStep[]> = {
         {
             target: '[data-demo-tour="board-lane-approved"]',
             title: 'Approval',
-            content: <p>Approving a document locks it and keeps an exact copy of the version approved, with who approved it and when. When every document on the Board is approved, so is the deliverable.</p>,
+            content: <p>Approving a document locks it and keeps an exact copy of the version approved, with who approved it and when. When every document in it is approved, so is the deliverable.</p>,
             route: engAt({ tab: 'board' }),
             placement: 'left',
             skipScroll: true,
@@ -472,7 +480,7 @@ export const NODE_STEPS: Record<TourNodeId, TourStep[]> = {
         {
             target: '[data-demo-tour="board-filters"]',
             title: 'Overdue and Blocked',
-            content: <p>Narrow the Board to the deliverables that are overdue, or that have a document your firm flagged Blocked. Blocked shows up while there are some.</p>,
+            content: <p>Narrow the list to the deliverables that are overdue, or that have a document your firm flagged Blocked. Blocked shows up while there are some.</p>,
             route: engAt({ tab: 'board' }),
             placement: 'bottom',
             skipScroll: true,
@@ -579,7 +587,7 @@ export const NODE_STEPS: Record<TourNodeId, TourStep[]> = {
         {
             target: '[data-demo-tour="engagement-raid-tab"]',
             title: 'RAID log',
-            content: <p>The engagement&apos;s Risks, Actions, Issues and Decisions, for your team only. Status, health and Board entries keep themselves current, at no cost in credits.</p>,
+            content: <p>The engagement&apos;s Risks, Actions, Issues and Decisions, for your team only. Status, health and deliverable entries keep themselves current, at no cost in credits.</p>,
             route: engAt({ tab: 'raid' }),
             placement: 'bottom',
             skipScroll: true,
@@ -614,7 +622,7 @@ export const NODE_STEPS: Record<TourNodeId, TourStep[]> = {
         {
             target: '[data-demo-tour="engagement-members-tab"]',
             title: 'Engagement members',
-            content: <p>Manage who has access to this engagement and their role: Lead, Contributor or Reviewer.</p>,
+            content: <p>Who&apos;s on the engagement at a glance, joined and by role, then everyone with access and their role: Lead, Contributor or Reviewer.</p>,
             route: engAt({ tab: 'members' }),
             placement: 'bottom',
             skipScroll: true,

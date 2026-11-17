@@ -481,7 +481,7 @@ export function NotesProposalsReview({ found, apply, onDismiss, readOnly = false
                                     <p key={i}>“{s.quote}” {clause(s.reason)}, so it isn&apos;t proposed.</p>
                                 ))}
                                 {dropped > 0 && (
-                                    <p>{dropped} more didn&apos;t match the notes or the Board, so {dropped === 1 ? 'it isn’t' : 'they aren’t'} shown.</p>
+                                    <p>{dropped} more didn&apos;t match the notes or the deliverables, so {dropped === 1 ? 'it isn’t' : 'they aren’t'} shown.</p>
                                 )}
                             </div>
                         </details>

@@ -38,7 +38,7 @@ describe('NotesProposalsReview', () => {
         expect(screen.getByText('NPT-6 · Estimated Payments Schedule')).toBeTruthy()
         expect(screen.getByText('“I need to chase the brokerage 1099-B, still missing”')).toBeTruthy()
         expect(screen.getByText('“Next check-in after Thanksgiving” has no date, so it isn\'t proposed.')).toBeTruthy()
-        expect(screen.getByText(/1 more didn't match the notes or the Board/)).toBeTruthy()
+        expect(screen.getByText(/1 more didn't match the notes or the deliverables/)).toBeTruthy()
     })
 
     it('selects every action item, a new deliverable too', () => {

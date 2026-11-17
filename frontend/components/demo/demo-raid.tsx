@@ -30,6 +30,8 @@ const MEMBERS: RaidMember[] = [
     { userId: 'tour-sam', name: 'Sam Rivera' },
 ]
 const ME = MEMBERS[0]
+/** The tour's signed-in person, who owns the sample's Actions. */
+export const TOUR_ME = ME.userId
 
 /** A day `n` days from today (negative for the past), as UTC midnight ISO. */
 function day(n: number, now: Date): string {
@@ -71,7 +73,7 @@ export function demoRaidLog(now: Date = new Date()): RaidLogPayload {
         priority: 'HIGH',
         title: 'QSR-9 · Market & Competitive Intelligence Report overdue by 5 days',
         sourceKind: 'STATUS',
-        sources: [chip('STATUS', 'Board')],
+        sources: [chip('STATUS', 'Deliverables')],
         autoLine: autoLineFor('overdue:qsr-9'),
         overdue: true,
         ownerUserId: ME.userId,
@@ -142,7 +144,7 @@ export function demoRaidLog(now: Date = new Date()): RaidLogPayload {
             type: 'DECISION',
             title: 'QSR-3 · Market Sizing approved by Dana',
             sourceKind: 'BOARD',
-            sources: [chip('BOARD', 'Board')],
+            sources: [chip('BOARD', 'Deliverables')],
             autoLine: autoLineFor('approved:qsr-3'),
             raisedAt: day(-11, now),
         }),

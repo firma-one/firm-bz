@@ -18,10 +18,14 @@ import {
     NotionTableRow,
 } from '@/components/ui/notion-table'
 import { initialsOf } from '@/lib/initials'
+import type { PersonaUiSlug } from '@/lib/persona-ui-groups'
+import { TeamStatusStrip, teamStatusOf } from '@/components/projects/members/team-status-strip'
 
 interface DemoEngagementMember {
     name: string
     email: string
+    /** The persona, for Team Status's count by role. */
+    slug: PersonaUiSlug
     role: ReactNode
     addedDaysAgo: number
 }
@@ -38,14 +42,15 @@ function Internal({ children }: { children: ReactNode }) {
 
 /** The app's engagement roles, tagged as member-list.tsx tags them. */
 const DEMO_ENGAGEMENT_MEMBERS: DemoEngagementMember[] = [
-    { name: 'Alex Jordan', email: 'alex@beacongrowth.com', role: <Internal><Tag color="purple">Lead</Tag></Internal>, addedDaysAgo: 88 },
-    { name: 'Sam Rivera', email: 'sam@beacongrowth.com', role: <Internal><Tag color="gray">Contributor · Full Access</Tag></Internal>, addedDaysAgo: 85 },
-    { name: 'Jordan Lee', email: 'jordan@beacongrowth.com', role: <Internal><Tag color="gray">Contributor · Full Access</Tag></Internal>, addedDaysAgo: 60 },
-    { name: 'Morgan Ellis', email: 'morgan@client-example.com', role: <Tag color="blue">Reviewer</Tag>, addedDaysAgo: 41 },
+    { name: 'Alex Jordan', email: 'alex@beacongrowth.com', slug: 'eng_admin', role: <Internal><Tag color="purple">Lead</Tag></Internal>, addedDaysAgo: 88 },
+    { name: 'Sam Rivera', email: 'sam@beacongrowth.com', slug: 'eng_member', role: <Internal><Tag color="gray">Contributor · Full Access</Tag></Internal>, addedDaysAgo: 85 },
+    { name: 'Jordan Lee', email: 'jordan@beacongrowth.com', slug: 'eng_member', role: <Internal><Tag color="gray">Contributor · Full Access</Tag></Internal>, addedDaysAgo: 60 },
+    { name: 'Morgan Ellis', email: 'morgan@client-example.com', slug: 'eng_viewer', role: <Tag color="blue">Reviewer</Tag>, addedDaysAgo: 41 },
 ]
 
 /** The invitation the engagement's Overview counts as pending. */
-const INVITEE = 'riley@client-example.com'
+export const DEMO_INVITEE = 'riley@client-example.com'
+const INVITEE = DEMO_INVITEE
 const INVITEE_ROLE = <Tag color="blue">Reviewer</Tag>
 
 /** Static counterpart to engagement-members-tab.tsx: the same count line and members table. No write actions. */
@@ -56,6 +61,10 @@ export function DemoEngagementMembers() {
 
     return (
         <div className="flex flex-col">
+            {/* As the app: Team Status at the top of the Members tab, from the same list. */}
+            <div className="mb-3">
+                <TeamStatusStrip status={teamStatusOf(DEMO_ENGAGEMENT_MEMBERS.map((m) => ({ role: m.slug })), 1)} />
+            </div>
             <div className="flex h-10 shrink-0 items-center justify-between gap-3">
                 <span className="text-small tabular-nums text-fg-muted">{DEMO_ENGAGEMENT_MEMBERS.length} people</span>
                 <Hint label="Not available in this demo" side="bottom">

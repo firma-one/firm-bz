@@ -810,7 +810,7 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
                 {rows.length === 0 ? (
                     <p className="border-y border-line px-2.5 py-2.5 text-small text-fg-muted">
                         {log.items.length === 0
-                            ? 'Nothing in the log yet. Status, health and Board items appear here on their own.'
+                            ? 'Nothing in the log yet. Status, health and deliverable items appear here on their own.'
                             : stateFilter === 'open' ? 'Nothing open here.' : actionsOnly ? 'Nothing done here yet.' : 'Nothing closed here yet.'}
                     </p>
                 ) : (
@@ -932,7 +932,7 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
             </section>
 
             <p className="text-small text-fg-muted">
-                Status, health and Board items keep themselves current, with no credits. <Brio noIcon /> reads threads with new messages once a
+                Status, health and deliverable items keep themselves current, with no credits. <Brio noIcon /> reads threads with new messages once a
                 day, or when you check with the sparkle: 1 credit per read. A memo is read once, when it&apos;s added, and its suggestions
                 wait on the memo, to accept or dismiss there. An open Action shows on its owner&apos;s Home and Inbox until it&apos;s done.{' '}
                 <Brio noIcon /> records what people decided; it never decides.

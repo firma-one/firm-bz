@@ -916,16 +916,16 @@ export function DeliverableDetailPanel({
     }
   }
 
-  /** "Add to Board": a Not started document joins the deliverable's work at To do. */
+  /** "Move to To do": a Not started document joins the deliverable's work at To do. */
   const addToBoard = async (subtask: SubtaskRecord) => {
     setSubtasks((prev) => prev.map((t) => t.id === subtask.id ? { ...t, status: 'to_do' } : t))
     const result = await moveStage(projectId, subtask.documentId, 'to_do')
     if (!result.ok) {
       setSubtasks((prev) => prev.map((t) => t.id === subtask.id ? { ...t, status: 'not_started' } : t))
-      if (!result.cancelled) addToast({ type: 'error', title: "Couldn't add it to the Board", message: result.error })
+      if (!result.cancelled) addToast({ type: 'error', title: "Couldn't move it to To do", message: result.error })
       return
     }
-    if (result.warning) addToast({ type: 'warning', title: 'Added to the Board', message: result.warning })
+    if (result.warning) addToast({ type: 'warning', title: 'Moved to To do', message: result.warning })
     if (result.deliverable && result.deliverable.status !== status) followDocuments(result.deliverable.status)
   }
 
@@ -1090,7 +1090,7 @@ export function DeliverableDetailPanel({
             </span>
           ) : (
             <span className="inline-flex h-7 items-center px-1.5 text-small text-fg-subtle">
-              {docsLoad.state === 'failed' ? "Couldn't load its documents" : loadingSubtasks ? 'Loading…' : subtasks.length > 0 ? 'No documents on the Board yet' : 'No documents yet'}
+              {docsLoad.state === 'failed' ? "Couldn't load its documents" : loadingSubtasks ? 'Loading…' : subtasks.length > 0 ? 'No documents started yet' : 'No documents yet'}
             </span>
           )}
         </PropertyRow>
@@ -1186,7 +1186,7 @@ export function DeliverableDetailPanel({
               ) : (
                 <>
                   {boardSubtasks.length === 0 ? (
-                    <p className="py-1 text-small text-fg-subtle">None of its documents is on the Board yet.</p>
+                    <p className="py-1 text-small text-fg-subtle">None of its documents has started yet.</p>
                   ) : (
                     <div className="-mx-4 mt-1 divide-y divide-line border-y border-line">
                       {boardSubtasks.map((s) => renderSubtask(s))}
@@ -1202,7 +1202,7 @@ export function DeliverableDetailPanel({
                         className="inline-flex h-7 items-center gap-1.5 rounded-control px-1.5 -mx-1.5 text-small text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg-muted"
                       >
                         <ChevronDown className={cn('h-3.5 w-3.5 transition-transform duration-200', !showNotStarted && '-rotate-90')} />
-                        {notStartedSubtasks.length} not on the Board
+                        {notStartedSubtasks.length} not started
                       </button>
                       {showNotStarted && (
                         <div className="-mx-4 mt-1 divide-y divide-line border-y border-line">
@@ -1211,7 +1211,7 @@ export function DeliverableDetailPanel({
                               <div className="min-w-0 flex-1">{renderSubtask(s)}</div>
                               {canAddToBoard && !isApproved && (
                                 <Button type="button" size="sm" variant="outline" className="mr-4 shrink-0" onClick={() => addToBoard(s)}>
-                                  Add to Board
+                                  Move to To do
                                 </Button>
                               )}
                             </div>

@@ -31,8 +31,8 @@ const FIRM_TABS: Record<string, { label: string; icon: ReactNode }> = {
 const ENGAGEMENT_TABS: Record<string, { label: string; icon: ReactNode; info?: ReactNode }> = {
     analytics: { label: "Overview", icon: <BarChart3 /> },
     files: { label: "Files", icon: <Folder /> },
-    shares: { label: "Board", icon: <LayoutGrid /> },
-    board: { label: "Board", icon: <LayoutGrid /> },
+    shares: { label: "Deliverables", icon: <LayoutGrid /> },
+    board: { label: "Deliverables", icon: <LayoutGrid /> },
     comments: { label: "Discussions", icon: <MessagesSquare /> },
     raid: { label: "RAID", icon: <ShieldAlert />, info: <RaidInfo /> },
     wiki: { label: "Dossier", icon: <PenTool /> },

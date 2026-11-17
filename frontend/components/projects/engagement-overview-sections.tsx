@@ -277,7 +277,7 @@ function StatusBlock({ r }: { r: ReportInputs }) {
             <SegmentedBar segments={total > 0 ? items : []} />
             {total > 0
                 ? <Legend items={items} />
-                : <Empty>No deliverables yet. Mark a folder as a deliverable on the Board to track it here.</Empty>}
+                : <Empty>No deliverables yet. Mark a folder as a deliverable in Files to track it here.</Empty>}
         </ChartBlock>
     )
 }

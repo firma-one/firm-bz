@@ -1775,7 +1775,7 @@ export function EngagementFileList({ projectId, initialFolderData, connectorRoot
             const body = await res.json().catch(() => ({})) as { warning?: string }
             addToast(body.warning
                 ? { type: 'warning', title: 'Promoted, with a problem', message: body.warning, duration: 12000 }
-                : { type: 'success', title: 'Promoted to deliverable', message: `"${doc.name}" added to the Board.` })
+                : { type: 'success', title: 'Promoted to deliverable', message: `"${doc.name}" added to Deliverables.` })
             await refreshShareStateAndFiles()
         } catch (e) {
             addToast({ type: 'error', title: "Couldn't make it a deliverable", message: failureReason(e) })
@@ -1797,7 +1797,7 @@ export function EngagementFileList({ projectId, initialFolderData, connectorRoot
             const body = await res.json().catch(() => ({})) as { warning?: string }
             addToast(body.warning
                 ? { type: 'warning', title: 'Demoted, with a problem', message: body.warning, duration: 12000 }
-                : { type: 'success', title: 'Demoted to folder', message: `"${doc.name}" removed from the Board.` })
+                : { type: 'success', title: 'Demoted to folder', message: `"${doc.name}" removed from Deliverables.` })
             await refreshShareStateAndFiles()
         } catch (e) {
             addToast({ type: 'error', title: 'Demote failed', message: failureReason(e) })

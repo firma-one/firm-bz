@@ -231,9 +231,9 @@ export function closeReasonFor(signalKey: string, ctx: RaidCloseContext): string
         : null
     switch (parsed?.kind) {
         case 'overdue':
-            return approved ?? (deliverable ? 'Resolved · due date moved' : 'Resolved · no longer on the Board')
+            return approved ?? (deliverable ? 'Resolved · due date moved' : 'Resolved · no longer a deliverable')
         case 'review':
-            return approved ?? (deliverable ? 'Resolved · out of review' : 'Resolved · no longer on the Board')
+            return approved ?? (deliverable ? 'Resolved · out of review' : 'Resolved · no longer a deliverable')
         case 'blocked':
             return `Resolved · unblocked ${today}`
         case 'waiting':

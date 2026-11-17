@@ -643,7 +643,7 @@ function ShareCardContent({
                   <span className="shrink-0 text-caption tabular-nums text-fg-subtle">{approved}/{total}</span>
                 </>
               ) : (
-                <span className="text-caption text-fg-subtle">No documents on the Board yet</span>
+                <span className="text-caption text-fg-subtle">No documents started yet</span>
               )}
             </div>
           )
@@ -1597,7 +1597,7 @@ export function EngagementSharesTab({
     setIsLoading(true)
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      if (!session?.access_token) throw new Error('Your session has ended. Sign in again to see the Board.')
+      if (!session?.access_token) throw new Error('Your session has ended. Sign in again to see the deliverables.')
       const response = await fetch(`/api/projects/${projectId}/shares`, {
         headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
       })
@@ -1610,7 +1610,7 @@ export function EngagementSharesTab({
     } catch (error) {
       logger.error('Failed to fetch shares data', error instanceof Error ? error : new Error(String(error)), 'ProjectShares', { projectId })
       // A failed load is never an empty Board. Once it has loaded, the cards stay and the toast says why.
-      if (loadedRef.current) addToast({ type: 'error', title: "Couldn't refresh the Board", message: failureReason(error) })
+      if (loadedRef.current) addToast({ type: 'error', title: "Couldn't refresh the deliverables", message: failureReason(error) })
       else setLoadFailure(failureReason(error))
     } finally {
       setIsLoading(false)
@@ -1645,7 +1645,7 @@ export function EngagementSharesTab({
       logger.error('Failed to save order', e instanceof Error ? e : new Error(String(e)), 'ProjectShares', {})
       rollback()
       // P2-22: the reason, then that nothing moved.
-      addToast({ type: 'error', title: 'Move failed', message: `${failureReason(e)} The Board has been put back.` })
+      addToast({ type: 'error', title: 'Move failed', message: `${failureReason(e)} The deliverables have been put back.` })
     } finally {
       onComplete()
     }
@@ -1690,7 +1690,7 @@ export function EngagementSharesTab({
       // Demoted, but part of taking clients' access back couldn't be done: say what.
       addToast(typeof data.warning === 'string' && data.warning
         ? { type: 'warning', title: 'Demoted to folder', message: data.warning, duration: 12000 }
-        : { type: 'success', title: 'Demoted to folder', message: 'It is a plain folder again and off the Board.' })
+        : { type: 'success', title: 'Demoted to folder', message: 'It is a plain folder again, no longer a deliverable.' })
     } catch (e) {
       logger.error('Untag as deliverable error', e instanceof Error ? e : new Error(String(e)), 'ProjectShares', { documentId: doc.id })
       addToast({ type: 'error', title: 'Demote failed', message: failureReason(e) })
@@ -2260,7 +2260,7 @@ export function EngagementSharesTab({
               <LoadingSpinner size="md" className="min-h-0" />
             </div>
           ) : loadFailure ? (
-            <LoadFailed what="the Board" reason={loadFailure} onRetry={() => { void refreshData() }} className="mx-2" />
+            <LoadFailed what="the deliverables" reason={loadFailure} onRetry={() => { void refreshData() }} className="mx-2" />
           ) : filteredShares.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 text-fg-muted bg-white/60 rounded-2xl border border-slate-200/60 mx-2">
               <Share2 className="h-11 w-11 mb-3 text-fg-subtle" />

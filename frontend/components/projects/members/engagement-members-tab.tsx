@@ -7,6 +7,7 @@ import { EmptyPanel } from '@/components/ui/empty-panel'
 import { getProjectMembers } from '@/lib/actions/members'
 import { getProjectPersonas } from '@/lib/actions/personas'
 import { MemberList } from './member-list'
+import { TeamStatusStrip, teamStatusOf } from './team-status-strip'
 import { InviteMemberModal } from './invite-member-modal'
 import { logger } from '@/lib/logger'
 import { PersonaUiRole } from '@/lib/persona-ui-groups'
@@ -70,6 +71,12 @@ export function EngagementMembersTab({ projectId, groupSlug, orgSlug, canManage 
 
     return (
         <div className="flex h-full flex-col overflow-hidden">
+            {/* Team Status, moved here from the Overview (.claude/plans/engagement-overview-restructure.md). */}
+            {!isLoading && !loadError && clientConnectorId && total > 0 && (
+                <div className="mb-3 shrink-0">
+                    <TeamStatusStrip status={teamStatusOf(members, invitations.length)} />
+                </div>
+            )}
             {/* Toolbar: count and refresh on the left, the one primary action on the right. */}
             <div className="flex h-10 shrink-0 items-center justify-between gap-3">
                 <div className="flex items-center gap-1.5 text-small text-fg-muted">

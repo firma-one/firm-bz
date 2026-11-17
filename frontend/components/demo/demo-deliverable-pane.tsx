@@ -201,7 +201,7 @@ export function DemoDeliverablePane({ deliverable, onClose, embedded = false, in
                                             className="inline-flex h-7 items-center gap-1.5 rounded-control px-1.5 -mx-1.5 text-small text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg-muted"
                                         >
                                             <ChevronDown className={cn('h-3.5 w-3.5 transition-transform duration-200', !showNotStarted && '-rotate-90')} />
-                                            {notStarted.length} not on the Board
+                                            {notStarted.length} not started
                                         </button>
                                         {showNotStarted && (
                                             <div className="divide-y divide-[#e5e7eb] -mx-4 mt-1 border-t border-b border-[#e5e7eb]">

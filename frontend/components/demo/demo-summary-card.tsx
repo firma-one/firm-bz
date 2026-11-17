@@ -7,8 +7,8 @@ import { BrioByline } from '@/components/ui/brio-byline'
 import { Hint } from '@/components/ui/tooltip'
 import { useToast } from '@/components/ui/toast'
 import { ASSISTANT, BRIO_GREEN } from '@/lib/ai/assistant'
-import { BrioSections } from '@/components/ui/brio-sections'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { LatestUpdate } from '@/components/projects/overview-layout'
 import {
     SummaryDraftReviewPane,
     summaryReviewStore,
@@ -199,47 +199,45 @@ export function DemoSummaryCard({ input, today }: { input: DemoSummaryInput; tod
 
     return (
         <>
-            <div className="flex flex-col overflow-hidden rounded-card border border-line bg-surface" data-demo-tour="engagement-ai-summary">
-                <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-line px-4 pb-2 pt-3">
-                    <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
-                        <span className="text-small font-medium text-fg-muted">Engagement Summary</span>
-                    </div>
-                    {reviewing ? (
-                        <div className="flex shrink-0 items-center gap-2">
-                            <span className="inline-flex items-center gap-1.5 text-small text-fg-muted">
-                                {streaming ? <><Brio className="animate-pulse" /> is writing a new summary…</> : <><Brio /> drafted a new summary</>}
-                            </span>
-                            <button type="button" disabled={paneOpen} onClick={openPane} className={`${CONTROL} font-medium text-action disabled:cursor-default disabled:text-fg-subtle disabled:hover:bg-surface`}>
-                                {paneOpen ? 'Reviewing' : 'Review'}
+            {/* As the app's Overview: the Latest update section (overview-layout.tsx), its first part
+                on screen and the rest behind Read the full update. */}
+            <LatestUpdate
+                content={published.content}
+                meta={<span className="text-small text-fg-muted">{new Date(published.publishedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>}
+                actions={reviewing ? (
+                    <>
+                        <span className="inline-flex items-center gap-1.5 text-small text-fg-muted">
+                            {streaming ? <><Brio className="animate-pulse" /> is writing a new summary…</> : <><Brio /> drafted a new summary</>}
+                        </span>
+                        <button type="button" disabled={paneOpen} onClick={openPane} className={`${CONTROL} font-medium text-action disabled:cursor-default disabled:text-fg-subtle disabled:hover:bg-surface`}>
+                            {paneOpen ? 'Reviewing' : 'Review'}
+                        </button>
+                        {streaming && (
+                            <button type="button" onClick={() => { discard(); clearPaneRef.current() }} className={`${CONTROL} text-fg-muted hover:text-fg`}>
+                                <Square className="h-3 w-3 fill-current" /> Stop
                             </button>
-                            {streaming && (
-                                <button type="button" onClick={() => { discard(); clearPaneRef.current() }} className={`${CONTROL} text-fg-muted hover:text-fg`}>
-                                    <Square className="h-3 w-3 fill-current" /> Stop
-                                </button>
-                            )}
+                        )}
+                    </>
+                ) : (
+                    <>
+                        {/* As the app: an update to the client, drafted from the published summary. */}
+                        <div className="mr-1.5">
+                            <StatusUpdateAction projectId="tour" firmName="Your firm" demo={statusUpdateDemo(input, today)} />
                         </div>
-                    ) : (
-                        <div className="flex shrink-0 items-center gap-0.5">
-                            {/* As the app: an update to the client, drafted from the published summary. */}
-                            <div className="mr-1.5">
-                                <StatusUpdateAction projectId="tour" firmName="Your firm" demo={statusUpdateDemo(input, today)} />
-                            </div>
-                            <Hint label={copied === 'published' ? 'Copied' : 'Copy as Markdown'}>
-                                <button type="button" onClick={() => copy(published.content, 'published')} aria-label="Copy the summary as Markdown" className={ICON_BUTTON}>
-                                    {copied === 'published' ? <Check className="h-4 w-4 text-status-done-icon" /> : <Copy className="h-4 w-4" />}
-                                </button>
-                            </Hint>
-                            <Hint label={<>Rewrite with <Brio /></>}>
-                                <button type="button" onClick={rewrite} aria-label={`Rewrite with ${ASSISTANT.name}`} className={ICON_BUTTON}>
-                                    <Sparkles className="h-4 w-4" style={{ color: BRIO_GREEN }} />
-                                </button>
-                            </Hint>
-                        </div>
-                    )}
-                </div>
-                <BrioSections content={published.content} className="px-4 py-3 text-fg-muted" />
-                <BrioByline source="ai" publisherName={TOUR_PUBLISHER} date={published.publishedAt} className="border-t border-line px-4 py-2.5" />
-            </div>
+                        <Hint label={copied === 'published' ? 'Copied' : 'Copy as Markdown'}>
+                            <button type="button" onClick={() => copy(published.content, 'published')} aria-label="Copy the summary as Markdown" className={ICON_BUTTON}>
+                                {copied === 'published' ? <Check className="h-4 w-4 text-status-done-icon" /> : <Copy className="h-4 w-4" />}
+                            </button>
+                        </Hint>
+                        <Hint label={<>Rewrite with <Brio /></>}>
+                            <button type="button" onClick={rewrite} aria-label={`Rewrite with ${ASSISTANT.name}`} className={ICON_BUTTON}>
+                                <Sparkles className="h-4 w-4" style={{ color: BRIO_GREEN }} />
+                            </button>
+                        </Hint>
+                    </>
+                )}
+                byline={<BrioByline source="ai" publisherName={TOUR_PUBLISHER} date={published.publishedAt} className="pt-1" />}
+            />
 
             <ConfirmDialog
                 open={confirmOpen}

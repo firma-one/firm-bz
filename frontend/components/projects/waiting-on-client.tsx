@@ -12,6 +12,8 @@ import type { DeliverableProgress } from '@/lib/insights/engagement-insights'
 import { daysAgoWords, nudgeCandidates, nudgeRowState, type NudgeCandidate, type NudgeRowState, type NudgeStatus } from '@/lib/ai/nudge-draft'
 import { getNudgeRecipients, getNudgeStatuses } from '@/lib/actions/status-update'
 import type { ActionResult } from '@/lib/actions/action-result'
+import { StatusIcon } from '@/components/ui/status-icon'
+import { NEEDS_ROW_CLASS } from './overview-layout'
 
 function refOf(c: Pick<NudgeCandidate, 'docId' | 'name'>): string {
     return c.docId ? `${c.docId} · ${c.name}` : c.name
@@ -34,12 +36,18 @@ export function WaitingOnClient({
     deliverables,
     engagementBase,
     demo,
+    variant = 'section',
 }: {
     projectId: string
     deliverables: DeliverableProgress[]
     engagementBase: string
     /** The /tour: canned people and drafts (`name` is the person's member name); no requests, nothing sent. */
     demo?: { recipients: ComposerRecipient[]; draft: (c: NudgeCandidate, name: string) => string }
+    /**
+     * `rows`: just the list items, for the Overview's Needs you › Waiting on others
+     * (overview-layout.tsx), which owns the list and its heading. `section`: the old block with its own.
+     */
+    variant?: 'section' | 'rows'
 }) {
     const { addToast } = useToast()
     const candidates = useMemo(() => nudgeCandidates(deliverables), [deliverables])
@@ -112,6 +120,93 @@ export function WaitingOnClient({
 
     const chosen = recipients?.find((r) => r.userId === recipientId) ?? null
 
+    const composer = active && chosen && (
+        <DraftComposer
+            // A new person means a new draft: it greets them by name.
+            key={`${active.deliverableId}:${chosen.userId}`}
+            open={!!active}
+            onOpenChange={(o) => { if (!o) setActive(null) }}
+            title={`Nudge about ${active.docId ?? active.name}`}
+            recipients={[chosen]}
+            removableRecipients={false}
+            context={recipients && recipients.length > 1 ? (
+                <label className="flex items-center gap-2 text-small text-fg-muted">
+                    <span>Nudge</span>
+                    <select
+                        value={chosen.userId}
+                        onChange={(e) => setRecipientId(e.target.value)}
+                        className="h-7 rounded-control border border-line-strong bg-surface px-2 text-small text-fg"
+                    >
+                        {recipients.map((r) => (
+                            <option key={r.userId} value={r.userId}>{r.name} · {r.role}</option>
+                        ))}
+                    </select>
+                </label>
+            ) : null}
+            draftUrl={`/api/projects/${projectId}/documents/${active.deliverableId}/ai-nudge-draft`}
+            draftBody={{ recipientUserId: chosen.userId }}
+            sendLabel="Send nudge"
+            staticDraft={demo ? demo.draft(active, chosen.name) : undefined}
+            // The draft opens by tagging them ("Hi @Dana Whitfield,"): a chip, as in the comment box.
+            mentionNames={[chosen.name]}
+            sentNote={`Posts as a comment on ${active.docId ?? `"${active.name}"`} and reminds ${chosen.name.split(/\s+/)[0]}.`}
+            onSend={send}
+            onSent={() => {
+                // The row says so at once: no second nudge while this one is fresh.
+                setStatuses((prev) => new Map(prev).set(active.deliverableId, {
+                    deliverableId: active.deliverableId,
+                    nudgedAt: new Date().toISOString(),
+                    recipientId: chosen.userId,
+                    recipientName: chosen.name,
+                    repliedAt: null,
+                    doneAt: null,
+                }))
+                addToast({ type: 'success', title: 'Nudge sent', message: `Posted on ${refOf(active)}.` })
+            }}
+        />
+    )
+
+    if (variant === 'rows') {
+        // As Needs you's other rows (NeedsRow): the stage's icon, the deliverable and how long it has
+        // waited, then the nudge. The composer is a dialog, so it can sit among the items.
+        return (
+            <>
+                {candidates.map((c) => (
+                    <li key={c.deliverableId} className={NEEDS_ROW_CLASS}>
+                        <span className="flex h-5 w-5 shrink-0 items-center justify-center" aria-hidden><StatusIcon stage="waiting" /></span>
+                        <div className="flex min-w-0 flex-[1_1_18rem] flex-col gap-0.5">
+                            <a
+                                href={engagementBase ? `${engagementBase}/shares/board#doc-file:${c.deliverableId}` : undefined}
+                                className="truncate text-ui font-medium text-fg hover:underline"
+                            >
+                                {refOf(c)}
+                            </a>
+                            <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-small text-fg-muted">
+                                <span className="inline-flex h-5 shrink-0 items-center rounded-control bg-[var(--ui-status-waiting-bg)] px-1.5 text-caption text-[var(--ui-status-waiting-fg)]">
+                                    In review · {c.daysWaiting} days
+                                </span>
+                                <span className="truncate">with its Reviewers</span>
+                                {c.dueDate && (
+                                    // Past its due date while the client reviews it: said in the danger tone.
+                                    new Date(c.dueDate).getTime() < Date.now()
+                                        ? <span className="shrink-0 font-medium text-danger">· overdue since {formatFullDate(c.dueDate)}</span>
+                                        : <span className="shrink-0">· due {formatFullDate(c.dueDate)}</span>
+                                )}
+                            </span>
+                        </div>
+                        <NudgeAction
+                            state={nudgeRowState(statuses.get(c.deliverableId))}
+                            discussionHref={engagementBase ? `${engagementBase}/comments#doc-comment:${c.deliverableId}` : undefined}
+                            onNudge={() => void open(c)}
+                        />
+                    </li>
+                ))}
+                {error && <li className="px-3 py-2 text-small text-danger" role="alert">{error}</li>}
+                {composer}
+            </>
+        )
+    }
+
     return (
         <section aria-labelledby="waiting-on-client-h" className="flex flex-col gap-2">
             <div className="flex items-center gap-2">
@@ -141,51 +236,7 @@ export function WaitingOnClient({
             </ul>
             {error && <p className="text-small text-danger" role="alert">{error}</p>}
 
-            {active && chosen && (
-                <DraftComposer
-                    // A new person means a new draft: it greets them by name.
-                    key={`${active.deliverableId}:${chosen.userId}`}
-                    open={!!active}
-                    onOpenChange={(o) => { if (!o) setActive(null) }}
-                    title={`Nudge about ${active.docId ?? active.name}`}
-                    recipients={[chosen]}
-                    removableRecipients={false}
-                    context={recipients && recipients.length > 1 ? (
-                        <label className="flex items-center gap-2 text-small text-fg-muted">
-                            <span>Nudge</span>
-                            <select
-                                value={chosen.userId}
-                                onChange={(e) => setRecipientId(e.target.value)}
-                                className="h-7 rounded-control border border-line-strong bg-surface px-2 text-small text-fg"
-                            >
-                                {recipients.map((r) => (
-                                    <option key={r.userId} value={r.userId}>{r.name} · {r.role}</option>
-                                ))}
-                            </select>
-                        </label>
-                    ) : null}
-                    draftUrl={`/api/projects/${projectId}/documents/${active.deliverableId}/ai-nudge-draft`}
-                    draftBody={{ recipientUserId: chosen.userId }}
-                    sendLabel="Send nudge"
-                    staticDraft={demo ? demo.draft(active, chosen.name) : undefined}
-                    // The draft opens by tagging them ("Hi @Dana Whitfield,"): a chip, as in the comment box.
-                    mentionNames={[chosen.name]}
-                    sentNote={`Posts as a comment on ${active.docId ?? `"${active.name}"`} and reminds ${chosen.name.split(/\s+/)[0]}.`}
-                    onSend={send}
-                    onSent={() => {
-                        // The row says so at once: no second nudge while this one is fresh.
-                        setStatuses((prev) => new Map(prev).set(active.deliverableId, {
-                            deliverableId: active.deliverableId,
-                            nudgedAt: new Date().toISOString(),
-                            recipientId: chosen.userId,
-                            recipientName: chosen.name,
-                            repliedAt: null,
-                            doneAt: null,
-                        }))
-                        addToast({ type: 'success', title: 'Nudge sent', message: `Posted on ${refOf(active)}.` })
-                    }}
-                />
-            )}
+            {composer}
         </section>
     )
 }

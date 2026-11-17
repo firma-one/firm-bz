@@ -1415,7 +1415,7 @@ export function DocumentActionMenu({
         iconVariant="primary"
         title="Promote Folder to Deliverable"
         subtitle={document.name}
-        description="This will share the folder externally and add it to the Board."
+        description="This will share the folder externally and add it to Deliverables."
         extra={
           // A Due property row, as on the engagement header: optional, and the same picker as everywhere.
           <div className="flex items-center gap-2">
@@ -1448,7 +1448,7 @@ export function DocumentActionMenu({
         iconVariant="red"
         title="Demote Deliverable to Folder"
         subtitle={document.name}
-        description="It goes back to being a plain folder and comes off the Board. Limited Access contributors and Reviewers lose their access to it."
+        description="It goes back to being a plain folder and comes off Deliverables. Limited Access contributors and Reviewers lose their access to it."
         confirmLabel="Demote"
         confirmVariant="red"
         onCancel={() => setShowUntagConfirm(false)}

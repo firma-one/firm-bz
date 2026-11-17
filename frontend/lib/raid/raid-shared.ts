@@ -215,7 +215,7 @@ export function autoLineFor(signalKey: string | null | undefined): string | null
         case 'waiting': return 'From discussions · closes itself when answered'
         case 'pace': return 'From health · updates daily'
         case 'planning': return 'From health · closes itself when planned'
-        case 'approved': return 'From the Board'
+        case 'approved': return 'From Deliverables'
         default: return null
     }
 }

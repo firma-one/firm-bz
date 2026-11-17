@@ -25,7 +25,9 @@ describe('the Overview without Internal memos', () => {
     it('/tour: the Overview renders without the memos card', async () => {
         render(<TooltipProvider><DemoEngagementOverview engagement={DEMO_FIRM.clients[0].engagements[0]} /></TooltipProvider>)
         await act(async () => { await new Promise((r) => setTimeout(r, 20)) })
-        expect(screen.getByText('Engagement Health')).toBeTruthy()
+        // The restructured Overview (.claude/plans/engagement-overview-restructure.md): Needs you, then the update.
+        expect(screen.getByRole('heading', { name: 'Needs you' })).toBeTruthy()
+        expect(screen.getByRole('heading', { name: 'Latest update' })).toBeTruthy()
         expect(screen.queryByRole('heading', { name: 'Internal memos' })).toBeNull()
         expect(screen.queryByText('Weekly check-in')).toBeNull()
     })

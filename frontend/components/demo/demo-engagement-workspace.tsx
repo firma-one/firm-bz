@@ -20,6 +20,8 @@ import { raidOpenCount } from '@/lib/raid/raid-shared'
 import { DISCUSSIONS_MEMO_PARAM, DISCUSSIONS_VIEW_PARAM } from '@/components/projects/discussions-switch'
 import { DemoEngagementAudit } from '@/components/demo/demo-engagement-audit'
 import { DemoEngagementMembers } from '@/components/demo/demo-engagement-members'
+import { DemoFilesViews } from '@/components/demo/demo-files-views'
+import { FILES_VIEW_PARAM, FilesViewTabs, filesViewOf, type FilesView } from '@/components/projects/files-views'
 import { DemoBrioChat } from '@/components/demo/demo-brio-chat'
 import { DemoEngagementSettings } from '@/components/demo/demo-engagement-settings'
 import { filesChat, overviewChat, overviewFacts } from '@/lib/demo/demo-brio'
@@ -53,6 +55,16 @@ export function DemoEngagementWorkspace({ client, engagement }: DemoEngagementWo
         params.delete(DISCUSSIONS_VIEW_PARAM)
         params.delete(DISCUSSIONS_MEMO_PARAM)
         router.push(`${pathname}?${params.toString()}`, { scroll: false })
+    }
+
+    // The Files tab's view, as the app's: All files, Recent or Health (files-views.tsx).
+    const filesView: FilesView = filesViewOf(searchParams.get(FILES_VIEW_PARAM))
+    const filesViewHref = (v: FilesView) => {
+        const params = new URLSearchParams(searchParams.toString())
+        params.set('tab', 'files')
+        if (v === 'all') params.delete(FILES_VIEW_PARAM)
+        else params.set(FILES_VIEW_PARAM, v)
+        return `${pathname}?${params.toString()}`
     }
 
     const deliverableCount = getDemoDeliverables(engagement).length
@@ -119,7 +131,12 @@ export function DemoEngagementWorkspace({ client, engagement }: DemoEngagementWo
                         <DemoEngagementOverview engagement={engagement} />
                     </TabsContent>
                     <TabsContent value="files" className="m-0 flex h-full min-h-0 flex-col data-[state=inactive]:hidden">
-                        <DemoFileList folders={engagement.folders} deliverableStatusByFolderId={getDeliverableStatusMap(engagement)} deliverableDueByFolderId={getDeliverableDueMap(engagement)} />
+                        <div className="mb-2 shrink-0">
+                            <FilesViewTabs view={filesView} hrefOf={filesViewHref} onSelect={(v) => router.push(filesViewHref(v), { scroll: false })} />
+                        </div>
+                        {filesView === 'all'
+                            ? <DemoFileList folders={engagement.folders} deliverableStatusByFolderId={getDeliverableStatusMap(engagement)} deliverableDueByFolderId={getDeliverableDueMap(engagement)} />
+                            : <DemoFilesViews engagement={engagement} view={filesView} />}
                     </TabsContent>
                     <TabsContent value="board" className="m-0 h-full">
                         <DemoEngagementBoard engagement={engagement} />

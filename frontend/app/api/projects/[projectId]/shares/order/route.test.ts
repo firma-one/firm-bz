@@ -63,7 +63,7 @@ describe('PUT shares/order refusals', () => {
         st.canManage = false
         const res = await put({ to_do: ['b', 'a'] })
         expect(res.status).toBe(403)
-        expect(await res.json()).toEqual({ error: "You can't reorder this Board." })
+        expect(await res.json()).toEqual({ error: "You can't reorder these deliverables." })
     })
 
     it('answers plain words when it fails on our side', async () => {
