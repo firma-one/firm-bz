@@ -57,9 +57,8 @@ describe('internal notes in the thread', () => {
         fireEvent.change(box, { target: { value: 'Pricing needs partner sign-off' } })
         await act(async () => { fireEvent.submit(box.closest('form')!) })
         expect(posted[0]).toEqual({ content: 'Pricing needs partner sign-off', internal: true })
-        // It stays on after posting, so a run of notes doesn't slip out as a reply.
-        expect(lock.getAttribute('aria-checked')).toBe('true')
-        fireEvent.click(lock)
+        // Internal notes are the exception: posting one opens the lock again.
+        expect(lock.getAttribute('aria-checked')).toBe('false')
         expect(screen.getByLabelText('Comment')).toBeTruthy()
     })
 

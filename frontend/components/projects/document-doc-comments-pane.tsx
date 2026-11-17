@@ -705,6 +705,8 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
       setTagQuery(null)
       setMentionedUsers([])
       setRemindAt('')
+      // Internal notes are the exception: every post opens the lock again (Deepak, 2026-11-17).
+      setInternalMode(false)
       onChange?.()
       // Notify everyone still mentioned: now, or on the reminder date.
       if (recipients.length > 0) await notifyMentioned(newMsg.id, recipients, dateVal)
@@ -1244,8 +1246,8 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
             </PopoverContent>
           </Popover>
           {/* Who sees it: a lock that marks this comment internal only (the firm's team), beside the
-              composer's other tools. It stays on after posting, so a run of notes doesn't slip into a
-              reply; the dashed box, the placeholder and "Post note" say it's on (Deepak, 2026-11-17). */}
+              composer's other tools. Open is a reply; closed, the box turns dashed and the placeholder
+              says who sees it. It opens again after every post: internal notes are the exception. */}
           {canNote && (
             <Hint label={internalMode ? 'Internal only · only Leads and Full Access contributors see it. Click to reply to everyone' : 'Make it internal only · only Leads and Full Access contributors will see it'}>
               <button
@@ -1488,7 +1490,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                         </Hint>
                         {msg.isInternal && (
                           <Hint label="Only Leads and Full Access contributors see this">
-                            <span className="inline-flex h-[18px] shrink-0 items-center self-center rounded-[4px] bg-tag-gray-bg px-1.5 text-[11px] font-semibold text-tag-gray-fg">Internal</span>
+                            <span className="inline-flex h-[18px] shrink-0 items-center self-center gap-1 rounded-[4px] bg-tag-gray-bg px-1.5 text-[11px] font-semibold text-tag-gray-fg"><Lock className="h-2.5 w-2.5" aria-hidden />Internal</span>
                           </Hint>
                         )}
                         <span className="shrink-0 whitespace-nowrap text-caption text-fg-subtle">

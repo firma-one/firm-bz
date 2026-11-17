@@ -52,3 +52,16 @@ describe('/tour comments: internal only', () => {
         expect(screen.getByLabelText('Comment')).toBeTruthy()
     })
 })
+
+describe('/tour comments: after posting an internal note', () => {
+    it('opens the lock again', () => {
+        renderPane()
+        const lock = screen.getByRole('switch', { name: 'Internal only' })
+        fireEvent.click(lock)
+        const box = screen.getByLabelText('Internal note') as HTMLTextAreaElement
+        fireEvent.change(box, { target: { value: 'Between us', selectionStart: 10, selectionEnd: 10 } })
+        fireEvent.submit(box.closest('form')!)
+        expect(lock.getAttribute('aria-checked')).toBe('false')
+        expect(screen.getByLabelText('Comment')).toBeTruthy()
+    })
+})

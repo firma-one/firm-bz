@@ -263,6 +263,8 @@ export function DemoDeliverableComments({ documents, thread, onPost, focusDocId,
         setPicked([])
         setMention(null)
         setTag(null)
+        // As in the app: every post opens the lock again.
+        setInternalMode(false)
         requestAnimationFrame(() => endRef.current?.scrollIntoView({ block: 'nearest' }))
     }
 
@@ -382,7 +384,7 @@ export function DemoDeliverableComments({ documents, thread, onPost, focusDocId,
                                 <span className="font-medium text-fg">{c.author === ME ? 'You' : c.author}</span>
                                 {c.internal && (
                                     <Hint label="Only Leads and Full Access contributors see this">
-                                        <span className="inline-flex h-[18px] shrink-0 items-center self-center rounded-[4px] bg-tag-gray-bg px-1.5 text-[11px] font-semibold text-tag-gray-fg">Internal</span>
+                                        <span className="inline-flex h-[18px] shrink-0 items-center self-center gap-1 rounded-[4px] bg-tag-gray-bg px-1.5 text-[11px] font-semibold text-tag-gray-fg"><Lock className="h-2.5 w-2.5" aria-hidden />Internal</span>
                                     </Hint>
                                 )}
                                 <span className="shrink-0 whitespace-nowrap text-caption text-fg-subtle" suppressHydrationWarning>
