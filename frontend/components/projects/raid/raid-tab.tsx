@@ -596,7 +596,7 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
                 {readOnly ? (
                     <span className="text-small text-fg-subtle">Read only · completed</span>
                 ) : (
-                    <div className="flex shrink-0 items-center gap-0.5">
+                    <div className="flex shrink-0 items-center gap-0.5" data-demo-tour="raid-brio-check">
                         <CheckStatus state={log.conversation} lastCheckedAt={log.lastCheckedAt} checking={checking} now={now} />
                         <Hint label={log.canCheck ? <>Check with <Brio /></> : `${ASSISTANT.name} isn't available right now`}>
                             {/* aria-disabled, not disabled, when Brio is off: a disabled button shows no tooltip. */}
@@ -742,7 +742,7 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
                 </ul>
             )}
 
-            <div className="flex flex-wrap items-center gap-1" role="toolbar" aria-label="Filter the RAID log">
+            <div className="flex flex-wrap items-center gap-1" role="toolbar" aria-label="Filter the RAID log" data-demo-tour="raid-filters">
                 {TYPE_FILTERS.map((t) => (
                     <button
                         key={t}
@@ -787,7 +787,7 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
                             : stateFilter === 'open' ? 'Nothing open here.' : actionsOnly ? 'Nothing done here yet.' : 'Nothing closed here yet.'}
                     </p>
                 ) : (
-                    <NotionTable>
+                    <NotionTable data-demo-tour="raid-table">
                         <NotionTableHeader>
                             <NotionTableHead icon={<Shapes />} className="w-[72px]">Type</NotionTableHead>
                             {!actionsOnly && <NotionTableHead icon={<SignalHigh />} className="w-[112px]">Priority</NotionTableHead>}

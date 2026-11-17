@@ -45,7 +45,8 @@ const TEAM: Person[] = [
 ]
 const NAMES = TEAM.map((p) => p.name)
 
-/** Two comments that use what the composer offers: a mention, and tags of this deliverable's documents. */
+/** Comments that use what the composer offers (a mention, tags of this deliverable's documents, an
+ * internal note), ending on the client's question, which the firm hasn't answered yet. */
 function sampleThread(docs: DemoTaggableDocument[], now: Date): Comment[] {
     const ago = (h: number) => new Date(now.getTime() - h * 3_600_000).toISOString()
     const [first, second] = docs
@@ -67,6 +68,14 @@ function sampleThread(docs: DemoTaggableDocument[], now: Date): Comment[] {
             content: first
                 ? `Between us: the pricing in #${first.docId} waits for partner sign-off before the client sees it.`
                 : 'Between us: the pricing waits for partner sign-off before the client sees it.',
+        },
+        // The client has the last word, so the thread waits on the firm and Draft reply is offered
+        // (the tour's "Brio drafts a reply" step points at it).
+        {
+            id: 's4', author: 'Taylor Kim', at: ago(1),
+            content: second
+                ? `Thanks both. When will #${second.docId} have the latest numbers? We'd like to review it this week.`
+                : "Thanks both. When will the latest numbers be in? We'd like to review this week.",
         },
     ]
 }
@@ -409,6 +418,8 @@ export function DemoDeliverableComments({ documents, thread, onPost, focusDocId,
 
             <form
                 className="flex shrink-0 flex-col gap-2"
+                // The tour's "Brio drafts a reply" step: Draft reply sits in this composer while the client waits.
+                data-demo-tour="deliverable-composer"
                 onSubmit={(e) => {
                     e.preventDefault()
                     send()

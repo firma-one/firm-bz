@@ -546,7 +546,7 @@ export function MemoBrioPanel({
 
     return (
         <section aria-label={`${ASSISTANT.name} on this memo`} className="flex min-w-0 basis-full flex-col border-t border-line @[1040px]:min-h-0 @[1040px]:border-t-0">
-            <div className="flex flex-none items-end gap-5 border-b border-line px-5" role="tablist" aria-label="From this memo">
+            <div className="flex flex-none items-end gap-5 border-b border-line px-5" role="tablist" aria-label="From this memo" data-demo-tour="memo-brio-tabs">
                 {tabButton('summary', 'Summary')}
                 {tabButton('raid', <>RAID {items.length > 0 && <span className="font-normal tabular-nums text-fg-subtle">{items.length}</span>}</>)}
                 {!readOnly && sparkle}
@@ -562,7 +562,7 @@ export function MemoBrioPanel({
                         <p className="mt-2 text-small text-fg-muted">You can change each suggestion before accepting it, and nothing changes until you do.</p>
                     </div>
                 ) : current === 'summary' ? (
-                    <div role="tabpanel" id={`${baseId}-summary-panel`} aria-labelledby={`${baseId}-summary`}>
+                    <div role="tabpanel" id={`${baseId}-summary-panel`} aria-labelledby={`${baseId}-summary`} data-demo-tour="memo-brio-summary">
                         {minutes ? (
                             <>
                                 <div className="px-5 pb-4 pt-[18px]">
@@ -598,7 +598,7 @@ export function MemoBrioPanel({
                                         Click a title, type, date or priority to change it. Nothing changes until you accept. Owner and status are set on the RAID tab.
                                     </p>
                                 </div>
-                                <ul>
+                                <ul data-demo-tour="memo-brio-raid">
                                     {items.map((item) => (
                                         <SuggestionRow key={item.id} item={item} choices={choices} quote={quoteOf(item)} readOnly={readOnly || acceptingAll} onAccept={() => void accept(item)} />
                                     ))}
@@ -622,7 +622,7 @@ export function MemoBrioPanel({
                             </details>
                         )}
                         {(items.length > 0 || legacy) && !readOnly && (
-                            <div className="sticky bottom-0 mt-auto flex flex-wrap items-center justify-end gap-2.5 border-t border-line bg-surface px-5 py-4">
+                            <div className="sticky bottom-0 mt-auto flex flex-wrap items-center justify-end gap-2.5 border-t border-line bg-surface px-5 py-4" data-demo-tour="memo-accept">
                                 <Button type="button" variant="ghost" size="sm" onClick={onDismissAll} disabled={acceptingAll}>Dismiss all</Button>
                                 <Button type="button" variant="greenCta" size="sm" disabled={selectedTotal === 0 || acceptingAll} onClick={() => void acceptSelected()}>
                                     {acceptingAll ? 'Accepting…' : `Accept ${selectedTotal} selected`}

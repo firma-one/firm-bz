@@ -1,4 +1,5 @@
 import { Brio } from '@/components/ui/brio'
+import { RaidInfo } from '@/components/projects/raid/raid-info'
 import { DEMO_FIRM } from '@/lib/demo/static-demo-data'
 import { getDemoDeliverables } from '@/lib/demo/demo-deliverables'
 import { TOUR_NODES, tourSubtree, type TourNodeId } from '@/lib/demo/tour-chapters'
@@ -68,14 +69,22 @@ export const NODE_STEPS: Record<TourNodeId, TourStep[]> = {
         {
             target: '[data-demo-tour="sidebar-home"]',
             title: 'Home',
-            content: <p>Home picks up where you left off: recent pages, this week&apos;s agenda, what needs you, your engagements and your bookmarks.</p>,
+            content: <p>Home picks up where you left off: your brief, what needs you, recent pages, this week&apos;s agenda, your engagements and your bookmarks.</p>,
             route: `${firm}/home`,
             placement: 'right',
         },
         {
+            target: '[data-demo-tour="home-day-brief"]',
+            title: 'Your brief',
+            content: <p>Once a day, <Brio /> writes your brief from what&apos;s on your plate: what needs you first, what&apos;s due and what&apos;s changed. The sparkle rewrites it when your day moves on.</p>,
+            route: `${firm}/home`,
+            placement: 'bottom',
+            skipScroll: true,
+        },
+        {
             target: '[data-demo-tour="home-needs-you"]',
             title: 'Needs you',
-            content: <p>Always first: approvals, client comments, changes requested and @mentions that are waiting on you, across every firm you&apos;re in.</p>,
+            content: <p>Right under your brief, always: approvals, client comments, changes requested, @mentions and the Actions you own, across every firm you&apos;re in.</p>,
             route: `${firm}/home`,
             placement: 'bottom',
             skipScroll: true,
@@ -85,7 +94,7 @@ export const NODE_STEPS: Record<TourNodeId, TourStep[]> = {
         {
             target: '[data-demo-tour="sidebar-inbox"]',
             title: 'Inbox',
-            content: <p>Reminders from due dates, follow-ups, review requests and @mentions land here with your notifications, so nothing slips through the cracks.</p>,
+            content: <p>Reminders from due dates, follow-ups, the Actions you own, review requests and @mentions land here with your notifications, so nothing slips through the cracks.</p>,
             route: `${firm}/inbox`,
             placement: 'right',
         },
@@ -134,7 +143,7 @@ export const NODE_STEPS: Record<TourNodeId, TourStep[]> = {
         {
             target: '[data-demo-tour="firm-overview-tab"]',
             title: 'Firm overview',
-            content: <p>Overview shows business insights — revenue pipeline, engagement health, and what needs attention across all clients.</p>,
+            content: <p>Overview shows business insights: revenue pipeline, engagement health, and what needs attention across all clients.</p>,
             route: at(firm, { tab: 'analytics' }),
             placement: 'right',
             skipScroll: true,
@@ -147,12 +156,20 @@ export const NODE_STEPS: Record<TourNodeId, TourStep[]> = {
             placement: 'bottom',
             skipScroll: true,
         },
+        {
+            target: '[data-demo-tour="firm-chat"]',
+            title: <>Ask <Brio /> about the firm</>,
+            content: <p>Ask across every engagement: what&apos;s late this week, which clients are waiting on you, where the pipeline stands. Answers link the engagements they name.</p>,
+            route: at(firm, { tab: 'analytics' }),
+            placement: 'top',
+            skipScroll: true,
+        },
     ],
     'doc-search': [
         {
             target: '[data-demo-tour="firm-doc-search-tab"]',
             title: 'Doc Search',
-            content: <p>Search every document across your firm by filename or topic — powered by AI semantic search, with filters for file type, client, and engagement.</p>,
+            content: <p>Search every document across your firm by filename or topic. Semantic search finds a document by what it&apos;s about, with filters for file type, client and engagement.</p>,
             route: at(firm, { tab: 'doc-search' }),
             placement: 'right',
             skipScroll: true,
@@ -170,7 +187,7 @@ export const NODE_STEPS: Record<TourNodeId, TourStep[]> = {
         {
             target: '[data-demo-tour="firm-calendar-tab"]',
             title: 'Calendar',
-            content: <p>See deadlines and events across every client and engagement in your firm in one calendar — switch between Month, Week, Day, and Agenda views.</p>,
+            content: <p>See deadlines and events across every client and engagement in your firm in one calendar, in Month, Week, Day or Agenda view.</p>,
             route: at(firm, { tab: 'calendar' }),
             placement: 'right',
             skipScroll: true,
@@ -198,7 +215,7 @@ export const NODE_STEPS: Record<TourNodeId, TourStep[]> = {
         {
             target: '[data-demo-tour="firm-audit-tab"]',
             title: 'Firm audit log',
-            content: <p>A complete activity log across all clients and engagements in your firm — searchable and exportable.</p>,
+            content: <p>A complete activity log across all clients and engagements in your firm, searchable and exportable.</p>,
             route: at(firm, { tab: 'audit' }),
             placement: 'right',
             skipScroll: true,
@@ -217,15 +234,22 @@ export const NODE_STEPS: Record<TourNodeId, TourStep[]> = {
             title: 'General, Branding, App settings, Storage',
             content: (
                 <ul>
-                    <li><strong>General</strong> — the firm&apos;s details and an internal memo only admins see.</li>
-                    <li><strong>Branding</strong> — the name, tagline, color and logo shown in the app.</li>
-                    <li><strong>App settings</strong> — who can join by email domain, currency, reminder emails, notifications, and what Limited Access contributors and Reviewers see on an engagement&apos;s Overview.</li>
-                    <li><strong>Storage</strong> — the firm&apos;s Google Drive or OneDrive.</li>
+                    <li><strong>General</strong>: the firm&apos;s details and an internal memo only admins see.</li>
+                    <li><strong>Branding</strong>: the name, tagline, color and logo shown in the app.</li>
+                    <li><strong>App settings</strong>: who can join by email domain, currency, reminder emails, notifications, <Brio />, and what Limited Access contributors and Reviewers see on an engagement&apos;s Overview.</li>
+                    <li><strong>Storage</strong>: the firm&apos;s Google Drive or OneDrive.</li>
                 </ul>
             ),
             route: at(firm, { tab: 'settings' }),
             placement: 'bottom',
             skipScroll: true,
+        },
+        {
+            target: '[data-demo-tour="firm-settings-brio"]',
+            title: <><Brio /> settings</>,
+            content: <p>Whether <Brio /> reads each new memo, for 2 credits. Whether names, emails and links are swapped for placeholders before <Brio /> reads. And whether Reviewers can ask <Brio /> on an engagement&apos;s Overview.</p>,
+            route: at(firm, { tab: 'settings', section: 'appsettings' }),
+            placement: 'top',
         },
     ],
     clients: [],
@@ -233,7 +257,7 @@ export const NODE_STEPS: Record<TourNodeId, TourStep[]> = {
         {
             target: '[data-demo-tour="firm-clients-tab"]',
             title: 'Clients',
-            content: <p>Every client workspace for your firm lives here — each with its own branding, contacts, and engagements.</p>,
+            content: <p>Every client workspace for your firm lives here, each with its own branding, contacts and engagements.</p>,
             route: at(firm, { tab: 'clients' }),
             placement: 'right',
             skipScroll: true,
@@ -279,7 +303,7 @@ export const NODE_STEPS: Record<TourNodeId, TourStep[]> = {
         {
             target: '[data-demo-tour="client-engagements-tab"]',
             title: "A client's engagements",
-            content: <p>Every engagement for this client lives here — each one is its own client-billable project, with its own Files, Board, Discussions, members, audit log and settings.</p>,
+            content: <p>Every engagement for this client lives here. Each one is its own client-billable project, with its own Files, Board, Discussions, RAID log<RaidInfo className="ml-0.5" />, audit log, members and settings.</p>,
             route: client,
             placement: 'bottom',
             skipScroll: true,
@@ -289,7 +313,7 @@ export const NODE_STEPS: Record<TourNodeId, TourStep[]> = {
         {
             target: '[data-demo-tour="engagement-add-btn"]',
             title: 'Add an engagement',
-            content: <p>Engagements are client-billable projects — e.g. SEO retainers, paid media campaigns, content sprints, brand audits, or social strategy. Run them as a <strong>Retainer</strong>, <strong>T&amp;M</strong>, or <strong>Fixed Price</strong> engagement. Each has its own Files, Board, Discussions and team.</p>,
+            content: <p>Engagements are client-billable projects, like SEO retainers, paid media campaigns, content sprints, brand audits, or social strategy. Run them as a <strong>Retainer</strong>, <strong>T&amp;M</strong>, or <strong>Fixed Price</strong> engagement. Each has its own Files, Board, Discussions and team.</p>,
             spoken: 'Engagements are client-billable projects, like SEO retainers, paid media campaigns, content sprints, brand audits, or social strategy. Run them as a Retainer, Time and Materials, or Fixed Price engagement. Each has its own Files, Board, Discussions and team.',
             route: client,
             placement: 'bottom',
@@ -306,14 +330,6 @@ export const NODE_STEPS: Record<TourNodeId, TourStep[]> = {
             skipScroll: true,
         },
         {
-            target: '[data-demo-tour="engagement-overview-tab"]',
-            title: 'Engagement overview',
-            content: <p>The Overview tab surfaces engagement-level insights — progress, activity, and key metrics at a glance.</p>,
-            route: engAt({ tab: 'analytics' }),
-            placement: 'bottom',
-            skipScroll: true,
-        },
-        {
             target: '[data-demo-tour="engagement-action-center"]',
             title: 'Action Center',
             content: <p>What needs doing on this engagement, in two lists: <strong>Delivery</strong> (overdue deliverables, ones awaiting approval or rework, planning gaps, unanswered comments) and <strong>Housekeeping</strong> (pending invitations, sensitive, duplicate or stale files).</p>,
@@ -321,9 +337,23 @@ export const NODE_STEPS: Record<TourNodeId, TourStep[]> = {
             placement: 'bottom',
         },
         {
+            target: '[data-demo-tour="overview-waiting-reviewer"]',
+            title: 'Waiting on review',
+            content: <p>Deliverables that have sat with the client for a while, each with a nudge <Brio /> drafts for you to edit and send.</p>,
+            route: engAt({ tab: 'analytics' }),
+            placement: 'bottom',
+        },
+        {
+            target: '[data-demo-tour="overview-raid-card"]',
+            title: 'RAID at a glance',
+            content: <p>The engagement&apos;s open Risks, Actions and Issues, and its Decisions so far, with a link to the full log on the RAID tab.</p>,
+            route: engAt({ tab: 'analytics' }),
+            placement: 'bottom',
+        },
+        {
             target: '[data-demo-tour="engagement-ai-summary"]',
             title: 'AI summary',
-            content: <p><Brio /> drafts the engagement&apos;s status summary from its own data, and can rewrite it. Your team edits and approves it before anything reaches the client.</p>,
+            content: <p><Brio /> drafts the engagement&apos;s status summary from its own data, and the status update you send the client. Your team edits and approves both before anything reaches the client.</p>,
             route: engAt({ tab: 'analytics' }),
             placement: 'left',
         },
@@ -347,7 +377,7 @@ export const NODE_STEPS: Record<TourNodeId, TourStep[]> = {
         {
             target: '[data-demo-tour="engagement-upload-btn"]',
             title: 'Upload files and create folders',
-            content: <p>Upload files, create folders or import from Google Drive with New. You can also drag files from your computer onto the list — try it here; the tour only adds them on screen.</p>,
+            content: <p>Upload files, create folders or import from Google Drive with New. You can also drag files from your computer onto the list. Try it here: the tour only adds them on screen.</p>,
             route: engAt({ tab: 'files', folder: inProgressId }),
             placement: 'bottom',
             skipScroll: true,
@@ -359,7 +389,7 @@ export const NODE_STEPS: Record<TourNodeId, TourStep[]> = {
                 <div className="space-y-2">
                     <p>Each document in a deliverable has a stage, from Not started to Approved. Change it here.</p>
                     <ul>
-                        <li><strong>The deliverable follows</strong> — its stage is worked out from its documents&apos;, so there&apos;s nothing to keep in step by hand.</li>
+                        <li><strong>The deliverable follows</strong>: its stage is worked out from its documents&apos;, so there&apos;s nothing to keep in step by hand.</li>
                         <li><strong>Firma asks first</strong> when a move would show the deliverable to a Limited Access contributor or Reviewer for the first time, or approve it.</li>
                     </ul>
                 </div>
@@ -467,12 +497,21 @@ export const NODE_STEPS: Record<TourNodeId, TourStep[]> = {
             placement: 'left',
             skipScroll: true,
         },
+        {
+            target: '[data-demo-tour="deliverable-composer"]',
+            title: <><Brio /> drafts a reply</>,
+            content: <p>When the client is waiting on you, <strong>Draft reply</strong> has <Brio /> write one from the thread, for you to edit and send. Internal notes are never used.</p>,
+            route: engAt({ tab: 'board', deliverable: inProgressId, dtab: 'comments' }),
+            placement: 'left',
+            skipScroll: true,
+            settle: PANE_SETTLE_MS,
+        },
     ],
     discussions: [
         {
             target: '[data-demo-tour="engagement-comments-tab"]',
             title: 'Discussions',
-            content: <p>Every deliverable’s discussion in one place: see what’s new and who’s waiting on a reply, answer without leaving the page, and resolve what’s settled.</p>,
+            content: <p>Every deliverable’s discussion in one place: see what’s new and who’s waiting on a reply, answer without leaving the page, and resolve what’s settled. Beside Threads, Memos keeps your team’s call notes.</p>,
             route: engAt({ tab: 'comments' }),
             placement: 'bottom',
             skipScroll: true,
@@ -494,6 +533,83 @@ export const NODE_STEPS: Record<TourNodeId, TourStep[]> = {
             skipScroll: true,
         },
     ],
+    memos: [
+        {
+            target: '[data-demo-tour="discussions-memos-tab"]',
+            title: 'Memos',
+            content: <p>Your team&apos;s notes and call transcripts, each a Markdown file in your Google Drive or OneDrive. Only Leads and Full Access contributors see them.</p>,
+            route: engAt({ tab: 'comments', view: 'memos' }),
+            placement: 'bottom',
+            skipScroll: true,
+        },
+        {
+            target: '[data-demo-tour="memos-add"]',
+            title: 'Add a memo',
+            content: <p>Paste your notes or a transcript after a call. <Brio /> reads a new memo once, for 2 credits: it writes the meeting&apos;s minutes and suggests what to log in RAID<RaidInfo className="ml-0.5" />.</p>,
+            route: engAt({ tab: 'comments', view: 'memos' }),
+            placement: 'bottom',
+            skipScroll: true,
+        },
+        {
+            target: '[data-demo-tour="memo-brio-summary"]',
+            title: 'Minutes',
+            content: <p>Minutes for the people who were there: who came, what was discussed and decided, and the action items. Copy the subject and the summary into an email.</p>,
+            route: engAt({ tab: 'comments', view: 'memos', memo: 'tour-memo-weekly', brio: 'summary' }),
+            placement: 'left',
+            skipScroll: true,
+        },
+        {
+            target: '[data-demo-tour="memo-brio-raid"]',
+            title: 'RAID suggestions',
+            content: <p>Each is a Risk, Action, Issue or Decision. Click its letter, title, date or priority to change it before you accept. Nothing changes until you do.</p>,
+            route: engAt({ tab: 'comments', view: 'memos', memo: 'tour-memo-weekly', brio: 'raid' }),
+            placement: 'left',
+            skipScroll: true,
+        },
+        {
+            target: '[data-demo-tour="memo-accept"]',
+            title: 'Accept',
+            content: <p>Accept one, or every selected one at once. Each joins the RAID log, where its owner and status are set.</p>,
+            route: engAt({ tab: 'comments', view: 'memos', memo: 'tour-memo-weekly', brio: 'raid' }),
+            placement: 'top',
+            skipScroll: true,
+        },
+    ],
+    raid: [
+        {
+            target: '[data-demo-tour="engagement-raid-tab"]',
+            title: 'RAID log',
+            content: <p>The engagement&apos;s Risks, Actions, Issues and Decisions, for your team only. Status, health and Board entries keep themselves current, at no cost in credits.</p>,
+            route: engAt({ tab: 'raid' }),
+            placement: 'bottom',
+            skipScroll: true,
+        },
+        {
+            target: '[data-demo-tour="raid-filters"]',
+            title: 'Four kinds',
+            // "A is an Action", not "A an Action": Kokoro reads a lone "A" as the article.
+            content: <p>R is a Risk, A is an Action, I is an Issue and D is a Decision. Filter by kind, and switch between what&apos;s open and what&apos;s closed.</p>,
+            route: engAt({ tab: 'raid' }),
+            placement: 'bottom',
+            skipScroll: true,
+        },
+        {
+            target: '[data-demo-tour="raid-table"]',
+            title: 'Actions',
+            content: <p>An Action has an owner and a due date. While it&apos;s open, it&apos;s a reminder on its owner&apos;s Home and Inbox, and Done there closes it here. Late ones turn red.</p>,
+            route: engAt({ tab: 'raid' }),
+            placement: 'top',
+            skipScroll: true,
+        },
+        {
+            target: '[data-demo-tour="raid-brio-check"]',
+            title: <><Brio />&apos;s suggestions</>,
+            content: <p><Brio /> reads threads with new messages once a day, or now with the sparkle, for 1 credit, and suggests what to log. What it finds in a memo waits on the memo. The plus adds your own.</p>,
+            route: engAt({ tab: 'raid' }),
+            placement: 'bottom',
+            skipScroll: true,
+        },
+    ],
     'engagement-members': [
         {
             target: '[data-demo-tour="engagement-members-tab"]',
@@ -508,7 +624,7 @@ export const NODE_STEPS: Record<TourNodeId, TourStep[]> = {
         {
             target: '[data-demo-tour="engagement-audit-tab"]',
             title: 'Engagement audit',
-            content: <p>A full activity log for this engagement — who uploaded, shared, commented, or changed settings and when.</p>,
+            content: <p>A full activity log for this engagement: who uploaded, shared, commented or changed settings, and when.</p>,
             route: engAt({ tab: 'audit' }),
             placement: 'bottom',
             skipScroll: true,
@@ -518,7 +634,7 @@ export const NODE_STEPS: Record<TourNodeId, TourStep[]> = {
         {
             target: '[data-demo-tour="engagement-settings-tab"]',
             title: 'Engagement settings',
-            content: <p>For the engagement&apos;s leads: its name, status and description, contract type and value, start and end dates, and an internal memo. Edits here stay on screen; Save and Delete are inert in this demo.</p>,
+            content: <p>For the engagement&apos;s leads: its name, status and description, contract type and value, start and end dates, and call notes, where <Brio /> can identify action items. Edits here stay on screen; Save and Delete are inert in this demo.</p>,
             route: engAt({ tab: 'settings' }),
             placement: 'bottom',
             skipScroll: true,
@@ -538,6 +654,14 @@ export const NODE_STEPS: Record<TourNodeId, TourStep[]> = {
             title: <><Brio /> on Files</>,
             content: <p>On the Files tab, <Brio /> answers about the deliverables, folders and files, and how the engagement&apos;s work is organized.</p>,
             route: engAt({ tab: 'files' }),
+            placement: 'top',
+            skipScroll: true,
+        },
+        {
+            target: '[data-demo-tour="ask-brio"]',
+            title: <><Brio /> and your data</>,
+            content: <p>By default, the names, emails and links <Brio /> knows are swapped for placeholders before it reads, and come back in what it writes. Nothing it suggests changes anything until someone accepts it. Each answer or draft is 1 credit.</p>,
+            route: engAt({ tab: 'analytics' }),
             placement: 'top',
             skipScroll: true,
         },
@@ -569,7 +693,7 @@ export const NODE_STEPS: Record<TourNodeId, TourStep[]> = {
         {
             target: '[data-demo-tour="profile-menu-billing"]',
             title: 'Billing',
-            content: <p>Billing is in the profile menu too, for firm admins: your plan and your payments. It&apos;s inert in this demo.</p>,
+            content: <p>Billing is in the profile menu too, for firm admins: your plan, your payments and your <Brio /> credits, one for each answer or draft. It&apos;s inert in this demo.</p>,
             route: at(`${firm}/support`, { menu: 'profile' }),
             placement: 'right',
             settle: MENU_SETTLE_MS,

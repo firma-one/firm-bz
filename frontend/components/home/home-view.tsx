@@ -234,7 +234,9 @@ export function HomeView({
             ) : (
                 <>
                     {/* Brio's few lines on the day, above what they sum up. Loads on its own, after the page. */}
-                    {readOnly ? <DemoDayBrief work={work} firmName={firms[0]?.name} /> : <DayBrief />}
+                    {readOnly
+                        ? <div data-demo-tour="home-day-brief"><DemoDayBrief work={work} firmName={firms[0]?.name} /></div>
+                        : <DayBrief />}
 
                     {/* First, always: what is waiting on you. The order never changes with the day's state.
                         Your brief points down to it; its id keeps links into Home (#needs-you) working. */}

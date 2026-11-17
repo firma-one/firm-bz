@@ -295,16 +295,12 @@ function TourStart() {
                                 <span>Read aloud by <Brio /></span>
                             </label>
                         )}
+                        {/* Where the run was left: Resume, the footer's main button, picks it up from here. */}
                         {stoppedAt && (
-                            <button
-                                type="button"
-                                onClick={resumeTour}
-                                className="mt-2.5 flex w-full min-w-0 items-center gap-2 rounded-control bg-black/[0.04] px-2.5 py-2 text-left text-small transition-colors hover:bg-black/[0.07]"
-                            >
+                            <p className="mt-2.5 flex w-full min-w-0 items-center gap-2 rounded-control bg-black/[0.04] px-2.5 py-2 text-small" data-testid="tour-stopped-at">
                                 <History className="h-3.5 w-3.5 shrink-0 text-fg-muted" aria-hidden />
                                 <span className="min-w-0 flex-1 truncate text-fg-muted">You stopped at <span className="text-fg"><TourNodePlace id={stoppedAt} /></span></span>
-                                <span className="shrink-0 font-medium text-action">Resume</span>
-                            </button>
+                            </p>
                         )}
                     </div>
 
@@ -319,12 +315,24 @@ function TourStart() {
                                 <span className="truncate">Don&apos;t show again</span>
                             </label>
                         )}
+                        {/* A run left partway: Resume leads, so the obvious press keeps the place (Deepak,
+                            2026-11-17); Start over plays the whole tour afresh and clears the rings. */}
                         <div className="ml-auto flex shrink-0 items-center gap-1.5">
                             <Button variant="ghost" size="sm" onClick={skip}>Skip</Button>
-                            <Button size="sm" onClick={startTour}>
-                                {mode === 'autoplay' && <Play className="h-3.5 w-3.5" />}
-                                {wholeTour}
-                            </Button>
+                            {stoppedAt ? (
+                                <>
+                                    <Button variant="outline" size="sm" onClick={startTour}>Start over</Button>
+                                    <Button size="sm" onClick={resumeTour}>
+                                        {mode === 'autoplay' && <Play className="h-3.5 w-3.5" />}
+                                        Resume
+                                    </Button>
+                                </>
+                            ) : (
+                                <Button size="sm" onClick={startTour}>
+                                    {mode === 'autoplay' && <Play className="h-3.5 w-3.5" />}
+                                    {wholeTour}
+                                </Button>
+                            )}
                         </div>
                     </div>
                 </DialogPrimitive.Content>

@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils'
  * sub-tab until it got a tab of its own (2026-11-14); the switch still takes it when it's passed.
  *
  * Leads and Full Access contributors get a switch at the top of Discussions: Threads (the page as it
- * was), Memos (call and meeting notes kept as files) and RAID (risks, assumptions, issues, decisions).
+ * was), Memos (call and meeting notes kept as files) and RAID (Risks, Actions, Issues and Decisions).
  * Memos and RAID are internal. Reviewers and Limited Access contributors get no switch at all: their
  * Discussions page is Threads alone, as before, and nothing of the other two is rendered for them.
  *
@@ -182,6 +182,7 @@ export function DiscussionsSwitch({
                         tabIndex={selected ? 0 : -1}
                         onClick={() => onChange(o.id)}
                         onKeyDown={(e) => onKeyDown(e, i)}
+                        data-demo-tour={o.id === 'memos' ? 'discussions-memos-tab' : undefined}
                         className={cn(
                             'inline-flex h-7 items-center gap-1.5 px-3 text-small font-medium transition-colors',
                             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-action/30',

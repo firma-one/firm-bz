@@ -9,7 +9,7 @@ import { EngagementFileList, type EngagementFolderData } from './engagement-file
 import { type BreadcrumbItem } from '@/lib/files-folder-session'
 import { EngagementSettingsForm } from './engagement-settings-form'
 import { LayoutGrid, List, Lock } from 'lucide-react'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { EngagementMembersTab } from './members/engagement-members-tab'
 import { EngagementSharesTab } from './shares/engagement-shares-tab'
 import { ErrorBoundary } from '@/components/error-boundary'
@@ -17,7 +17,7 @@ import { EngagementSearchProvider } from './engagement-search-context'
 import { useViewAs } from '@/lib/view-as-context'
 import { EngagementAuditPane } from './engagement-audit-pane'
 import { EngagementCommentsTab } from './engagement-comments-tab'
-import { hasInternalDiscussions } from './discussions-switch'
+import { DISCUSSIONS_VIEW_PARAM, hasInternalDiscussions } from './discussions-switch'
 import { EngagementWikiTab } from './wiki/engagement-wiki-tab'
 import type { LwCrmEngagementStatus } from '@/lib/actions/project'
 import { EngagementHeader } from './engagement-header'
@@ -146,6 +146,8 @@ export function EngagementWorkspace({
 }: EngagementWorkspaceProps) {
     const pathname = usePathname()
     const router = useRouter()
+    // Discussions keeps its sub-tab in the URL: on Memos, How this works opens the tour's Memos section.
+    const discussionsView = useSearchParams().get(DISCUSSIONS_VIEW_PARAM)
     const { viewAsPersonaSlug } = useViewAs()
     // External roles (EC/EV) — including internal users previewing via "view as".
     // Drives the Overview tab: externals get only the deliverables analytics section.
@@ -270,7 +272,7 @@ export function EngagementWorkspace({
                 membersHref={`${base}/members`}
                 personaDisplayName={projectPersonaDisplayName}
                 // The tour shows the firm's view, so client roles (and "view as" one) get no link.
-                guide={isExternalPersona ? null : engagementTabGuide(currentTab)}
+                guide={isExternalPersona ? null : engagementTabGuide(currentTab, discussionsView)}
             />
 
             <Tabs value={currentTab} onValueChange={handleTabChange} className="flex-1 flex flex-col min-h-0">

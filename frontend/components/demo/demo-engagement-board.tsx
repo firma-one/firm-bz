@@ -131,7 +131,7 @@ export function DemoEngagementBoard({ engagement }: { engagement: DemoEngagement
     const openIdRef = useRef<string | null>(null)
     const clearPaneRef = useRef(rightPane.clearPane)
     useEffect(() => { clearPaneRef.current = rightPane.clearPane }, [rightPane.clearPane])
-    const openCard = (card: DemoDeliverable) => {
+    const openCard = (card: DemoDeliverable, tab: 'details' | 'comments' = 'details') => {
         setSelected(card.folder.id)
         openIdRef.current = card.folder.id
         rightPane.setTitle(card.folder.docId)
@@ -140,7 +140,8 @@ export function DemoEngagementBoard({ engagement }: { engagement: DemoEngagement
         rightPane.setIconTooltip('Deliverable')
         rightPane.setHeaderActions(null)
         rightPane.setPaneSize('medium')
-        rightPane.setContent(<DemoDeliverablePane deliverable={card} embedded />)
+        // Keyed by the tab, so a tour step that asks for Comments opens the pane afresh on it.
+        rightPane.setContent(<DemoDeliverablePane key={`${card.folder.id}-${tab}`} deliverable={card} embedded initialTab={tab} />)
     }
     const closeCard = () => {
         setSelected(null)
@@ -161,17 +162,21 @@ export function DemoEngagementBoard({ engagement }: { engagement: DemoEngagement
 
     // The guided tour opens a card by URL (?deliverable=, .claude/plans/tour-chapters.md); when the
     // parameter goes away (the tour steps back), the card it opened closes.
-    const deliverableParam = useSearchParams().get('deliverable')
+    const searchParams = useSearchParams()
+    const deliverableParam = searchParams.get('deliverable')
+    // The pane's tab, for the step on Brio's reply draft (`dtab=comments`).
+    const paneTab = searchParams.get('dtab') === 'comments' ? 'comments' : 'details'
     const openedFromUrl = useRef(false)
     useEffect(() => {
         const card = deliverableParam ? getDemoDeliverables(engagement).find((c) => c.folder.id === deliverableParam) : undefined
         if (card) {
             openedFromUrl.current = true
-            openCard(card)
+            openCard(card, paneTab)
         } else if (openedFromUrl.current) {
             openedFromUrl.current = false
             closeCard()
         }
+        // Only a new card reopens the pane: on `dtab` alone, the open pane follows it itself.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [deliverableParam])
 

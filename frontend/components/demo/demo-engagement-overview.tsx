@@ -181,22 +181,26 @@ export function DemoEngagementOverview({ engagement }: { engagement: DemoEngagem
                     ]}
                 />
                 {/* As the app: deliverables in review for a while, with Brio's nudge to the Reviewer. */}
-                <WaitingOnClient
-                    projectId="tour"
-                    engagementBase=""
-                    deliverables={m.deliverables.map((d) => ({
-                        ...d,
-                        // In review for six days, so the sample has something to nudge about.
-                        stageSince: d.stage === 'in_review' && today ? new Date(today.getTime() - 6 * DAY).toISOString() : null,
-                    }))}
-                    demo={{
-                        recipients: [{ userId: 'tour-reviewer', name: 'Dana Whitfield', role: 'Reviewer' }],
-                        // Opens as the app's does: the person tagged by their member name, then Brio's words.
-                        draft: (c, name) => `${nudgeGreeting(name)}A quick check-in on ${c.name}${c.docId ? ` (${c.docId})` : ''}. It's been with you for review for ${c.daysWaiting} days.\n\nIf anything needs changing, a comment here is the quickest way to get it to us.`,
-                    }}
-                />
+                <div data-demo-tour="overview-waiting-reviewer">
+                    <WaitingOnClient
+                        projectId="tour"
+                        engagementBase=""
+                        deliverables={m.deliverables.map((d) => ({
+                            ...d,
+                            // In review for six days, so the sample has something to nudge about.
+                            stageSince: d.stage === 'in_review' && today ? new Date(today.getTime() - 6 * DAY).toISOString() : null,
+                        }))}
+                        demo={{
+                            recipients: [{ userId: 'tour-reviewer', name: 'Dana Whitfield', role: 'Reviewer' }],
+                            // Opens as the app's does: the person tagged by their member name, then Brio's words.
+                            draft: (c, name) => `${nudgeGreeting(name)}A quick check-in on ${c.name}${c.docId ? ` (${c.docId})` : ''}. It's been with you for review for ${c.daysWaiting} days.\n\nIf anything needs changing, a comment here is the quickest way to get it to us.`,
+                        }}
+                    />
+                </div>
                 {/* As the app: the RAID log's short form under the Action Center. */}
-                <DemoRaidOverviewCard />
+                <div data-demo-tour="overview-raid-card">
+                    <DemoRaidOverviewCard />
+                </div>
             </div>
 
             {/* As the app: internal memos moved to Discussions › Memos (demo-memos.tsx); their card is no longer mounted here. */}

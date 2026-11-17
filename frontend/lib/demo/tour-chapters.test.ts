@@ -140,10 +140,17 @@ describe("the engagement page's How this works link", () => {
         ['files', 'files'],
         ['board', 'board'],
         ['comments', 'discussions'],
+        ['raid', 'raid'],
         ['members', 'engagement-members'],
         ['audit', 'engagement-audit'],
     ])('opens %s on its %s section', (tab, node) => {
         expect(engagementTabGuide(tab)).toBe(node)
+    })
+
+    it('opens the Memos section on Discussions › Memos, and Discussions on its other sub-tabs', () => {
+        expect(engagementTabGuide('comments', 'memos')).toBe('memos')
+        expect(engagementTabGuide('comments', null)).toBe('discussions')
+        expect(engagementTabGuide('raid', 'memos')).toBe('raid')
     })
 
     it('is left out on Settings and Wiki, which the tour only points at', () => {

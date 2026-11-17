@@ -71,8 +71,12 @@ function SwitchRow({ icon, title, description, initial }: { icon: ReactNode; tit
  * over the sample firm. Fields and switches change on screen; Save, Delete and the storage
  * connection are inert, as nothing here is saved.
  */
-export function DemoFirmSettings({ firm }: { firm: DemoFirm }) {
-    const [tab, setTab] = useState<Tab>('main')
+export function DemoFirmSettings({ firm, initialTab }: {
+    firm: DemoFirm
+    /** The tab to open on, from the tour's `section=` (the dashboard keys this by it, so a step can switch it). */
+    initialTab?: string | null
+}) {
+    const [tab, setTab] = useState<Tab>(() => (TABS.some((t) => t.value === initialTab) ? (initialTab as Tab) : 'main'))
 
     return (
         <div className="flex flex-col">
@@ -203,7 +207,7 @@ export function DemoFirmSettings({ firm }: { firm: DemoFirm }) {
                             </NotionTableBody>
                         </NotionTable>
                     </section>
-                    <section>
+                    <section data-demo-tour="firm-settings-brio">
                         <h3 className={SETTINGS_SECTION_HEADING_CLASS}><Brio /></h3>
                         <SwitchRow
                             icon={<Sparkles />}
