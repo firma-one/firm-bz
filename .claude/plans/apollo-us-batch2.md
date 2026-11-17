@@ -1,6 +1,13 @@
 # Apollo US Batch 2: 10 a day
 
-**Status:** approved by Deepak on 2026-11-13 ("Approve and schedule").
+**Status: PAUSED 2026-11-15 ("Pause all") before the first run. Nobody from Batch 2 was enrolled.**
+- **Why:** Gmail marks everything from firmaos.co "blatant spam" since the Nov 9 Batch 1 send. Proven with Google Admin Email Log Search on pockett.io, including a plain no-link note.
+- **What's off:**
+  - Task `apollo-us-batch2-enroll` is disabled.
+  - Both US Wave 1 sequences are deactivated (manual_pause). Apollo deleted the 50 unsent third emails and recreates them on reactivation.
+- Don't re-enable until firmaos.co passes a plain-note test at pockett.io.
+
+**Originally:** approved by Deepak on 2026-11-13 ("Approve and schedule").
 - **Scheduled task:** `apollo-us-batch2-enroll`, cron `30 9 16,17,19,20,23 11 *`, saved in Auto mode. First run: Mon Nov 16 at about 9:31 AM IST.
 - **Each run:** enrolls only that day's group. It catches up a missed group, up to 20 contacts per run.
 - **It enrolls nobody when:** the date is Nov 18 or after Nov 27, either sequence is off, there's any spam block, bounces add up to 2 or more, or any send failed.
