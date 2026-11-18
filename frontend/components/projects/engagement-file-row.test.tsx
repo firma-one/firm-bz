@@ -228,30 +228,30 @@ describe('a comment link landing on the row', () => {
     })
 })
 
-// A locked row's Due (read only): red only once the day has passed; today and the coming week amber;
-// approved work just shows its date, in the default color.
+// A locked row's Due (read only): the same chip and date format as an editable row's ("Nov 25",
+// the year only when it isn't this one). Approved work's date is history, never drawn overdue.
 describe('a locked row’s Due', () => {
-    const day = (offset: number) => { const d = new Date(); d.setDate(d.getDate() + offset); d.setHours(5, 30, 0, 0); return d.toISOString() }
     const lockedRow = (dueDate: string, activityStatus: string) =>
         renderRow({ file: { ...FILE, dueDate, activityStatus, lock: { type: 'finalize' } } as EngagementFileRowProps['file'] })
+    const chipOf = (text: string) => screen.getByText(text).closest('span[class*="rounded-control"]') as HTMLElement
 
     it('is the plain date once approved, even past its date', () => {
-        lockedRow(day(-7), 'approved')
+        lockedRow('2020-01-10', 'approved')
         expect(screen.queryByText(/overdue/)).toBeNull()
-        const date = new Date(day(-7)).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-        const label = screen.getByText((t) => t.includes(date.split(' ')[1]) && t.includes(date.split(' ')[0]))
-        expect(label.className).toContain('text-fg-muted')
-        expect(label.className).not.toMatch(/danger|yellow|red/)
+        expect(chipOf('Jan 10, 2020').className).not.toMatch(/red|danger|problem/)
     })
 
-    it('says today in amber for a date earlier today, not overdue', () => {
-        lockedRow(day(0), 'in_review')
-        const label = screen.getByText('today')
-        expect(label.className).toContain('text-tag-yellow-fg')
+    it('leaves out this year, as the editable chip does', () => {
+        const thisYear = new Date().getFullYear()
+        lockedRow(`${thisYear}-12-31`, 'approved')
+        expect(screen.getByText('Dec 31')).toBeTruthy()
     })
 
-    it('is red only once the day has passed', () => {
-        lockedRow(day(-3), 'in_review')
-        expect(screen.getByText('3d overdue').className).toContain('text-danger')
+    it('is drawn overdue when the work is still open and the day has passed', () => {
+        lockedRow('2020-01-10', 'in_review')
+        const approved = chipOf('Jan 10, 2020').className
+        cleanup()
+        lockedRow('2020-01-10', 'approved')
+        expect(chipOf('Jan 10, 2020').className).not.toBe(approved)
     })
 })

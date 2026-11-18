@@ -40,8 +40,7 @@ import {
     TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
-import { differenceInCalendarDays } from 'date-fns'
-import { READ_ONLY_PILL_CLASS, type PersonOption } from '@/components/ui/property-cells'
+import { DateProperty, READ_ONLY_PILL_CLASS, type PersonOption } from '@/components/ui/property-cells'
 import { FILES_DROP_TARGET_ROW_CLASS } from '@/components/projects/files-drop-zone'
 import { formatFileSize } from '@/lib/utils'
 import { DriveFile } from '@/lib/types'
@@ -815,7 +814,7 @@ function EngagementFileRowInner({
                 />
             </div>
 
-            {/* Due Column — leads edit it in place (Notion-style); everyone else sees the relative date.
+            {/* Due Column — leads edit it in place (Notion-style); everyone else sees the same chip, read only.
                 Files and deliverable folders both have one. */}
             <div className={cn('min-w-0 items-center gap-1 whitespace-nowrap', DUE_DATE_COL_CLASS, FILE_TABLE_COL_LINE_CLASS)} onClick={(e) => { if (canEditDueDate) e.stopPropagation() }}>
                 {canEditDueDate ? (
@@ -832,50 +831,19 @@ function EngagementFileRowInner({
                         approved={shownStage === 'approved'}
                     />
                 ) : (
-                    // Inset as the editable picker's button is, so a locked row's Due lines up with the others.
-                    <span className={READ_ONLY_PILL_CLASS}>
-                    {/* Folders other than deliverables have no Due, whatever an older value says */}
-                    {file.dueDate && (!isFolder || file.isDeliverable) ? (() => {
-                        // Approved: the date is history, not a countdown. Just the date, muted.
-                        if (shownStage === 'approved') {
-                            return (
-                                <RelativeDateTime
-                                    date={file.dueDate}
-                                    displayFormat="short"
-                                    textClassName="text-[0.8125rem] text-fg-muted"
-                                    iconClassName="text-line hover:text-fg-muted"
-                                    tooltipSide="top"
-                                    tooltipPrefix="Due on:"
-                                />
-                            )
-                        }
-                        // By calendar day: a date earlier today is "today", not overdue.
-                        const days = differenceInCalendarDays(new Date(file.dueDate), new Date())
-                        const isOverdue = days < 0
-                        const isUrgent = days >= 0 && days <= 7
-                        const relativeLabel = days === 0 ? 'today'
-                            : days < 0 ? (days === -1 ? '1d overdue' : `${-days}d overdue`)
-                            : days === 1 ? 'in 1d' : `in ${days}d`
-
-                        // Red only for a date that has passed; today and the next week are a heads-up, amber.
-                        const colorClass = isOverdue ? 'text-danger' : isUrgent ? 'text-tag-yellow-fg' : 'text-fg-muted'
-                        const iconColor = isOverdue ? 'text-danger/50 hover:text-danger' : isUrgent ? 'text-tag-yellow-fg/60 hover:text-tag-yellow-fg' : 'text-line hover:text-fg-muted'
-
-                        return (
-                            <RelativeDateTime
-                                date={file.dueDate}
-                                displayFormat="short"
-                                textClassName={`text-[0.8125rem] ${colorClass}`}
-                                iconClassName={iconColor}
-                                tooltipSide="top"
-                                tooltipPrefix="Due on:"
-                                overrideDisplayText={relativeLabel}
-                            />
-                        )
-                    })() : (
-                        <span className={cn('text-[0.8125rem]', isTracked ? 'text-fg-subtle' : 'text-[#45474c]/40')}>{emptyTrackedValue}</span>
-                    )}
-                    </span>
+                    // The same chip as the editable cell, read only: one date format in the column. Approved
+                    // work's date is history, so it's never drawn overdue. Folders other than deliverables
+                    // have no Due, whatever an older value says.
+                    <DateProperty
+                        value={!isFolder || file.isDeliverable ? file.dueDate ?? null : null}
+                        onChange={() => {}}
+                        disabled
+                        placeholder={emptyTrackedValue}
+                        highlightOverdue={shownStage !== 'approved'}
+                        allowTime
+                        compact
+                        chip
+                    />
                 )}
                 {missingDue && shownStage && <MissingDueWarning stage={shownStage} />}
             </div>
