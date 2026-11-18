@@ -380,9 +380,16 @@ export function UpdateEmailFields({ state, pdf = true }: { state: UpdateEmailSta
                 />
             </div>
             {pdf && (
-                <label className="flex w-fit items-center gap-2 text-small text-fg">
-                    <Checkbox checked={state.withPdf} onCheckedChange={(v) => state.setWithPdf(v === true)} />
-                    Attach the Overview as a PDF
+                // What the PDF holds, said: the Overview's export (captureHealthCard), which leaves
+                // out everything marked data-no-export.
+                <label className="flex w-fit cursor-pointer items-start gap-2 text-small text-fg">
+                    <Checkbox checked={state.withPdf} onCheckedChange={(v) => state.setWithPdf(v === true)} className="mt-0.5" />
+                    <span className="flex flex-col gap-0.5">
+                        <span>Attach the Overview report (PDF)</span>
+                        <span className="text-caption text-fg-muted">
+                            The engagement&apos;s health, timeline and progress, this update in full, the deliverables timeline and health details. Leaves out Needs you and RAID.
+                        </span>
+                    </span>
                 </label>
             )}
         </div>
