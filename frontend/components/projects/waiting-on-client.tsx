@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Sparkles, Hourglass } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Hint } from '@/components/ui/tooltip'
 import { useToast } from '@/components/ui/toast'
 import { DraftComposer, type ComposerRecipient } from '@/components/brio/draft-composer'
 import { BRIO_GREEN } from '@/lib/ai/assistant'
@@ -242,8 +243,9 @@ export function WaitingOnClient({
 }
 
 /**
- * The row's right-hand side: Draft a nudge, or what the last nudge came to. Quiet text when there is
- * nothing to do; the button only when a nudge is due.
+ * The row's right-hand side: Nudge, or what the last nudge came to. Quiet text when there is
+ * nothing to do; the button only when a nudge is due. Short words (Deepak, 2026-11-18): "Nudge",
+ * not "Draft a nudge"; the sparkle says Brio writes it, and the hint says the rest.
  */
 function NudgeAction({ state, discussionHref, onNudge }: {
     state: NudgeRowState
@@ -251,14 +253,16 @@ function NudgeAction({ state, discussionHref, onNudge }: {
     onNudge: () => void
 }) {
     const button = (label: string) => (
-        <Button variant="outline" size="sm" onClick={onNudge}>
-            <Sparkles className="h-3.5 w-3.5" style={{ color: BRIO_GREEN }} aria-hidden />
-            {label}
-        </Button>
+        <Hint label="Brio drafts it; you edit and send">
+            <Button variant="outline" size="sm" onClick={onNudge}>
+                <Sparkles className="h-3.5 w-3.5" style={{ color: BRIO_GREEN }} aria-hidden />
+                {label}
+            </Button>
+        </Hint>
     )
     switch (state.kind) {
         case 'due':
-            return button('Draft a nudge')
+            return button('Nudge')
         case 'nudged':
             return <span className="text-small text-fg-muted">Nudged {state.name} {daysAgoWords(state.at)}</span>
         case 'again':
@@ -275,6 +279,6 @@ function NudgeAction({ state, discussionHref, onNudge }: {
                 : <span className="text-small text-fg-muted">{words}</span>
         }
         case 'done':
-            return <span className="text-small text-fg-muted">{state.name} marked the nudge done {daysAgoWords(state.at)}</span>
+            return <span className="text-small text-fg-muted">{state.name} marked it done {daysAgoWords(state.at)}</span>
     }
 }

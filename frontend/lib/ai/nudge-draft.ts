@@ -33,7 +33,7 @@ export interface NudgeStatus {
 
 /**
  * What a Waiting on Reviewers row offers, given its last nudge:
- * - due: never nudged; Draft a nudge.
+ * - due: never nudged; Nudge.
  * - nudged: nudged under NUDGE_AGAIN_DAYS ago with no response; says so, nothing to press.
  * - again: nudged NUDGE_AGAIN_DAYS or more ago with no response; Nudge again.
  * - replied / done: they responded; says how, and no more nudges while it stays in review.
