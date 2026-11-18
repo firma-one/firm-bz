@@ -294,6 +294,7 @@ function AssetFields({ document, projectId, recordId, editing, record }: { docum
                         onOthersChanged={editing.onSaved}
                         onError={(message) => addToast({ type: 'error', title: "Couldn't set due date", message })}
                         onWarning={(message) => addToast({ type: 'warning', title: 'Due date set', message })}
+                        approved={stage === 'approved'}
                     />
                 ) : (
                     <span className={cn('px-1.5', !validDate(document.dueDate) && 'text-fg-subtle')}>

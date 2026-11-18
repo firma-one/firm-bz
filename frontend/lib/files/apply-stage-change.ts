@@ -1,4 +1,5 @@
 import 'server-only'
+import { afterResponse } from '@/lib/server/after-response'
 import { EngagementRole, DocumentSharingPermissionStatus } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { buildSettingsForDb, documentStage, parseSettingsFromDb, type ActivityStatus } from '@/lib/sharing-settings'
@@ -187,8 +188,9 @@ export async function applyStageChange(
         .meta({ fileName: row.fileName, oldStatus, newStatus: next, ...(opts.derived ? { derived: true } : {}), ...(opts.auditMeta ?? {}) })
         .fireAndForget()
 
-    // Event notifications — status changed / rejected, gated per-firm via Event Notifications grid
-    Promise.resolve().then(async () => {
+    // Event notifications — status changed / rejected, gated per-firm via Event Notifications grid.
+    // After the answer, kept alive until done (afterResponse).
+    afterResponse(async () => {
         try {
             const isRejection = oldStatus === 'in_review' && next === 'in_progress'
             const config = await getFirmReminderConfig(firmId)

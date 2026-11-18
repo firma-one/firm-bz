@@ -6,6 +6,10 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { formatFullDate } from '@/lib/utils'
 import { failureReason } from '@/lib/files/action-failure'
 import { FIX_FOR, dueLabel, type DueConflict, type DueFix } from '@/lib/files/due-date-rule'
+import { readSavedDocument, sameDueDate } from '@/lib/files/read-back'
+
+/** A save whose answer was lost, though the date itself was saved. */
+export const DROPPED_BUT_SAVED = 'The connection dropped before the answer came back, but the date was saved. Refresh to see the dates around it as they are now.'
 
 /**
  * Saving a due date under the rule (.claude/plans/due-date-rule.md): a document no later than its
@@ -57,7 +61,14 @@ export function useDueDateSave() {
         for (let round = 0; round < 4; round++) {
             let dropped: unknown = null
             const res = await patchDue(projectId, documentId, value, fixes).catch((e: unknown) => { dropped = e; return null })
-            if (!res) return { ok: false, error: failureReason(dropped ?? new TypeError('fetch failed')) }
+            if (!res) {
+                // The answer was lost, not necessarily the save: ask for the date as it is now.
+                const saved = await readSavedDocument(projectId, documentId)
+                if (saved && sameDueDate(saved.dueDate, value)) {
+                    return { ok: true, dueDate: value, alsoChanged: [], engagementDueDate: null, warning: DROPPED_BUT_SAVED }
+                }
+                return { ok: false, error: failureReason(dropped ?? new TypeError('fetch failed')) }
+            }
             const data = await res.json().catch(() => ({}))
             if (res?.status === 409 && data?.needsResolution) {
                 const conflict = data.needsResolution as DueConflict

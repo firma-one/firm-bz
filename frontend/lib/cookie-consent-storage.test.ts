@@ -3,6 +3,7 @@ import {
   analyticsAllowed,
   analyticsNoticeApplies,
   isPublicAnalyticsPath,
+  isAnalyticsFreePath,
   globalPrivacyControlOn,
   markAnalyticsNoticeSeen,
   readAnalyticsNoticeSeen,
@@ -86,5 +87,14 @@ describe('notice seen and panel defaults', () => {
     expect(globalPrivacyControlOn()).toBe(false)
     Object.defineProperty(navigator, 'globalPrivacyControl', { value: true, configurable: true })
     expect(globalPrivacyControlOn()).toBe(true)
+  })
+})
+
+// The secure-open tab names the file it's opening in its title: no analytics there, whatever was saved.
+describe('/open is analytics-free', () => {
+  it('never runs GA there, even with a saved Accept', () => {
+    expect(isAnalyticsFreePath('/open')).toBe(true)
+    expect(analyticsAllowed({ mode: 'notice', stored: { necessary: true, analytics: true }, gpc: false, pathname: '/open' })).toBe(false)
+    expect(isAnalyticsFreePath('/opener')).toBe(false)
   })
 })

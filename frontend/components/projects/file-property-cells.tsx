@@ -150,6 +150,7 @@ export function FileDueDateCell({
     onWarning,
     asProperty = false,
     onOthersChanged,
+    approved = false,
 }: {
     projectId: string
     documentId: string
@@ -164,6 +165,8 @@ export function FileDueDateCell({
     asProperty?: boolean
     /** A fix chosen in the due-date dialog moved another date too (its deliverable, its documents, the engagement). */
     onOthersChanged?: () => void
+    /** Approved: its date is history, so it's shown as the date, never as overdue. */
+    approved?: boolean
 }) {
     const [value, setValue] = React.useState<string | null>(dueDate)
     React.useEffect(() => { setValue(dueDate) }, [dueDate])
@@ -174,7 +177,7 @@ export function FileDueDateCell({
         <DateProperty
             value={value}
             placeholder={placeholder}
-            highlightOverdue
+            highlightOverdue={!approved}
             allowTime
             compact={!asProperty}
             chip={!asProperty}
