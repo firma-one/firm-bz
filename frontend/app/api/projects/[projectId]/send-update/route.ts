@@ -21,6 +21,7 @@ import {
     MAX_UPDATE_EMAILS,
     MAX_UPDATE_NOTE,
     normalizeEmail,
+    reportPdfFileName,
     type UpdateRecipientsInfo,
     type UpdateSendOutcome,
 } from '@/lib/updates/update-send'
@@ -213,7 +214,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         const forMembers = renderEngagementUpdateEmail({ ...base, ctaUrl })
         const forAddresses = renderEngagementUpdateEmail({ ...base, ctaUrl: null })
         const attachments = pdf
-            ? [{ filename: `${engagement.name.replace(/[^a-zA-Z0-9_-]/g, '_')}_Overview.pdf`, content: pdf, contentType: 'application/pdf' }]
+            ? [{ filename: reportPdfFileName(engagement.name), content: pdf, contentType: 'application/pdf' }]
             : undefined
         const replyTo = user.email ? { headers: { 'Reply-To': user.email } } : undefined
 

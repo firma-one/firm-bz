@@ -73,3 +73,10 @@ describe('the report PDF size check (Vercel caps a request at 4.5 MB)', () => {
         vi.unstubAllGlobals()
     })
 })
+
+describe('the report PDF file name', () => {
+    it('is the same name the email carries', async () => {
+        const { reportPdfFileName } = await import('@/lib/updates/update-send')
+        expect(reportPdfFileName('Q2 Go-To-Market Positioning')).toBe('Q2_Go-To-Market_Positioning_Overview.pdf')
+    })
+})

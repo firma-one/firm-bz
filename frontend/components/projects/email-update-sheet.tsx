@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { AlertTriangle, Mail, RefreshCw, Send } from 'lucide-react'
+import { AlertTriangle, Mail, Paperclip, RefreshCw, Send } from 'lucide-react'
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { Brio } from '@/components/ui/brio'
@@ -32,6 +32,7 @@ export function EmailUpdateSheet({
     onAddSections,
     capturePdf,
     pdfByDefault = false,
+    pdfName,
     demo,
     onSent,
 }: {
@@ -50,12 +51,14 @@ export function EmailUpdateSheet({
     /** The Overview as a PDF, base64. Absent where it can't be captured (the /tour). */
     capturePdf?: () => Promise<string>
     pdfByDefault?: boolean
+    /** The report PDF's file name (reportPdfFileName), for the attachment chip and What they get. */
+    pdfName?: string
     /** The /tour: canned recipients, and nothing is sent. */
     demo?: UpdateRecipientsInfo
     onSent?: () => void
 }) {
     const { addToast } = useToast()
-    const state = useUpdateEmail({ projectId, active: open, demo, pdfByDefault })
+    const state = useUpdateEmail({ projectId, active: open, demo, pdfByDefault, pdfName })
     const [sending, setSending] = useState(false)
     const [error, setError] = useState<string | null>(null)
 
@@ -139,6 +142,12 @@ export function EmailUpdateSheet({
                             {rest.length > 0 && (
                                 <span className="text-caption text-fg-muted">
                                     Then {rest.length === 1 ? rest[0] : `${rest.slice(0, -1).join(', ')} and ${rest[rest.length - 1]}`}, in full.
+                                </span>
+                            )}
+                            {state.withPdf && capturePdf && (
+                                <span className="inline-flex items-center gap-1.5 text-caption text-fg-muted">
+                                    <Paperclip className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                                    With {state.pdfName ?? 'the Overview report'} attached
                                 </span>
                             )}
                         </div>

@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react'
-import { Check, Lock, Mail, Plus, X } from 'lucide-react'
+import { Check, Lock, Mail, Paperclip, Plus, X } from 'lucide-react'
 import { Hint } from '@/components/ui/tooltip'
 import { Checkbox } from '@/components/ui/checkbox'
 import { formatFullDate, cn } from '@/lib/utils'
@@ -46,17 +46,21 @@ export interface UpdateEmailState {
     memberCount: number
     /** Back to everyone, no addresses, no note. */
     reset: () => void
+    /** The report PDF's file name, for the attachment chip. */
+    pdfName: string | null
 }
 
 /**
  * The block's state. It loads who to send to the first time `active` is true (the /tour passes
  * `demo` recipients instead and loads nothing), and fills everyone in.
  */
-export function useUpdateEmail({ projectId, active, demo, pdfByDefault = false }: {
+export function useUpdateEmail({ projectId, active, demo, pdfByDefault = false, pdfName = null }: {
     projectId: string
     active: boolean
     demo?: UpdateRecipientsInfo
     pdfByDefault?: boolean
+    /** The report PDF's file name, shown on the attachment chip (reportPdfFileName). */
+    pdfName?: string | null
 }): UpdateEmailState {
     const [info, setInfo] = useState<UpdateRecipientsInfo | null>(demo ?? null)
     const [loadError, setLoadError] = useState<string | null>(null)
@@ -98,7 +102,7 @@ export function useUpdateEmail({ projectId, active, demo, pdfByDefault = false }
     return {
         info, loading, loadError, reload: () => { setLoadError(null); setTick((t) => t + 1) },
         chosenIds, setChosenIds, emails, setEmails, note, setNote, withPdf, setWithPdf,
-        count: memberCount + emails.length, memberCount, reset,
+        count: memberCount + emails.length, memberCount, reset, pdfName,
     }
 }
 
@@ -391,6 +395,14 @@ export function UpdateEmailFields({ state, pdf = true }: { state: UpdateEmailSta
                         </span>
                     </span>
                 </label>
+            )}
+            {pdf && state.withPdf && (
+                // The file that will go with the email (Deepak, 2026-11-18). It's made when the email is
+                // sent, so there's no preview of it yet; the chip just says it's coming.
+                <div className="ml-6 inline-flex w-fit max-w-full items-center gap-1.5 rounded-control border border-line bg-surface px-2 py-1 text-small text-fg">
+                    <Paperclip className="h-3.5 w-3.5 shrink-0 text-fg-muted" aria-hidden />
+                    <span className="truncate">{state.pdfName ?? 'Overview report.pdf'}</span>
+                </div>
             )}
         </div>
     )

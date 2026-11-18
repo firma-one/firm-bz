@@ -101,7 +101,7 @@ import { DeliverablesTimeline } from './deliverables-timeline'
 // (.claude/plans/publish-and-send-update.md); its component stays, unmounted, until sign-off.
 import { EmailUpdateSheet } from './email-update-sheet'
 import { sendPublishedUpdate, useUpdateEmail } from './update-email-fields'
-import { reportPdfTooLarge, reportPdfTooLargeText, updateSendText } from '@/lib/updates/update-send'
+import { reportPdfFileName, reportPdfTooLarge, reportPdfTooLargeText, updateSendText } from '@/lib/updates/update-send'
 import { BrioWorkingSparkle } from '@/components/brio/brio-working-sparkle'
 import { MissingSectionsWarning } from './summary-draft-review'
 import { dropUnfilledLeadSections, hasRisks, missingLeadSections, withLeadSections } from '@/lib/ai/summary-sections'
@@ -2943,7 +2943,11 @@ export function EngagementInsightsDashboard({
     // The review and edit pane's "Also email it" at the top (Deepak, 2026-11-18): who, loaded while a
     // draft or an edit is open, in the same fields as Email this update.
     const [emailOnPublish, setEmailOnPublish] = useState(false)
-    const publishEmail = useUpdateEmail({ projectId, active: isFirmAdmin && (aiStreaming || !!data?.insightsSummaryDraft || summaryEditing) })
+    const publishEmail = useUpdateEmail({
+        projectId,
+        active: isFirmAdmin && (aiStreaming || !!data?.insightsSummaryDraft || summaryEditing),
+        pdfName: reportPdfFileName(engagementName || 'Engagement'),
+    })
     /** Unticked, everyone, no address, no note: each draft or edit starts there. */
     const resetEmailOnPublish = () => {
         setEmailOnPublish(false)
@@ -3430,6 +3434,7 @@ export function EngagementInsightsDashboard({
                 }}
                 capturePdf={capturePdfBase64}
                 pdfByDefault={!!emailSheet?.pdf}
+                pdfName={reportPdfFileName(engagementName || 'Engagement')}
             />
         )}
         <div className="flex min-w-0 flex-col gap-10 pb-6">

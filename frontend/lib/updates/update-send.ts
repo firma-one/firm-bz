@@ -102,3 +102,8 @@ export function reportPdfTooLargeText(base64OrBytes: string | number, next = 'Se
     const said = `The Overview report is too large to attach (${megabytes(bytes)}; the limit is ${megabytes(MAX_REPORT_PDF_BYTES)}).`
     return next ? `${said} ${next}` : said
 }
+
+/** The report PDF's file name, the same in the email and on the form: "Q2_Go-To-Market_Positioning_Overview.pdf". */
+export function reportPdfFileName(engagementName: string): string {
+    return `${engagementName.replace(/[^a-zA-Z0-9_-]/g, '_')}_Overview.pdf`
+}
