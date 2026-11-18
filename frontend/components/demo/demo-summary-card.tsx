@@ -20,7 +20,8 @@ import { dropUnfilledLeadSections, findUnfilledSections } from '@/lib/ai/summary
 import { buildDemoSummary, type DemoSummaryInput } from '@/lib/demo/demo-summary'
 import { EmailUpdateSheet } from '@/components/projects/email-update-sheet'
 import { BrioWorkingSparkle } from '@/components/brio/brio-working-sparkle'
-import type { UpdateRecipientsInfo } from '@/lib/updates/update-send'
+import { updateSendText, type UpdateRecipientsInfo } from '@/lib/updates/update-send'
+import { useUpdateEmail } from '@/components/projects/update-email-fields'
 import { ROLE_NAME } from '@/lib/persona-ui-groups'
 import { DEMO_ENGAGEMENT_MEMBERS } from './demo-engagement-members'
 
@@ -65,9 +66,13 @@ export function DemoSummaryCard({ input, today }: { input: DemoSummaryInput; tod
     const [copied, setCopied] = useState<'published' | 'draft' | null>(null)
     const timer = useRef<number | null>(null)
     const { addToast } = useToast()
-    // Email this update, as the app has it, with the tour's people; nothing is sent.
+    // Email this update and "Also email it to …", as the app has them, with the tour's people;
+    // nothing is sent.
     const tourInfo = useMemo(() => tourRecipients(today), [today])
     const [emailSheetOpen, setEmailSheetOpen] = useState(false)
+    const [emailOnPublish, setEmailOnPublish] = useState(false)
+    const publishEmail = useUpdateEmail({ projectId: 'tour', active: true, demo: tourInfo })
+    const [choosingRecipients, setChoosingRecipients] = useState(false)
 
     // The pane, exactly as the app's Overview drives it (engagement-insights-dashboard.tsx).
     const rightPane = useRightPane()
@@ -107,6 +112,9 @@ export function DemoSummaryCard({ input, today }: { input: DemoSummaryInput; tod
 
     const rewrite = () => {
         stopTyping()
+        // Each draft starts unticked, as in the app.
+        setEmailOnPublish(false)
+        publishEmail.reset()
         const text = buildDemoSummary(input, { leadFilled: false })
         // Words with their trailing spaces, released a couple at a time: reads as typing.
         const words = text.split(/(?<=\s)/)
@@ -139,7 +147,11 @@ export function DemoSummaryCard({ input, today }: { input: DemoSummaryInput; tod
         setDraft(null)
         setDraftEdit('')
         clearPaneRef.current()
-        addToast({ type: 'success', title: 'Summary published', message: 'Visible to everyone on the engagement and in exports.' })
+        addToast(emailOnPublish && publishEmail.count > 0
+            ? updateSendText({ sent: publishEmail.count, total: publishEmail.count, failed: [] }, true)
+            : { type: 'success', title: 'Summary published', message: 'Visible to everyone on the engagement and in exports.' })
+        setEmailOnPublish(false)
+        publishEmail.reset()
     }
 
     const copy = async (text: string, which: 'published' | 'draft') => {
@@ -172,8 +184,8 @@ export function DemoSummaryCard({ input, today }: { input: DemoSummaryInput; tod
         onRewrite: rewrite,
         // As in the app: stopping throws the unfinished draft away and closes the pane.
         onStop: () => { discard(); clearPaneRef.current() },
-        // As the app: Publish & send… publishes, then opens Email this update.
-        onPublishAndSend: () => { publish(); setEmailSheetOpen(true) },
+        // As the app: "Also email it to …" by the Publish button; Change opens the email form.
+        email: { on: emailOnPublish, onToggle: setEmailOnPublish, state: publishEmail, onChange: () => setChoosingRecipients(true) },
     }
     useLayoutEffect(() => {
         summaryReviewStore.set(reviewing ? reviewProps : null)
@@ -233,6 +245,18 @@ export function DemoSummaryCard({ input, today }: { input: DemoSummaryInput; tod
                 byline={<BrioByline source="ai" publisherName={TOUR_PUBLISHER} date={published.publishedAt} />}
             />
 
+            <EmailUpdateSheet
+                mode="choose"
+                open={choosingRecipients}
+                onOpenChange={setChoosingRecipients}
+                projectId="tour"
+                summary=""
+                publishedAt={null}
+                stale={false}
+                state={publishEmail}
+                demo={tourInfo}
+                onDone={() => setEmailOnPublish(publishEmail.count > 0)}
+            />
             <EmailUpdateSheet
                 open={emailSheetOpen}
                 onOpenChange={setEmailSheetOpen}

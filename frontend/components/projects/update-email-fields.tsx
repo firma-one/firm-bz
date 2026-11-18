@@ -115,6 +115,65 @@ function listOf(items: string[]): string {
     return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`
 }
 
+/**
+ * Who it goes to, in words, for "Also email it to …": the people chosen and the addresses typed,
+ * "Morgan Ellis, Sam Rivera and Jordan Lee", or the first two and "4 others" when it's a longer list.
+ * Empty when no one is chosen; null while who to send to is still loading.
+ */
+export function recipientSentence(state: Pick<UpdateEmailState, 'info' | 'chosenIds' | 'emails'>): string | null {
+    if (!state.info) return null
+    const names = [
+        ...state.info.recipients.filter((r) => state.chosenIds.includes(r.userId)).map((r) => r.name),
+        ...state.emails,
+    ]
+    if (names.length <= 3) return listOf(names)
+    return listOf([...names.slice(0, 2), `${names.length - 2} others`])
+}
+
+/**
+ * The review pane's "Also email it" (Deepak, 2026-11-18): one checkbox that says who, by name, beside
+ * the one Publish button; Change opens Email this update to choose. Ticked, Publish publishes and then
+ * emails them.
+ */
+export function EmailOnPublish({ on, onToggle, state, onChange }: {
+    on: boolean
+    onToggle: (on: boolean) => void
+    state: UpdateEmailState
+    /** Opens Email this update to choose who, add addresses, a note or the PDF. */
+    onChange: () => void
+}) {
+    const who = recipientSentence(state)
+    const extras = [state.note.trim() && 'your note', state.withPdf && 'the PDF'].filter(Boolean) as string[]
+    const nobody = who === ''
+    return (
+        <div className="flex flex-wrap items-start gap-x-1.5 gap-y-1 text-small text-fg">
+            <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-2">
+                <Checkbox
+                    checked={on && !nobody}
+                    onCheckedChange={(v) => onToggle(v === true)}
+                    disabled={nobody}
+                    className="mt-0.5"
+                />
+                <span className="min-w-0">
+                    {who === null
+                        ? 'Also email it to everyone on this engagement'
+                        : nobody
+                            ? <span className="text-fg-muted">No one to email yet: add an address with Change</span>
+                            : <>Also email it to <span className="font-medium">{who}</span></>}
+                    {!nobody && extras.length > 0 && <span className="text-fg-muted"> · with {listOf(extras)}</span>}
+                </span>
+            </label>
+            <button
+                type="button"
+                onClick={onChange}
+                className="shrink-0 rounded-control text-small text-fg-muted underline-offset-2 hover:text-fg hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action/30"
+            >
+                Change
+            </button>
+        </div>
+    )
+}
+
 const CHIP = 'inline-flex h-6 max-w-full items-center gap-1 rounded-control pl-2 pr-0.5 text-small text-fg'
 const CHIP_X = 'inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-control text-fg-muted hover:bg-surface-hover hover:text-fg'
 

@@ -51,15 +51,15 @@ export function updateSendText(outcome: UpdateSendOutcome, published = false): {
     const { sent, total, failed } = outcome
     const people = (n: number) => `${n} ${n === 1 ? 'person' : 'people'}`
     if (sent >= total && total > 0) {
-        return { type: 'success', title: published ? 'Published and sent' : 'Update sent', message: `Emailed to ${people(total)}.` }
+        return { type: 'success', title: published ? 'Published and emailed' : 'Update sent', message: `Emailed to ${people(total)}.` }
     }
     const who = failed.length ? listOf(failed.slice(0, 4)) + (failed.length > 4 ? ` and ${failed.length - 4} more` : '') : ''
     if (sent === 0) {
         return {
             type: 'error',
-            title: published ? 'Published, but not sent' : 'Update not sent',
+            title: published ? 'Published, but not emailed' : 'Update not sent',
             message: who ? `Couldn't reach ${who}.` : "Couldn't reach anyone.",
         }
     }
-    return { type: 'warning', title: published ? 'Published, sent to some' : 'Sent to some', message: `Sent to ${sent} of ${total}. Couldn't reach ${who || `${total - sent} of them`}.` }
+    return { type: 'warning', title: published ? 'Published, emailed to some' : 'Sent to some', message: `Sent to ${sent} of ${total}. Couldn't reach ${who || `${total - sent} of them`}.` }
 }

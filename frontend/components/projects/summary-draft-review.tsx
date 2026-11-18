@@ -7,6 +7,7 @@ import { Brio } from '@/components/ui/brio'
 import { BrioSections } from '@/components/ui/brio-sections'
 import { BrioTypedText, ThinkingDots, useTypedText } from '@/components/brio/brio-typing'
 import { InfoHint } from './overview-charts'
+import { EmailOnPublish, peopleCount, type UpdateEmailState } from './update-email-fields'
 import { cn, formatRelativeTime } from '@/lib/utils'
 import { LEAD_PLACEHOLDER, LEAD_SECTIONS, hasRisks, isPlaceholderText, splitSections, withLeadSections, writeSection } from '@/lib/ai/summary-sections'
 
@@ -54,10 +55,15 @@ export interface SummaryDraftReviewProps {
      */
     kind?: 'draft' | 'edit'
     /**
-     * Publish & send…: publishes, then opens Email this update filled in (the one place an email is
-     * written, .claude/plans/publish-and-send-update.md). Absent: Publish only.
+     * "Also email it to …" by the Publish button (Deepak, 2026-11-18): ticked, Publish publishes and
+     * then emails the people it names; Change opens Email this update to choose. Absent: no email.
      */
-    onPublishAndSend?: () => void
+    email?: {
+        on: boolean
+        onToggle: (on: boolean) => void
+        state: UpdateEmailState
+        onChange: () => void
+    }
     busyAction: 'publish' | 'dismiss' | null
     onPublish: () => void
     onDismiss: () => void
@@ -151,7 +157,7 @@ function SectionField({ heading, body, onChange, lead = true }: { heading: strin
  */
 export function SummaryDraftReview({
     streaming, streamText, generatedAt, value, onChange, mode, onModeChange, unfilledSections, busyAction,
-    onPublish, onDismiss, onCopy, copied, note, published, draftBehind, onRewrite, onStop, kind = 'draft', onPublishAndSend,
+    onPublish, onDismiss, onCopy, copied, note, published, draftBehind, onRewrite, onStop, kind = 'draft', email,
 }: SummaryDraftReviewProps) {
     const [showPublished, setShowPublished] = useState(false)
     // Typed out as Brio writes it (components/brio/brio-typing.tsx); the draft is still being
@@ -166,6 +172,9 @@ export function SummaryDraftReview({
     // Unwritten lead sections, present or not (`unfilledSections` only counts the present ones).
     const missing = LEAD_SECTIONS.filter((h) => unfilledSections.includes(h) || !sections.some((s) => s.heading === h && !isPlaceholderText(s.body)))
     const editing = kind === 'edit'
+    const emailing = !!email?.on && email.state.count > 0
+    // Ticked, but who to send to hasn't loaded yet: wait for it rather than publish without the email.
+    const emailNotReady = !!email?.on && !email.state.info
     // A summary in sections can be missing the lead's; one written by hand without any isn't.
     const structured = /^## /m.test(value)
     const warnMissing = structured ? missing : []
@@ -281,11 +290,13 @@ export function SummaryDraftReview({
                     {note && <p className="text-caption text-action">{note}</p>}
                     {/* Warned, not blocked: unwritten, they're left out of what publishes. */}
                     <MissingSectionsWarning missing={warnMissing} risks={hasRisks(withLead)} />
+                    {email && <EmailOnPublish on={email.on} onToggle={email.onToggle} state={email.state} onChange={email.onChange} />}
                     {/* One line: what publishing does. The detail is in the tip. */}
                     <p className="flex items-start gap-1.5 text-caption text-fg-muted">
                         <span>
-                            Publishing saves this as the engagement summary everyone on it sees.
-                            {onPublishAndSend && ' Publish & send opens the email next, filled in.'}
+                            {emailing
+                                ? `Publishing saves this as the engagement summary everyone on it sees, then emails it from you to ${peopleCount(email!.state.count)}.`
+                                : 'Publishing saves this as the engagement summary everyone on it sees.'}
                         </span>
                         <InfoHint
                             label="About publishing"
@@ -301,15 +312,11 @@ export function SummaryDraftReview({
                             {busyAction === 'dismiss' && <RefreshCw className="h-3 w-3 animate-spin" />}
                             {editing ? 'Cancel' : 'Discard'}
                         </Button>
-                        {onPublishAndSend && (
-                            <Button size="sm" variant="outline" onClick={onPublishAndSend} disabled={busy || empty}>
-                                <Send className="h-3 w-3" aria-hidden />
-                                Publish &amp; send…
-                            </Button>
-                        )}
-                        <Button size="sm" onClick={onPublish} disabled={busy || empty}>
-                            {busyAction === 'publish' && <RefreshCw className="h-3 w-3 animate-spin" />}
-                            {warnMissing.length > 0 ? 'Publish without them' : 'Publish'}
+                        <Button size="sm" onClick={onPublish} disabled={busy || empty || emailNotReady}>
+                            {busyAction === 'publish' ? <RefreshCw className="h-3 w-3 animate-spin" /> : emailing && <Send className="h-3 w-3" aria-hidden />}
+                            {emailing
+                                ? `Publish & email ${peopleCount(email!.state.count)}`
+                                : warnMissing.length > 0 ? 'Publish without them' : 'Publish'}
                         </Button>
                     </div>
                 </div>

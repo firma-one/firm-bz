@@ -100,6 +100,8 @@ import { DeliverablesTimeline } from './deliverables-timeline'
 // Draft an update (status-update-action.tsx) is folded into Publish & send and Email this update
 // (.claude/plans/publish-and-send-update.md); its component stays, unmounted, until sign-off.
 import { EmailUpdateSheet } from './email-update-sheet'
+import { sendPublishedUpdate, useUpdateEmail } from './update-email-fields'
+import { updateSendText } from '@/lib/updates/update-send'
 import { BrioWorkingSparkle } from '@/components/brio/brio-working-sparkle'
 import { MissingSectionsWarning } from './summary-draft-review'
 import { dropUnfilledLeadSections, hasRisks, missingLeadSections, withLeadSections } from '@/lib/ai/summary-sections'
@@ -2929,6 +2931,16 @@ export function EngagementInsightsDashboard({
     // One email form: the sheet the card's mail icon opens (the toolbar's Email opens it with the PDF
     // ticked, and Publish & send… opens it once the update is published).
     const [emailSheet, setEmailSheet] = useState<{ pdf: boolean } | null>(null)
+    // The review pane's "Also email it to …" (Deepak, 2026-11-18): who, loaded while a draft or an
+    // edit is open; Change edits it in the same form, in its choose mode.
+    const [emailOnPublish, setEmailOnPublish] = useState(false)
+    const publishEmail = useUpdateEmail({ projectId, active: isFirmAdmin && (aiStreaming || !!data?.insightsSummaryDraft || summaryEditing) })
+    const [choosingRecipients, setChoosingRecipients] = useState(false)
+    /** Unticked, everyone, no address, no note: each draft or edit starts there. */
+    const resetEmailOnPublish = () => {
+        setEmailOnPublish(false)
+        publishEmail.reset()
+    }
 
     /** The Overview as a PDF, base64: the capture Download PDF makes. */
     const capturePdfBase64 = async (): Promise<string> => {
@@ -2939,6 +2951,30 @@ export function EngagementInsightsDashboard({
         const base64 = btoa(binary)
         if (!base64) throw new Error('PDF generation produced empty output')
         return base64
+    }
+
+    /**
+     * Once Publish has published with "Also email it" ticked: emails the update just published. Waits
+     * for the Overview to show it first, so a PDF captures the new text. The publish stands either way.
+     */
+    const sendAfterPublish = async () => {
+        await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
+        let pdf: string | null = null
+        if (publishEmail.withPdf) {
+            try {
+                pdf = await capturePdfBase64()
+            } catch {
+                addToast({ type: 'error', title: 'Published, but not emailed', message: "Couldn't create the PDF. Email it from the mail icon, with or without one." })
+                return
+            }
+        }
+        try {
+            addToast(updateSendText(await sendPublishedUpdate(projectId, publishEmail, pdf), true))
+        } catch (e) {
+            addToast({ type: 'error', title: 'Published, but not emailed', message: `${failureReason(e)} Email it from the mail icon.` })
+        } finally {
+            resetEmailOnPublish()
+        }
     }
 
     /** Whether the published update differs from what the edit pane opened with. */
@@ -2963,11 +2999,15 @@ export function EngagementInsightsDashboard({
                 insightsSummarySource: text ? 'manual' : null,
                 insightsSummaryPublishedBy: text ? myDisplayName : null,
             } : prev)
-            // Publishing was silent before; it reaches the client, so say so.
-            addToast(text
-                ? { type: 'success', title: 'Summary published', message: 'Visible to everyone on the engagement and in exports.' }
-                : { type: 'success', title: 'Summary removed' })
             setSummaryEditing(false)
+            if (text && emailOnPublish) {
+                await sendAfterPublish()
+            } else {
+                // Publishing was silent before; it reaches the client, so say so.
+                addToast(text
+                    ? { type: 'success', title: 'Summary published', message: 'Visible to everyone on the engagement and in exports.' }
+                    : { type: 'success', title: 'Summary removed' })
+            }
             setRefreshTick((t) => t + 1)
             return true
         } catch (e) {
@@ -3015,6 +3055,7 @@ export function EngagementInsightsDashboard({
      */
     const openEditPane = (text?: string) => {
         const start = withLeadSections(text ?? data?.insightsSummary ?? '')
+        resetEmailOnPublish()
         setSummaryDraft(start)
         setEditBaseline(start)
         setReviewMode('preview')
@@ -3074,6 +3115,7 @@ export function EngagementInsightsDashboard({
      */
     const handleGenerateSummary = async () => {
         if (aiStreaming) return
+        resetEmailOnPublish()
         setAiGenerateNote(null)
         setAiStreamText('')
         setAiStreaming(true)
@@ -3195,7 +3237,11 @@ export function EngagementInsightsDashboard({
                 insightsSummaryPublishedBy: myDisplayName,
             } : prev)
             setAiGenerateNote(null)
-            addToast({ type: 'success', title: 'Summary published', message: 'Visible to everyone on the engagement and in exports.' })
+            if (emailOnPublish) {
+                await sendAfterPublish()
+            } else {
+                addToast({ type: 'success', title: 'Summary published', message: 'Visible to everyone on the engagement and in exports.' })
+            }
             setRefreshTick((t) => t + 1)
             return true
         } catch (e) {
@@ -3250,8 +3296,7 @@ export function EngagementInsightsDashboard({
         // Stopping throws the unfinished draft away, as Discard does; with nothing left to
         // review the pane closes itself, and the published summary stays as it was.
         onStop: () => { void discardDraft() },
-        // Publish & send…: publishes, then opens Email this update, the one email form.
-        onPublishAndSend: () => { void handleAiSummaryApprove().then((ok) => { if (ok) setEmailSheet({ pdf: false }) }) },
+        email: { on: emailOnPublish, onToggle: setEmailOnPublish, state: publishEmail, onChange: () => setChoosingRecipients(true) },
     }
     // The pencil's edit, in the same pane: every section a box, Cancel instead of Discard.
     const editProps: SummaryDraftReviewProps = {
@@ -3266,7 +3311,7 @@ export function EngagementInsightsDashboard({
         unfilledSections: findUnfilledSections(summaryDraft),
         busyAction: summarySaving ? 'publish' : null,
         onPublish: () => { void handleSummarySave() },
-        onPublishAndSend: () => { void handleSummarySave().then((ok) => { if (ok) setEmailSheet({ pdf: false }) }) },
+        email: { on: emailOnPublish, onToggle: setEmailOnPublish, state: publishEmail, onChange: () => setChoosingRecipients(true) },
         onDismiss: () => { if (editChanged) setConfirmDiscard('edit'); else setSummaryEditing(false) },
         onCopy: () => copySummary(summaryDraft, 'draft'),
         copied: summaryCopied === 'draft',
@@ -3354,6 +3399,21 @@ export function EngagementInsightsDashboard({
             Team Status moved to the Members tab; File Organization, the Action Center's housekeeping
             and Document Activity to the Files tab's Health and Recent views. */}
         {navSlot ? createPortal(overviewToolbar, navSlot) : null}
+        {isFirmAdmin && (
+            // "Also email it · Change": the same form, editing the review pane's choices.
+            <EmailUpdateSheet
+                mode="choose"
+                open={choosingRecipients}
+                onOpenChange={setChoosingRecipients}
+                projectId={projectId}
+                summary=""
+                publishedAt={null}
+                stale={false}
+                state={publishEmail}
+                capturePdf={capturePdfBase64}
+                onDone={() => setEmailOnPublish(publishEmail.count > 0)}
+            />
+        )}
         {isFirmAdmin && data?.insightsSummary && (
             <EmailUpdateSheet
                 open={!!emailSheet}

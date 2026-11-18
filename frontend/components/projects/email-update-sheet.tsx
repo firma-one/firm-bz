@@ -10,7 +10,7 @@ import { failureReason } from '@/lib/files/action-failure'
 import { hasRisks, missingLeadSections, splitSections } from '@/lib/ai/summary-sections'
 import { updateSendText, type UpdateRecipientsInfo } from '@/lib/updates/update-send'
 import { formatFullDate } from '@/lib/utils'
-import { UpdateEmailFields, sendLine, sendPublishedUpdate, useUpdateEmail } from './update-email-fields'
+import { UpdateEmailFields, sendLine, sendPublishedUpdate, useUpdateEmail, type UpdateEmailState } from './update-email-fields'
 import { MissingSectionsWarning, sectionInSentence } from './summary-draft-review'
 
 /**
@@ -20,6 +20,9 @@ import { MissingSectionsWarning, sectionInSentence } from './summary-draft-revie
  * whether the lead's sections are missing, each with the way to fix it.
  *
  * Opened from the Latest update's mail icon, and from the Overview's Email with the PDF ticked.
+ *
+ * `mode: 'choose'` is the same form opened from the review pane's "Also email it · Change": it edits
+ * the pane's own choices (`state`) and says Done; the email goes when the update is published.
  */
 export function EmailUpdateSheet({
     open,
@@ -34,6 +37,9 @@ export function EmailUpdateSheet({
     pdfByDefault = false,
     demo,
     onSent,
+    state: external,
+    mode = 'send',
+    onDone,
 }: {
     open: boolean
     onOpenChange: (open: boolean) => void
@@ -53,15 +59,22 @@ export function EmailUpdateSheet({
     /** The /tour: canned recipients, and nothing is sent. */
     demo?: UpdateRecipientsInfo
     onSent?: () => void
+    /** The choices to edit, kept by the opener (mode 'choose'). Without it the sheet keeps its own. */
+    state?: UpdateEmailState
+    mode?: 'send' | 'choose'
+    /** Choose mode's Done. */
+    onDone?: () => void
 }) {
     const { addToast } = useToast()
-    const state = useUpdateEmail({ projectId, active: open, demo, pdfByDefault })
+    const internal = useUpdateEmail({ projectId, active: open && !external, demo, pdfByDefault })
+    const state = external ?? internal
+    const choosing = mode === 'choose'
     const [sending, setSending] = useState(false)
     const [error, setError] = useState<string | null>(null)
 
     // Each opening starts from everyone, no addresses, no note, and the PDF as the opener asked.
     useEffect(() => {
-        if (!open) return
+        if (!open || external) return
         state.reset()
         state.setWithPdf(!!capturePdf && pdfByDefault)
         setError(null)
@@ -117,16 +130,18 @@ export function EmailUpdateSheet({
             <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-[480px]">
                 <div className="flex items-center gap-2 border-b border-line px-4 pb-3 pt-4">
                     <Mail className="h-4 w-4 text-fg-muted" aria-hidden />
-                    <SheetTitle className="text-h3 text-fg">Email this update</SheetTitle>
+                    <SheetTitle className="text-h3 text-fg">{choosing ? 'Who gets the email' : 'Email this update'}</SheetTitle>
                 </div>
                 <SheetDescription className="sr-only">
-                    Emails the published update to the people you choose. Nothing is sent until you press Send.
+                    {choosing
+                        ? 'Who the update is emailed to when you publish it.'
+                        : 'Emails the published update to the people you choose. Nothing is sent until you press Send.'}
                 </SheetDescription>
 
                 <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-4 py-4">
                     <UpdateEmailFields state={state} pdf={!!capturePdf} />
 
-                    <div className="flex flex-col gap-1.5">
+                    {!choosing && <div className="flex flex-col gap-1.5">
                         <span className="text-caption text-fg-muted">What they get</span>
                         <div className="flex flex-col gap-2 rounded-card border border-line px-3.5 py-3">
                             {publishedAt && <span className="text-caption text-fg-subtle">The update published {formatFullDate(publishedAt)}, whole</span>}
@@ -142,9 +157,19 @@ export function EmailUpdateSheet({
                                 </span>
                             )}
                         </div>
-                    </div>
+                    </div>}
                 </div>
 
+                {choosing ? (
+                    <div className="flex flex-col gap-2.5 border-t border-line px-4 py-3">
+                        <p className="text-caption text-fg-muted">
+                            {state.count > 0 ? `${sendLine(state)} It goes when you publish.` : sendLine(state)}
+                        </p>
+                        <div className="flex items-center justify-end">
+                            <Button size="sm" onClick={() => { onDone?.(); onOpenChange(false) }}>Done</Button>
+                        </div>
+                    </div>
+                ) : (
                 <div className="flex flex-col gap-2.5 border-t border-line px-4 py-3">
                     {stale && (
                         <div role="note" className="flex items-start gap-2 rounded-control bg-tag-yellow-bg px-3 py-2 text-caption text-tag-yellow-fg">
@@ -182,6 +207,7 @@ export function EmailUpdateSheet({
                         </Button>
                     </div>
                 </div>
+                )}
             </SheetContent>
         </Sheet>
     )

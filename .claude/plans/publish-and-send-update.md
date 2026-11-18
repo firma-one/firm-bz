@@ -16,11 +16,13 @@ Mock: https://claude.ai/artifact/HrnCvBZYPn32HKaFBRMvU6 (row "Publish & send"). 
   link into Firma, Reply-To is the sender.
 - Optional note from the sender, above the update.
 - Optional: attach the Overview as a PDF (the same capture as Download PDF).
-- Simplified (Deepak, 2026-11-18: "too many options"): **one email form**, Email this update. The
-  review pane has no "Also email it": its footer is Discard · Publish & send… · Publish, and Publish &
-  send… publishes, then opens Email this update filled in. The pencil opens the **same pane** with the
-  published update, every section a box (Cancel instead of Discard). In the sheet, To and the note
-  come first, in the email's own order; warnings sit by the button they're about.
+- Simplified (Deepak, 2026-11-18): **one email form**, Email this update, and the pencil opens the
+  **same pane** as Brio's drafts, every section a box (Cancel instead of Discard).
+- Checkbox, not two buttons (Deepak, 2026-11-18: "Publish & send" didn't say email or to whom): by the
+  one Publish button, "☐ Also email it to Morgan Ellis, Sam Rivera and Jordan Lee · Change" (first two
+  and "N others" when longer). Ticked, the button reads "Publish & email 3 people" and one click
+  publishes then emails. Change opens Email this update in its choose mode (To, addresses, note, PDF,
+  Done). Unticked each time a draft or edit starts. In the review and edit pane alike.
 
 ## Build
 
