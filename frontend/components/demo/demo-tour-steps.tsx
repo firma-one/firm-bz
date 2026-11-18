@@ -353,7 +353,7 @@ export const NODE_STEPS: Record<TourNodeId, TourStep[]> = {
         {
             target: '[data-demo-tour="engagement-ai-summary"]',
             title: 'Latest update',
-            content: <p><Brio /> drafts the engagement&apos;s status summary from its own data, and the status update you send the client. Your team edits and approves both before anything reaches the client.</p>,
+            content: <p><Brio /> drafts the engagement&apos;s update from its own data, and your team writes the plan. Publish it here, or publish and email it to everyone on the engagement in one go.</p>,
             route: engAt({ tab: 'analytics' }),
             placement: 'top',
         },

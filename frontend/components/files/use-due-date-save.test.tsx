@@ -81,3 +81,25 @@ describe('useDueDateSave', () => {
         expect(sent).toHaveLength(1)
     })
 })
+
+// A save whose answer is lost (the connection dropped) may still have been made: it's read back.
+describe('a save whose answer never arrived', () => {
+    const saveWith = async (stored: unknown) => {
+        vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: RequestInit) => {
+            if (init?.method === 'PATCH') throw new TypeError('Failed to fetch')
+            return { ok: true, json: async () => ({ sharing: { dueDate: stored } }) } as Response
+        }))
+        render(<Harness />)
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Set Nov 12' })) })
+        await waitFor(() => expect(results).toHaveLength(1))
+        return results[0]
+    }
+
+    it('says the date was saved when the server has it', async () => {
+        expect(await saveWith(new Date('2026-11-12').toISOString())).toMatchObject({ ok: true, dueDate: '2026-11-12', warning: expect.stringMatching(/the date was saved/) })
+    })
+
+    it("says it couldn't reach the server when the date isn't there", async () => {
+        expect(await saveWith(null)).toMatchObject({ ok: false, error: expect.stringMatching(/^Couldn't reach/) })
+    })
+})

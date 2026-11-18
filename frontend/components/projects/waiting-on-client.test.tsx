@@ -52,10 +52,10 @@ beforeEach(() => {
 describe('WaitingOnClient', () => {
     it('says the nudge went out the moment it is sent, with nothing more to press', async () => {
         render(<WaitingOnClient projectId="e1" deliverables={deliverables} engagementBase="/d/g/f/c/e" />)
-        await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Draft a nudge/ })) })
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: /^Nudge$/ })) })
         await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Send nudge' })) })
         expect(screen.getByText('Nudged Dana today')).toBeTruthy()
-        expect(screen.queryByRole('button', { name: /Draft a nudge|Nudge again/ })).toBeNull()
+        expect(screen.queryByRole('button', { name: /^Nudge( again)?$/ })).toBeNull()
         expect(h.toast).toHaveBeenCalledWith(expect.objectContaining({ title: 'Nudge sent' }))
     })
 
@@ -82,7 +82,7 @@ describe('WaitingOnClient', () => {
 
         h.statuses = [status({ nudgedAt: ago(6), doneAt: ago(1) })]
         render(<WaitingOnClient projectId="e1" deliverables={deliverables} engagementBase="/d/g/f/c/e" />)
-        await waitFor(() => expect(screen.getByText('Dana marked the nudge done yesterday')).toBeTruthy())
+        await waitFor(() => expect(screen.getByText('Dana marked it done yesterday')).toBeTruthy())
         expect(screen.queryByRole('button', { name: /nudge/i })).toBeNull()
     })
 })

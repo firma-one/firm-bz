@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // The due-date route under the nesting rule (.claude/plans/due-date-rule.md): a conflict answers
 // 409 with what to resolve; a chosen fix moves the other dates through the same path.
 
-const { st, calls } = vi.hoisted(() => ({
+const { st, calls, afterTasks } = vi.hoisted(() => ({
     st: {
         plan: { conflict: null as any, documents: [] as any[], engagementDue: null as Date | null },
         privateIds: new Set<string>(),
@@ -11,10 +11,17 @@ const { st, calls } = vi.hoisted(() => ({
         putBackFails: false,
         inngestUp: true,
         notifyFails: false,
+        inngestHangs: false,
     },
+    // Work queued with Next's after(): run by the test, as Next runs it once the answer has gone.
+    afterTasks: [] as Array<() => unknown>,
     calls: { updates: [] as any[], engagement: [] as any[], fixes: [] as any[], reminders: [] as string[], notified: [] as string[], putBack: [] as any[] },
 }))
 
+vi.mock('next/server', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('next/server')>()),
+    after: (task: () => unknown) => { afterTasks.push(task) },
+}))
 vi.mock('@/lib/engagement-access', async (importOriginal) => ({
     ...(await importOriginal<typeof import('@/lib/engagement-access')>()),
     blockIfEngagementCompleted: async () => null,
@@ -24,10 +31,19 @@ vi.mock('@/utils/supabase/server', () => ({
 }))
 vi.mock('@/lib/resolve-project-context', () => ({ resolveProjectContext: async () => ({ orgId: 'f', clientId: 'c', projectId: 'p' }) }))
 vi.mock('@/lib/permission-helpers', () => ({ canViewProject: async () => true, canViewProjectSettings: async () => true }))
-vi.mock('@/utils/supabase/admin', () => ({ createAdminClient: () => ({}) }))
-vi.mock('@/lib/email', () => ({ sendEmail: vi.fn() }))
+vi.mock('@/utils/supabase/admin', () => ({
+    createAdminClient: () => ({ auth: { admin: { getUserById: async (id: string) => ({ data: { user: { email: `${id}@x.test` } } }) } } }),
+}))
+const { sendEmail } = vi.hoisted(() => ({ sendEmail: vi.fn(async () => {}) }))
+vi.mock('@/lib/email', () => ({ sendEmail }))
 vi.mock('@/lib/email-templates/reminder', () => ({ renderReminderEmail: () => ({}) }))
-vi.mock('@/lib/inngest/client', () => ({ safeInngestSend: async (name: string) => { calls.reminders.push(name); return st.inngestUp } }))
+vi.mock('@/lib/inngest/client', () => ({
+    safeInngestSend: async (name: string) => {
+        calls.reminders.push(name)
+        if (st.inngestHangs) return new Promise<boolean>(() => {})
+        return st.inngestUp
+    },
+}))
 vi.mock('@/lib/notification-links', () => ({ documentLink: () => '/x' }))
 vi.mock('@/lib/files/due-date-check', () => ({
     planDueDate: async (_e: string, _t: unknown, _d: unknown, fixes: unknown) => { calls.fixes.push(fixes); return st.plan },
@@ -73,6 +89,9 @@ beforeEach(() => {
     st.putBackFails = false
     st.inngestUp = true
     st.notifyFails = false
+    st.inngestHangs = false
+    afterTasks.length = 0
+    sendEmail.mockClear()
     for (const k of Object.keys(calls) as (keyof typeof calls)[]) calls[k].length = 0
 })
 
@@ -176,5 +195,37 @@ describe('a due date that fails part way (P1-62)', () => {
         const res = await patch('d1', { dueDate: '2026-11-12' })
         expect(res.status).toBe(500)
         expect(await res.json()).toEqual({ error: "Couldn't set the due date. Something went wrong on our side. Try again." })
+    })
+})
+
+describe('what waits for the answer', () => {
+    it("emails a soon-due document's members after the answer, not before", async () => {
+        const soon = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString()
+        const res = await patch('d1', { dueDate: soon })
+        expect(res.status).toBe(200)
+        expect(sendEmail).not.toHaveBeenCalled()
+        expect(afterTasks).toHaveLength(1)
+        await afterTasks[0]()
+        expect(sendEmail).toHaveBeenCalledTimes(3)
+    })
+
+    it('queues no email for a date further out', async () => {
+        await patch('d1', { dueDate: '2099-01-01' })
+        expect(afterTasks).toHaveLength(0)
+    })
+
+    it('answers with a warning when Inngest never replies, rather than holding the save', async () => {
+        vi.useFakeTimers()
+        try {
+            st.inngestHangs = true
+            const pending = patch('D', { dueDate: '2099-01-01' })
+            await vi.advanceTimersByTimeAsync(10_000)
+            const res = await pending
+            expect(res.status).toBe(200)
+            expect((await res.json()).warning).toMatch(/D\.xlsx/)
+            expect(calls.notified).toEqual(['staff', 'client'])
+        } finally {
+            vi.useRealTimers()
+        }
     })
 })

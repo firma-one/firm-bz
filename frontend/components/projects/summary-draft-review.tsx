@@ -1,15 +1,39 @@
 'use client'
 
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { AlertTriangle, Check, ChevronRight, Copy, RefreshCw, Square } from 'lucide-react'
+import { AlertTriangle, Check, ChevronRight, Copy, RefreshCw, Send, Square } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Hint } from '@/components/ui/tooltip'
 import { Brio } from '@/components/ui/brio'
 import { BrioSections } from '@/components/ui/brio-sections'
 import { BrioTypedText, ThinkingDots, useTypedText } from '@/components/brio/brio-typing'
 import { InfoHint } from './overview-charts'
+import { AlsoEmailIt, peopleCount, type UpdateEmailState } from './update-email-fields'
 import { cn, formatRelativeTime } from '@/lib/utils'
-import { LEAD_PLACEHOLDER, LEAD_SECTIONS, isPlaceholderText, splitSections, writeSection } from '@/lib/ai/summary-sections'
+import { LEAD_PLACEHOLDER, LEAD_SECTIONS, hasRisks, isPlaceholderText, splitSections, withLeadSections, writeSection } from '@/lib/ai/summary-sections'
+
+/** "Mitigation & Contingency" → "Mitigation & contingency", for a sentence. */
+export const sectionInSentence = (heading: string) => heading.charAt(0) + heading.slice(1).toLowerCase()
+
+/**
+ * The warning before publishing or sending without the lead's sections (Deepak, 2026-11-17: "give
+ * the writer enough warning to supply Mitigation and Next steps, if planned"). Null when both are written.
+ */
+export function MissingSectionsWarning({ missing, risks, action }: { missing: string[]; risks: boolean; action?: React.ReactNode }) {
+    if (missing.length === 0) return null
+    const names = missing.map(sectionInSentence)
+    return (
+        <div role="note" className="flex items-start gap-2 rounded-control bg-tag-yellow-bg px-3 py-2 text-caption text-tag-yellow-fg">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+            <span className="flex-1">
+                <span className="font-semibold">No {names.join(' or ')}.</span>{' '}
+                {risks && <>The update lists risks and says nothing about handling them. </>}
+                <Brio /> leaves {missing.length === 1 ? 'this' : 'these'} to you because {missing.length === 1 ? 'it commits' : 'they commit'} the firm to a plan.
+                {' '}If you&apos;ve planned {missing.length === 1 ? 'it' : 'them'}, write {missing.length === 1 ? 'it' : 'them'} in first.
+            </span>
+            {action}
+        </div>
+    )
+}
 
 export type ReviewMode = 'preview' | 'edit'
 
@@ -23,8 +47,24 @@ export interface SummaryDraftReviewProps {
     /** Preview (sections, with the lead's own as text boxes) or the whole draft as Markdown. */
     mode: ReviewMode
     onModeChange: (mode: ReviewMode) => void
-    /** Sections the firm has to write itself before the draft can be published. */
+    /** The lead's sections still unwritten: left out when published, and warned about before. */
     unfilledSections: string[]
+    /**
+     * 'draft' reviews Brio's draft; 'edit' is the person editing the published update by hand, every
+     * section a box (the pencil, 2026-11-18). Default 'draft'.
+     */
+    kind?: 'draft' | 'edit'
+    /**
+     * "Also email it" at the top of the pane (Deepak, 2026-11-18): ticked, Email this update's fields
+     * open under it, and Publish publishes, then emails them. Absent: no email.
+     */
+    email?: {
+        on: boolean
+        onToggle: (on: boolean) => void
+        state: UpdateEmailState
+        /** The Overview can be attached as a PDF (not on the /tour). */
+        pdf: boolean
+    }
     busyAction: 'publish' | 'dismiss' | null
     onPublish: () => void
     onDismiss: () => void
@@ -40,6 +80,13 @@ export interface SummaryDraftReviewProps {
     onStop?: () => void
 }
 
+/** Replaces the text before a summary's first heading. */
+function writePreamble(text: string, body: string): string {
+    const at = text.search(/^## /m)
+    const rest = at === -1 ? '' : text.slice(at)
+    return body.trim() ? `${body.trim()}\n\n${rest}` : rest
+}
+
 const LEAD_PROMPTS: Record<string, string> = {
     'Mitigation & Contingency': 'How the firm will handle the risks above, and the fallback if it can’t.',
     'Next Steps': 'What happens next, by when, and who does it.',
@@ -53,8 +100,8 @@ const LEAD_PROMPTS: Record<string, string> = {
  * new lines at the end survive typing. The pane draws its content twice (docked, and in its full
  * screen view), so a field that is not being typed in picks up changes made in the other copy.
  */
-function LeadSectionField({ heading, body, onChange }: { heading: string; body: string; onChange: (text: string) => void }) {
-    const fromDraft = isPlaceholderText(body) ? '' : body
+function SectionField({ heading, body, onChange, lead = true }: { heading: string; body: string; onChange: (text: string) => void; lead?: boolean }) {
+    const fromDraft = lead && isPlaceholderText(body) ? '' : body
     const [text, setText] = useState(fromDraft)
     const ref = useRef<HTMLTextAreaElement>(null)
     useEffect(() => {
@@ -72,24 +119,25 @@ function LeadSectionField({ heading, body, onChange }: { heading: string; body: 
         <div className="flex flex-col gap-1.5">
             <div className="flex items-center gap-2">
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">{heading}</p>
-                <span className={cn('text-caption', empty ? 'text-tag-orange-fg' : 'text-fg-subtle')}>
-                    {empty ? 'Yours to write' : 'Written by you'}
+                <span className="text-caption text-fg-subtle">
+                    {lead ? (empty ? 'Yours to write · left out if empty' : 'Written by you') : empty ? 'Left out if empty' : ''}
                 </span>
             </div>
             <textarea
                 ref={ref}
                 value={text}
-                rows={3}
+                rows={empty ? 2 : 3}
                 onChange={(e) => {
                     setText(e.target.value)
-                    // Cleared again: the placeholder goes back, so publishing stays blocked.
-                    onChange(e.target.value.trim() ? e.target.value : LEAD_PLACEHOLDER)
+                    // Cleared again: the section is left out when published (a lead section gets
+                    // its placeholder back, which publishing drops).
+                    onChange(e.target.value.trim() || !lead ? e.target.value : LEAD_PLACEHOLDER)
                 }}
-                placeholder={LEAD_PROMPTS[heading] ?? 'Your input'}
+                placeholder={lead ? (LEAD_PROMPTS[heading] ?? 'Your input') : 'Left out of the update if empty'}
                 aria-label={heading}
                 className={cn(
-                    'w-full resize-none overflow-hidden rounded-control border bg-surface px-3 py-2 text-sm leading-relaxed text-fg placeholder:text-fg-subtle focus:border-action/60 focus:outline-none focus:ring-2 focus:ring-action/20',
-                    empty ? 'border-tag-orange-fg/40' : 'border-line',
+                    'w-full resize-none overflow-hidden rounded-control border px-3 py-2 text-sm leading-relaxed text-fg placeholder:text-fg-subtle focus:border-action/60 focus:outline-none focus:ring-2 focus:ring-action/20',
+                    empty ? 'border-dashed border-line-strong bg-surface-subtle' : 'border-line bg-surface',
                 )}
             />
         </div>
@@ -102,12 +150,15 @@ function LeadSectionField({ heading, body, onChange }: { heading: string; body: 
  * The draft reads as it will publish, section by section. The two sections the lead writes are
  * text boxes in place, so filling them in is the whole job; Edit opens the draft as Markdown for
  * anything else. The published summary stays on the page, with a copy below the draft to compare.
- * One plain line says what publishing does, or what still stops it. A draft is one-off: Publish
- * saves it, Discard (or closing the pane) throws it away — it is never kept to come back to.
+ * One plain line says what publishing does. Publish saves it; Publish & send… publishes and opens
+ * Email this update; Discard throws a draft away. Closing the pane keeps a draft behind Review.
+ *
+ * `kind: 'edit'` is the same pane for editing the published update by hand: every section a box,
+ * Markdown for anything else, Cancel instead of Discard.
  */
 export function SummaryDraftReview({
     streaming, streamText, generatedAt, value, onChange, mode, onModeChange, unfilledSections, busyAction,
-    onPublish, onDismiss, onCopy, copied, note, published, draftBehind, onRewrite, onStop,
+    onPublish, onDismiss, onCopy, copied, note, published, draftBehind, onRewrite, onStop, kind = 'draft', email,
 }: SummaryDraftReviewProps) {
     const [showPublished, setShowPublished] = useState(false)
     // Typed out as Brio writes it (components/brio/brio-typing.tsx); the draft is still being
@@ -115,15 +166,26 @@ export function SummaryDraftReview({
     const typed = useTypedText(streamText, streaming)
     const writing = streaming || typed.typing
     const busy = busyAction !== null
-    const blocked = unfilledSections.length > 0
     const empty = !value.trim()
-    const sections = splitSections(value)
+    // The lead's sections always get a box, where they belong, even when a draft came without them.
+    const withLead = withLeadSections(value)
+    const sections = splitSections(withLead)
+    // Unwritten lead sections, present or not (`unfilledSections` only counts the present ones).
+    const missing = LEAD_SECTIONS.filter((h) => unfilledSections.includes(h) || !sections.some((s) => s.heading === h && !isPlaceholderText(s.body)))
+    const editing = kind === 'edit'
+    const emailing = !!email?.on && email.state.count > 0
+    // Ticked, but no one to send to yet (still loading, or everyone removed): wait, rather than
+    // publish without the email the person asked for.
+    const emailNotReady = !!email?.on && (!email.state.info || email.state.count === 0)
+    // A summary in sections can be missing the lead's; one written by hand without any isn't.
+    const structured = /^## /m.test(value)
+    const warnMissing = structured ? missing : []
 
     return (
         <div className="flex min-h-0 flex-1 flex-col">
             <div className="flex items-center gap-2 border-b border-line px-4 py-2">
                 <span className="inline-flex min-w-0 items-center gap-1.5 text-small text-fg-muted">
-                    {writing ? <><Brio className="animate-pulse" /> is writing…</> : <>Suggested by <Brio /></>}
+                    {editing ? 'Editing the published update' : writing ? <><Brio className="animate-pulse" /> is writing…</> : <>Suggested by <Brio /></>}
                 </span>
                 {!writing && generatedAt && <span className="text-caption text-fg-subtle">{formatRelativeTime(generatedAt)}</span>}
                 {streaming && onStop && (
@@ -155,6 +217,13 @@ export function SummaryDraftReview({
             </div>
 
             <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4">
+                {/* Who it goes to and your note, first: the email's own order (who, your note, then
+                    the update below), the same fields as the mail icon's pane. */}
+                {email && !writing && (
+                    <div className="-mx-4 -mt-4 mb-5 border-b border-line bg-surface-subtle px-4 py-3">
+                        <AlsoEmailIt on={email.on} onToggle={email.onToggle} state={email.state} pdf={email.pdf} />
+                    </div>
+                )}
                 {/* Said before publishing: the draft describes the engagement as it was when Brio
                     wrote it. Publishing it anyway is the lead's call, and records today's data. */}
                 {draftBehind && !writing && (
@@ -185,17 +254,23 @@ export function SummaryDraftReview({
                         aria-label="Summary draft (Markdown)"
                         className="min-h-[18rem] w-full flex-1 resize-none rounded-control border border-line bg-surface px-3 py-2 font-mono text-small leading-relaxed text-fg focus:border-action/60 focus:outline-none focus:ring-2 focus:ring-action/20 disabled:opacity-60"
                     />
-                ) : empty ? (
+                ) : empty && !editing ? (
                     <p className="text-small text-fg-subtle">The draft is empty. Open Markdown to write it.</p>
+                ) : editing && !/^## /m.test(value) ? (
+                    // Written by hand without sections: one box for all of it.
+                    <SectionField heading="Update" body={value} lead={false} onChange={onChange} />
                 ) : (
                     <div className="flex flex-col gap-6">
-                        {sections.map((s, i) => s.heading && LEAD_SECTIONS.includes(s.heading) ? (
-                            <LeadSectionField
+                        {sections.map((s, i) => s.heading && (editing || LEAD_SECTIONS.includes(s.heading)) ? (
+                            <SectionField
                                 key={s.heading}
                                 heading={s.heading}
                                 body={s.body}
-                                onChange={(text) => onChange(writeSection(value, s.heading!, text))}
+                                lead={LEAD_SECTIONS.includes(s.heading)}
+                                onChange={(text) => onChange(writeSection(withLead, s.heading!, text))}
                             />
+                        ) : editing ? (
+                            <SectionField key={`intro-${i}`} heading="Introduction" body={s.body} lead={false} onChange={(text) => onChange(writePreamble(withLead, text))} />
                         ) : (
                             <BrioSections key={s.heading ?? `intro-${i}`} content={s.heading ? `## ${s.heading}\n${s.body}` : s.body} className="text-fg" />
                         ))}
@@ -222,18 +297,18 @@ export function SummaryDraftReview({
             {!writing && (
                 <div className="flex flex-col gap-2 border-t border-line px-4 py-3">
                     {note && <p className="text-caption text-action">{note}</p>}
-                    {/* One line: what stops publishing, or what publishing does. The detail is in the tip. */}
+                    {/* Warned, not blocked: unwritten, they're left out of what publishes. */}
+                    <MissingSectionsWarning missing={warnMissing} risks={hasRisks(withLead)} />
+                    {/* One line: what publishing does. The detail is in the tip. */}
                     <p className="flex items-start gap-1.5 text-caption text-fg-muted">
-                        {blocked ? (
-                            <span>Fill in <strong className="font-medium text-fg">{unfilledSections.join(' and ')}</strong> to publish.</span>
-                        ) : (
-                            <span>Publishing saves this as the engagement summary everyone on it sees.</span>
-                        )}
+                        <span>
+                            {emailing
+                                ? `Publishing saves this as the engagement summary everyone on it sees, then emails it from you to ${peopleCount(email!.state.count)}${email!.state.info?.cc ? ', with a copy to you' : ''}.`
+                                : 'Publishing saves this as the engagement summary everyone on it sees.'}
+                        </span>
                         <InfoHint
                             label="About publishing"
-                            text={blocked
-                                ? `${unfilledSections.join(' and ')} ${unfilledSections.length === 1 ? 'is' : 'are'} yours to decide: Brio reports what the data shows and does not commit your firm to a plan.`
-                                : `It is visible to everyone on the engagement and goes into PDF and email exports.${published ? ' It replaces the summary published' + (published.publishedAt ? ` ${formatRelativeTime(published.publishedAt)}` : ' earlier') + '.' : ''}`}
+                            text={`It is visible to everyone on the engagement and goes into the PDF.${published ? ' It replaces the summary published' + (published.publishedAt ? ` ${formatRelativeTime(published.publishedAt)}` : ' earlier') + '.' : ''}${warnMissing.length ? ` ${warnMissing.map(sectionInSentence).join(' and ')} ${warnMissing.length === 1 ? 'is' : 'are'} yours to write: Brio reports what the data shows and doesn't commit your firm to a plan.` : ''}`}
                         />
                     </p>
                     <div className="flex items-center gap-2">
@@ -241,27 +316,16 @@ export function SummaryDraftReview({
                             {copied ? <Check className="h-3 w-3 text-action" /> : <Copy className="h-3 w-3" />}
                             {copied ? 'Copied' : 'Copy'}
                         </Button>
-                        <Button size="sm" variant="outline" onClick={onDismiss} disabled={busy}>
+                        <Button size="sm" variant="ghost" onClick={onDismiss} disabled={busy}>
                             {busyAction === 'dismiss' && <RefreshCw className="h-3 w-3 animate-spin" />}
-                            Discard
+                            {editing ? 'Cancel' : 'Discard'}
                         </Button>
-                        {(() => {
-                            const publish = (
-                                <Button size="sm" onClick={onPublish} disabled={busy || empty || blocked}>
-                                    {busyAction === 'publish' && <RefreshCw className="h-3 w-3 animate-spin" />}
-                                    Publish
-                                </Button>
-                            )
-                            // Why it's disabled, in the app's Hint rather than a native title. A disabled
-                            // button gets no pointer events, so the Hint sits on a focusable wrapper.
-                            return blocked ? (
-                                <Hint label={`Fill in ${unfilledSections.join(' and ')} first`}>
-                                    <span tabIndex={0} className="inline-flex rounded-control focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action/30">
-                                        {publish}
-                                    </span>
-                                </Hint>
-                            ) : publish
-                        })()}
+                        <Button size="sm" onClick={onPublish} disabled={busy || empty || emailNotReady}>
+                            {busyAction === 'publish' ? <RefreshCw className="h-3 w-3 animate-spin" /> : emailing && <Send className="h-3 w-3" aria-hidden />}
+                            {emailing
+                                ? `Publish & email ${peopleCount(email!.state.count)}`
+                                : warnMissing.length > 0 ? 'Publish without them' : 'Publish'}
+                        </Button>
                     </div>
                 </div>
             )}

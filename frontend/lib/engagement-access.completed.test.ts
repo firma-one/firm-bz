@@ -95,6 +95,7 @@ const REFUSES: Record<string, number> = {
     'raid': 1, // Adding to the RAID log; a completed engagement's log is read only.
     'raid/[itemId]': 1, // Accept, dismiss, edit, close or reopen an entry.
     'raid/check': 1, // Check now: nothing found could enter a read-only log.
+    'send-update': 1, // Emails the published update; reading who it would go to is a GET.
     'shares/order': 1,
 }
 const STAYS_OPEN = [

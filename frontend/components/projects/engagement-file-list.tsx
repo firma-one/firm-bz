@@ -77,6 +77,7 @@ import { useEngagementSearch, EngagementSearchProvider } from '@/components/proj
 import { EngagementSearchPanel, type EngagementSearchPanelActionMenuProps } from '@/components/projects/engagement-search-panel'
 import { consumeDeeplinkHighlight, type BreadcrumbItem } from '@/lib/files-folder-session'
 import { useSecureOpenDocument } from '@/lib/use-secure-open-document'
+import { providerFromConnectorType } from '@/lib/secure-open/holding-tab'
 import { SecureAccessModal } from '@/components/projects/shares/secure-access-modal'
 import { ProfileBubbleWithPopup } from '@/components/ui/profile-bubble-popup'
 import { loadEngagementMembers } from '@/lib/engagement-members'
@@ -415,6 +416,7 @@ export function EngagementFileList({ projectId, initialFolderData, connectorRoot
         projectId,
         firmId,
         logContext: 'EngagementFileList',
+        provider: providerFromConnectorType(clientConnectorType),
     })
     const [sharedExternalIds, setSharedExternalIds] = useState<Set<string>>(new Set())
     const [ancestorFolderIds, setAncestorFolderIds] = useState<Set<string>>(new Set())

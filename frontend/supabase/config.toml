@@ -100,10 +100,22 @@ port = 54324
 # sender_name = "Admin"
 
 [storage]
-# Off: files live in the firm's own Drive; the app never uses Supabase Storage.
-enabled = false
+# On for app-generated files only (2026-11-18): client files still live in the firm's own Drive and
+# never in Supabase Storage. First use: the Overview report PDF attached to an update email, uploaded
+# when Send is pressed and deleted as soon as the email is handed to the mail provider (nothing is kept).
+enabled = true
 # The maximum file size allowed (e.g. "5MB", "500KB").
 file_size_limit = "50MiB"
+
+# App-generated files, private: reached only through short-lived signed links the server makes.
+# Named by who can see them, not by what they hold, so other app files can share it later, by folder:
+#   firms/{firmId}/reports/{engagementId}/…   update email PDFs (deleted on dispatch)
+# Production needs the same bucket, created in the Supabase dashboard (this file is local only).
+# Anything that must stay reachable by a fixed link (email logos, say) belongs in a public
+# counterpart, app-public, created only when there's something to put in it.
+[storage.buckets.app-private]
+public = false
+file_size_limit = "10MiB"
 
 # Image transformation API is available to Supabase Pro plan.
 # [storage.image_transformation]

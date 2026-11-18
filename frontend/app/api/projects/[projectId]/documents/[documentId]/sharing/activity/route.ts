@@ -111,8 +111,11 @@ export async function PATCH(
     if (parsed.share?.finalizedAt)
       return NextResponse.json({ error: 'Share is finalized and cannot be updated' }, { status: 403 })
 
-    const role = (await getProjectPersona(ctx.firmId, ctx.clientId, ctx.projectId)) as EngagementRoleSlug
-    const completed = await blockIfEngagementCompleted(projectId)
+    const [persona, completed] = await Promise.all([
+      getProjectPersona(ctx.firmId, ctx.clientId, ctx.projectId),
+      blockIfEngagementCompleted(projectId),
+    ])
+    const role = persona as EngagementRoleSlug
     if (completed) return completed
     const moveCtx: StageMoveContext = { projectId, firmId: ctx.firmId, clientId: ctx.clientId ?? null, actorUserId: user.id }
     const isDeliverable = existing.isFolder && !!parsed.share?.createdAt
@@ -148,7 +151,11 @@ export async function PATCH(
     }
 
     // ── A document ──
-    const deliverableRef = await deliverableOf(projectId, existing.parentId)
+    // Its deliverable and what's private, read together.
+    const [deliverableRef, privateIds] = await Promise.all([
+      deliverableOf(projectId, existing.parentId),
+      privateExternalIds(projectId),
+    ])
     const deliverable: StageRowWithParent | null = deliverableRef
       ? await prisma.engagementDocument.findUnique({ where: { id: deliverableRef.id }, select: STAGE_ROW_SELECT })
       : null
@@ -157,7 +164,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'The deliverable is approved and its documents can no longer move.' }, { status: 403 })
     if (!deliverable && isExternalRole(role))
       return NextResponse.json({ error: 'This move is not permitted for your role.' }, { status: 403 })
-    const isPrivate = !!deliverable && (await privateExternalIds(projectId)).has(existing.externalId)
+    const isPrivate = !!deliverable && privateIds.has(existing.externalId)
     if (isPrivate && isExternalRole(role))
       return NextResponse.json({ error: 'This move is not permitted for your role.' }, { status: 403 })
 

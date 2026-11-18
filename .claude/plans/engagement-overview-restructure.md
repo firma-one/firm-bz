@@ -95,5 +95,12 @@ with its Members list (4 people, 1 invited).
 - Sub-tabs, one look (components/ui/sub-tabs.ts): borderless pills, the open one tinted, as Linear and
   Vercel draw a page's views. Discussions › Threads | Memos moved off its boxed segmented control;
   Files › All files | Recent | Health uses the same, with Discussions' AccessLock and wording.
+- Live on production 2026-11-17 (PR #161, `8e10414e`).
+- Latest update in a card (Deepak, 2026-11-17: "not visually segregated … only ~60% of the width").
+  Mock https://claude.ai/artifact/HrnCvBZYPn32HKaFBRMvU6, option A built: a hairline card, sections in
+  two columns from a 56rem container (one below), closed shows the first row (Summary + Progress, or
+  Summary alone in one column), "Read the full update" and the byline in the card's footer. The export
+  drops `hidden` from export-only parts, so every section still prints. Rejected: one column at full
+  width (~190-character lines).
 - Follow-up: the tour's RAID sample is from a tax engagement (K-1s, 1099-B, QSR ids, Dana) on a GTM
   engagement; realign it with the memos and comments that share it, and their tests.

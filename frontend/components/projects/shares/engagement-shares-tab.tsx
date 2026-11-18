@@ -50,6 +50,7 @@ import { LoadFailed } from '@/components/ui/load-failed'
 import { failureFrom, failureReason } from '@/lib/files/action-failure'
 import { supabase } from '@/lib/supabase'
 import { useSecureOpenDocument } from '@/lib/use-secure-open-document'
+import { providerFromConnectorType } from '@/lib/secure-open/holding-tab'
 import { logger } from '@/lib/logger'
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
 import { splitFolderOrdinal } from '@/lib/display-names'
@@ -1586,6 +1587,7 @@ export function EngagementSharesTab({
   } = useSecureOpenDocument({
     projectId,
     logContext: 'ProjectShares',
+    provider: providerFromConnectorType(clientConnectorType),
   })
   const storageOpenLabel = clientConnectorType === 'ONEDRIVE' ? 'Open in OneDrive' : 'Open in Google Drive'
 

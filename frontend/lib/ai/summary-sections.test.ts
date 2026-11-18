@@ -1,5 +1,16 @@
 import { describe, it, expect } from 'vitest'
-import { findUnfilledSections, LEAD_PLACEHOLDER, LEAD_SECTIONS, SUMMARY_SECTIONS, splitSections, writeSection } from './summary-sections'
+import {
+    dropUnfilledLeadSections,
+    findUnfilledSections,
+    hasRisks,
+    LEAD_PLACEHOLDER,
+    LEAD_SECTIONS,
+    missingLeadSections,
+    SUMMARY_SECTIONS,
+    splitSections,
+    withLeadSections,
+    writeSection,
+} from './summary-sections'
 
 const build = (mitigation: string, nextSteps: string) => `## Summary
 Things are on track.
@@ -68,6 +79,50 @@ describe('findUnfilledSections', () => {
         const aiSections = SUMMARY_SECTIONS.filter((s) => s.authored === 'ai').map((s) => s.heading)
         const flagged = findUnfilledSections(build(LEAD_PLACEHOLDER, LEAD_PLACEHOLDER))
         for (const heading of aiSections) expect(flagged).not.toContain(heading)
+    })
+})
+
+describe('publishing leaves unwritten sections out (dropUnfilledLeadSections)', () => {
+    it('drops lead sections still holding the placeholder, heading and all', () => {
+        const published = dropUnfilledLeadSections(build(LEAD_PLACEHOLDER, 'Client call Thursday.'))
+        expect(splitSections(published).map((s) => s.heading)).toEqual(['Summary', 'Progress', 'Collaboration', 'Risks', 'Needs Attention', 'Next Steps'])
+        expect(published).not.toMatch(/Awaiting/)
+    })
+
+    it('drops any heading with nothing under it', () => {
+        expect(dropUnfilledLeadSections('## Summary\nOn track.\n\n## Collaboration\n\n## Risks\nQSR-9 is late.'))
+            .toBe('## Summary\nOn track.\n\n## Risks\nQSR-9 is late.')
+    })
+
+    it('keeps what a person wrote, "NA" included, and returns untouched text as it was', () => {
+        const filled = build('NA', 'Client call Thursday.')
+        expect(dropUnfilledLeadSections(filled)).toBe(filled.trim())
+    })
+})
+
+describe('missingLeadSections, hasRisks and withLeadSections', () => {
+    it('names lead sections that are absent or unwritten', () => {
+        expect(missingLeadSections('## Summary\nOn track.')).toEqual(['Mitigation & Contingency', 'Next Steps'])
+        expect(missingLeadSections(build(LEAD_PLACEHOLDER, 'Call Thursday.'))).toEqual(['Mitigation & Contingency'])
+        expect(missingLeadSections(build('Reassign QSR-9.', 'Call Thursday.'))).toEqual([])
+    })
+
+    it('knows whether the summary names a risk', () => {
+        expect(hasRisks(build('a', 'b'))).toBe(true)
+        expect(hasRisks('## Summary\nOn track.')).toBe(false)
+    })
+
+    it('adds the missing lead headings where they belong, for an editor to fill in', () => {
+        const text = '## Summary\nOn track.\n\n## Risks\nQSR-9 is late.\n\n## Needs Attention\nQSR-9 needs review.'
+        expect(splitSections(withLeadSections(text)).map((s) => s.heading))
+            .toEqual(['Summary', 'Risks', 'Mitigation & Contingency', 'Needs Attention', 'Next Steps'])
+        // Left empty, they're dropped again when published.
+        expect(dropUnfilledLeadSections(withLeadSections(text))).toBe(text)
+    })
+
+    it('leaves a summary that has both as it was', () => {
+        const filled = build('Reassign QSR-9.', 'Call Thursday.')
+        expect(withLeadSections(filled)).toBe(filled)
     })
 })
 

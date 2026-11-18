@@ -969,9 +969,12 @@ export async function updateEngagementInsightsSummary(projectId: string, summary
     return asResult('updateEngagementInsightsSummary', () => updateEngagementInsightsSummaryOrThrow(projectId, summary))
 }
 
-async function updateEngagementInsightsSummaryOrThrow(projectId: string, summary: string | null): Promise<void> {
+async function updateEngagementInsightsSummaryOrThrow(projectId: string, rawSummary: string | null): Promise<void> {
     await assertCanManageProject(projectId, "change this engagement's summary")
     await assertEngagementNotCompleted(projectId)
+    // As publishing a draft: a lead section with nothing written in it is left out.
+    const { dropUnfilledLeadSections } = await import('@/lib/ai/summary-sections')
+    const summary = rawSummary ? dropUnfilledLeadSections(rawSummary) || null : null
     const project = await prisma.engagement.findFirst({
         where: { id: projectId, isDeleted: false },
         select: { settings: true },
@@ -1036,19 +1039,13 @@ async function approveEngagementAiSummaryOrThrow(projectId: string, editedConten
     if (!draft) throw userFacing('There is no draft to publish. It may have been published or discarded already.', 'no_draft')
 
     const originalText = (draft.text ?? '').trim()
-    const text = (editedContent ?? originalText).trim()
+    // Enforced here, not only in the UI: the client-facing summary never claims a mitigation plan or
+    // next steps that no person wrote. A lead section left as Brio's placeholder is left out of what
+    // publishes (it was refused before, which is how "NA" got typed in to get past it), and so is
+    // any heading with nothing under it (.claude/plans/publish-and-send-update.md).
+    const { dropUnfilledLeadSections } = await import('@/lib/ai/summary-sections')
+    const text = dropUnfilledLeadSections(editedContent ?? originalText)
     if (!text) throw userFacing("The summary is empty. Write something before publishing.", 'empty_summary')
-
-    // Enforced here, not only in the UI: the client-facing summary must never claim a mitigation
-    // plan or next steps that no human has actually written.
-    const { findUnfilledSections } = await import('@/lib/ai/engagement-summary')
-    const unfilled = findUnfilledSections(text)
-    if (unfilled.length > 0) {
-        throw userFacing(
-            `Complete these sections before publishing: ${unfilled.join(', ')}`,
-            'unfilled_sections'
-        )
-    }
 
     // Publishing vouches for the text as of now, so record the engagement's data as it is now,
     // not as it was when Brio wrote the draft. With the draft's fingerprint, a draft written

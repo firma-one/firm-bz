@@ -113,3 +113,12 @@ describe('proxy — custom domains', () => {
         expect(pricing.headers.get('x-middleware-rewrite')).toBeNull()
     })
 })
+
+/** The secure-open tab: no session work, no sign-in redirect, whoever opens it. */
+describe('proxy — /open passes straight through', () => {
+    it('serves /open signed out, without a redirect or a user lookup', async () => {
+        const res = await proxy(req('/open'))
+        expect(res.headers.get('location')).toBeNull()
+        expect(res.headers.get('x-middleware-next')).toBe('1')
+    })
+})

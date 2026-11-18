@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
 import { resolveProjectContext } from '@/lib/resolve-project-context'
@@ -40,13 +40,14 @@ export async function PATCH(
     const ctx = await resolveProjectContext(projectId)
     if (!ctx) return NextResponse.json({ error: 'This engagement was not found, or you no longer have access.' }, { status: 404 })
 
-    const canView = await canViewProject(ctx.orgId, ctx.clientId, ctx.projectId)
+    // Independent checks, asked together; answered in the same order as before.
+    const [canView, canManage, completed] = await Promise.all([
+      canViewProject(ctx.orgId, ctx.clientId, ctx.projectId),
+      canViewProjectSettings(ctx.orgId, ctx.clientId, ctx.projectId),
+      blockIfEngagementCompleted(projectId),
+    ])
     if (!canView) return NextResponse.json({ error: 'This engagement was not found, or you no longer have access.' }, { status: 404 })
-
-    const canManage = await canViewProjectSettings(ctx.orgId, ctx.clientId, ctx.projectId)
     if (!canManage) return NextResponse.json({ error: 'Only a Lead can change due dates.' }, { status: 403 })
-
-    const completed = await blockIfEngagementCompleted(projectId)
     if (completed) return completed
 
     const body = await request.json().catch(() => ({}))
@@ -106,23 +107,44 @@ export async function PATCH(
     }
 
     // What follows a saved date: notices and reminders. The dates stand either way; what didn't follow is said.
-    const members = await prisma.engagementMember.findMany({
-      where: { engagementId: projectId },
-      select: { userId: true, role: true },
-    })
+    // What every row's follow-up needs, read once and together.
+    const [members, privateIds, eng] = await Promise.all([
+      prisma.engagementMember.findMany({
+        where: { engagementId: projectId },
+        select: { userId: true, role: true },
+      }),
+      privateExternalIds(projectId),
+      prisma.engagement.findUnique({
+        where: { id: projectId },
+        select: { slug: true, client: { select: { slug: true, firm: { select: { slug: true, group: { select: { slug: true } } } } } } },
+      }),
+    ])
     const memberUserIds = members.map((m) => m.userId)
     // A private file's date is the firm's own: its notice names the file, so no client gets one.
     const firmUserIds = members.filter((m) => !isExternalEngagementRole(m.role)).map((m) => m.userId)
-    const privateIds = await privateExternalIds(projectId)
-    const notFollowed: string[] = []
-    for (const { row, next } of rows) {
-      const done = await followDueDate(row, next, {
+    const linkTo = {
+      groupSlug: eng?.client?.firm?.group?.slug ?? '',
+      firmSlug: eng?.client?.firm?.slug ?? '',
+      clientSlug: eng?.client?.slug ?? '',
+      engagementSlug: eng?.slug ?? '',
+    }
+    // Emails go after the answer: they can take seconds each, and a failed one was never reported.
+    const emails: Array<() => Promise<void>> = []
+    const followed = await Promise.all(rows.map(({ row, next }) =>
+      followDueDate(row, next, {
         projectId,
         clientId: ctx.clientId,
         actorUserId: user.id,
         memberUserIds: privateIds.has(row.externalId) ? firmUserIds : memberUserIds,
+        linkTo,
+        queueEmail: (send) => emails.push(send),
       }).catch((e) => { console.error('due-date PATCH: follow-up failed', row.id, e); return false })
-      if (!done) notFollowed.push(row.fileName)
+    ))
+    const notFollowed = rows.filter((_, i) => !followed[i]).map(({ row }) => row.fileName)
+    if (emails.length > 0) {
+      after(async () => {
+        await Promise.all(emails.map((send) => send().catch((e) => console.error('due-date PATCH: email failed', e))))
+      })
     }
 
     return NextResponse.json({
@@ -151,96 +173,113 @@ type DueRow = {
   clientId: string | null
 }
 
+/** An Inngest send that answers in time: a slow one counts as not sent, so the reply isn't held up. */
+const REMINDER_SEND_TIMEOUT_MS = 5_000
+function sendInTime(name: string, data: Record<string, unknown>): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  return Promise.race([
+    safeInngestSend(name, data),
+    new Promise<boolean>((resolve) => {
+      timer = setTimeout(() => {
+        console.error(`due-date PATCH: Inngest '${name}' took over ${REMINDER_SEND_TIMEOUT_MS}ms`)
+        resolve(false)
+      }, REMINDER_SEND_TIMEOUT_MS)
+    }),
+  ]).finally(() => clearTimeout(timer))
+}
+
 /**
- * What follows a row's saved due date: stale notices retracted, new ones sent, reminders rescheduled.
- * Answers false when a reminder couldn't be cancelled or scheduled; throws when a notice write fails.
+ * What follows a row's saved due date: stale notices retracted, new ones sent, reminders rescheduled,
+ * the reminders and the notices side by side. Answers false when a reminder couldn't be cancelled or
+ * scheduled; throws when a notice write fails. A soon-due document's emails are queued, to go after
+ * the answer.
  */
 async function followDueDate(
   doc: DueRow,
   dueDate: Date | null,
-  ctx: { projectId: string; clientId: string; actorUserId: string; memberUserIds: string[] },
+  ctx: {
+    projectId: string
+    clientId: string
+    actorUserId: string
+    memberUserIds: string[]
+    linkTo: { groupSlug: string; firmSlug: string; clientSlug: string; engagementSlug: string }
+    queueEmail: (send: () => Promise<void>) => void
+  },
 ): Promise<boolean> {
-  const { projectId, actorUserId, memberUserIds } = ctx
+  const { projectId, actorUserId, memberUserIds, linkTo } = ctx
 
   const isDeliverableFolder = doc.isFolder && (() => {
     try { return !!(parseSettingsFromDb(doc.settings as any).share?.createdAt) } catch { return false }
   })()
 
-  // Always cancel any existing scheduled reminder for this document
-  let followed = await safeInngestSend('deliverable.due_date.cancelled', { documentId: doc.id })
-
-  // If the due date was cleared or changed, retract any already-delivered
-  // due-date / reminder notifications for this document so members don't see
-  // stale "due on X" or "due tomorrow" items referencing the old date.
-  const prevDue = doc.dueDate ? doc.dueDate.toISOString() : null
-  const nextDue = dueDate ? dueDate.toISOString() : null
-  if (prevDue !== nextDue) {
-    await (prisma as any).notification.updateMany({
-      where: {
-        documentId: doc.id,
-        type: { in: ['DOCUMENT_DUE_DATE_SET', 'DELIVERABLE_DUE_REMINDER'] },
-        dismissedAt: null,
-      },
-      data: { dismissedAt: new Date() },
-    })
-  }
-
-  if (!dueDate) return followed
-
   // Where the notification and the deliverable's reminders link to: its card on the Board, or
   // the document in Files.
-  const eng = await prisma.engagement.findUnique({
-    where: { id: projectId },
-    select: { slug: true, client: { select: { slug: true, firm: { select: { slug: true, group: { select: { slug: true } } } } } } },
-  })
-  const groupSlug = eng?.client?.firm?.group?.slug ?? ''
-  const firmSlug = eng?.client?.firm?.slug ?? ''
-  const clientSlug = eng?.client?.slug ?? ''
-  const engSlug = eng?.slug ?? ''
-  const docUrl = groupSlug && firmSlug && clientSlug && engSlug
-    ? documentLink({ groupSlug, firmSlug, clientSlug, engagementSlug: engSlug }, { id: doc.id, deliverable: isDeliverableFolder })
+  const docUrl = linkTo.groupSlug && linkTo.firmSlug && linkTo.clientSlug && linkTo.engagementSlug
+    ? documentLink(linkTo, { id: doc.id, deliverable: isDeliverableFolder })
     : null
 
-  // In-app notifications for every member but whoever set it: no one is told of their own change.
-  // The title says which it is, a deliverable or a document.
-  const kind = isDeliverableFolder ? 'Deliverable' : 'Document'
-  const rows = memberUserIds.filter((userId) => userId !== actorUserId).map((userId) => ({
-    firmId: doc.firmId,
-    clientId: doc.clientId ?? ctx.clientId,
-    engagementId: projectId,
-    documentId: doc.id,
-    userId,
-    type: 'DOCUMENT_DUE_DATE_SET',
-    title: `${kind} due date updated`,
-    body: `${doc.fileName} is due on ${formatFullDate(dueDate)}`,
-    ctaUrl: docUrl,
-    metadata: { dueDate: dueDate.toISOString(), kind: kind.toLowerCase() },
-    channels: { inApp: true, email: false },
-    dedupeKey: `doc:${doc.id}:due:${dueDate.toISOString().slice(0, 10)}`,
-  }))
-  if (rows.length) {
-    await (prisma as any).notification.createMany({ data: rows, skipDuplicates: true })
-  }
+  // Reminders: any scheduled one cancelled, then a deliverable's 24h + 1h ones scheduled again.
+  const reminders = (async () => {
+    let ok = await sendInTime('deliverable.due_date.cancelled', { documentId: doc.id })
+    if (dueDate && isDeliverableFolder) {
+      ok = (await sendInTime('deliverable.due_date.set', {
+        documentId: doc.id,
+        documentName: doc.fileName,
+        dueDate: dueDate.toISOString(),
+        memberUserIds,
+        firmId: doc.firmId,
+        clientId: doc.clientId ?? ctx.clientId,
+        engagementId: projectId,
+        boardUrl: docUrl,
+      })) && ok
+    }
+    return ok
+  })()
 
-  if (isDeliverableFolder) {
-    // The reminder CTA deep-links to the Board card
-    const boardUrl = docUrl
-
-    // Schedule 24h + 1h reminders via Inngest for deliverable folders
-    followed = (await safeInngestSend('deliverable.due_date.set', {
-      documentId: doc.id,
-      documentName: doc.fileName,
-      dueDate: dueDate.toISOString(),
-      memberUserIds,
+  // Notices: a changed or cleared date retracts the delivered "due on X" / "due tomorrow" items,
+  // then every member but whoever set it is told of the new one. The title says which it is.
+  const notices = (async () => {
+    const prevDue = doc.dueDate ? doc.dueDate.toISOString() : null
+    const nextDue = dueDate ? dueDate.toISOString() : null
+    if (prevDue !== nextDue) {
+      await (prisma as any).notification.updateMany({
+        where: {
+          documentId: doc.id,
+          type: { in: ['DOCUMENT_DUE_DATE_SET', 'DELIVERABLE_DUE_REMINDER'] },
+          dismissedAt: null,
+        },
+        data: { dismissedAt: new Date() },
+      })
+    }
+    if (!dueDate) return
+    const kind = isDeliverableFolder ? 'Deliverable' : 'Document'
+    const rows = memberUserIds.filter((userId) => userId !== actorUserId).map((userId) => ({
       firmId: doc.firmId,
       clientId: doc.clientId ?? ctx.clientId,
       engagementId: projectId,
-      boardUrl,
-    })) && followed
-  } else {
-    // Non-deliverable: immediate email if within 24h (existing behavior)
-    const hours = (dueDate.getTime() - Date.now()) / (1000 * 60 * 60)
-    if (hours <= 24) {
+      documentId: doc.id,
+      userId,
+      type: 'DOCUMENT_DUE_DATE_SET',
+      title: `${kind} due date updated`,
+      body: `${doc.fileName} is due on ${formatFullDate(dueDate)}`,
+      ctaUrl: docUrl,
+      metadata: { dueDate: dueDate.toISOString(), kind: kind.toLowerCase() },
+      channels: { inApp: true, email: false },
+      dedupeKey: `doc:${doc.id}:due:${dueDate.toISOString().slice(0, 10)}`,
+    }))
+    if (rows.length) {
+      await (prisma as any).notification.createMany({ data: rows, skipDuplicates: true })
+    }
+  })()
+
+  // Both run to the end; a notice write that failed is thrown once the reminders have been asked.
+  const [remindersFollowed, noticesDone] = await Promise.allSettled([reminders, notices])
+  if (noticesDone.status === 'rejected') throw noticesDone.reason
+  const followed = remindersFollowed.status === 'fulfilled' && remindersFollowed.value
+
+  // A document (not a deliverable) due within a day: every member is emailed, after the answer.
+  if (dueDate && !isDeliverableFolder && (dueDate.getTime() - Date.now()) / (1000 * 60 * 60) <= 24) {
+    ctx.queueEmail(async () => {
       const admin = createAdminClient()
       await Promise.all(memberUserIds.map(async (userId) => {
         try {
@@ -255,7 +294,7 @@ async function followDueDate(
           await sendEmail(email, subject, html)
         } catch { /* ignore */ }
       }))
-    }
+    })
   }
   return followed
 }

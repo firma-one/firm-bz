@@ -288,7 +288,7 @@ function RowActionMenu({ entry, name, docId, deliverableStatus, dueDate, onSetDu
                                     <span className="flex shrink-0 text-fg-muted"><Calendar /></span>
                                     <span className="flex flex-1 items-center">
                                         Due
-                                        <span className={cn('ml-auto pl-3 tabular-nums', due && isPastDue(due) ? 'text-danger' : 'text-fg-subtle')}>{due ? formatDue(due) : 'Not set'}</span>
+                                        <span className={cn('ml-auto pl-3 tabular-nums', due && isPastDue(due) && deliverableStatus !== 'approved' ? 'text-danger' : 'text-fg-subtle')}>{due ? formatDue(due) : 'Not set'}</span>
                                     </span>
                                 </DropdownMenuSubTrigger>
                                 <DropdownMenuSubContent className="w-auto p-0" sideOffset={6}>
@@ -502,7 +502,7 @@ function EntryRow({
             <div className={`items-center ${DUE_DATE_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`} data-demo-tour={tracked && !isFolder ? 'files-due' : undefined}>
                 {/* As in the app: files and deliverable folders take a Due; other folders have none */}
                 {!isFolder || deliverableStatus ? (
-                    <DateProperty value={dueDate ?? null} onChange={onSetDue} placeholder={tracked ? 'Not set' : '—'} highlightOverdue allowTime={!isFolder} compact chip />
+                    <DateProperty value={dueDate ?? null} onChange={onSetDue} placeholder={tracked ? 'Not set' : '—'} highlightOverdue={stage !== 'approved'} allowTime={!isFolder} compact chip />
                 ) : empty}
                 {/* As in the app: underway with no due date */}
                 {tracked && stage && needsDueDate(stage, dueDate) && <MissingDueWarning stage={stage} className="ml-1" />}
