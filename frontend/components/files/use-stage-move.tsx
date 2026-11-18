@@ -5,7 +5,8 @@ import { Eye, CheckCircle2 } from 'lucide-react'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { statusOf } from '@/lib/ui/status'
 import { failureReason } from '@/lib/files/action-failure'
-import type { ActivityStatus } from '@/lib/sharing-settings'
+import { documentStage, type ActivityStatus } from '@/lib/sharing-settings'
+import { readSavedDocument } from '@/lib/files/read-back'
 
 /**
  * Moving a document's stage, and agreeing first when its deliverable would follow somewhere that
@@ -51,6 +52,9 @@ export function stageDoneTitle(to?: ActivityStatus): string {
     return to === 'approved' ? 'Approved' : 'Stage updated'
 }
 
+/** A move whose answer was lost, though the move itself went through. */
+export const DROPPED_BUT_MOVED = 'The connection dropped before the answer came back, but the move went through. Refresh to see its deliverable as it is now.'
+
 async function patchStage(projectId: string, documentId: string, status: ActivityStatus, confirm: boolean) {
     const { getSession } = await import('@/lib/supabase')
     const session = await getSession()
@@ -65,8 +69,11 @@ export function useStageMove() {
     const [pending, setPending] = React.useState<{ confirmation: StageConfirmation; answer: (yes: boolean) => void } | null>(null)
     const [sending, setSending] = React.useState(false)
 
-    /** Sends a request that may answer 409 `needsConfirmation`, asks, and resends with `confirm` when agreed. */
-    const send = React.useCallback(async (request: (confirm: boolean) => Promise<Response>): Promise<StageMoveResult> => {
+    /**
+     * Sends a request that may answer 409 `needsConfirmation`, asks, and resends with `confirm` when agreed.
+     * `landed`, when given, is asked after an answer that never arrived: whether the move was made anyway.
+     */
+    const send = React.useCallback(async (request: (confirm: boolean) => Promise<Response>, landed?: () => Promise<boolean>): Promise<StageMoveResult> => {
         // A request that never got there (or a session lookup that threw) is the reason itself.
         let dropped: unknown = null
         const attempt = (confirm: boolean) => request(confirm).catch((e: unknown) => { dropped = e; return null })
@@ -84,7 +91,13 @@ export function useStageMove() {
                 setPending(null)
             }
         }
-        if (!res) return { ok: false, error: failureReason(dropped ?? new TypeError('fetch failed')) }
+        if (!res) {
+            // The answer was lost, not necessarily the move: the server keeps going after a dropped connection.
+            if (landed && await landed().catch(() => false)) {
+                return { ok: true, deliverable: null, warning: DROPPED_BUT_MOVED }
+            }
+            return { ok: false, error: failureReason(dropped ?? new TypeError('fetch failed')) }
+        }
         if (!res.ok) {
             return {
                 ok: false,
@@ -100,7 +113,13 @@ export function useStageMove() {
     }, [])
 
     const move = React.useCallback(
-        (projectId: string, documentId: string, status: ActivityStatus) => send((confirm) => patchStage(projectId, documentId, status, confirm)),
+        (projectId: string, documentId: string, status: ActivityStatus) => send(
+            (confirm) => patchStage(projectId, documentId, status, confirm),
+            async () => {
+                const saved = await readSavedDocument(projectId, documentId)
+                return !!saved && documentStage(saved.settings) === status
+            },
+        ),
         [send],
     )
 

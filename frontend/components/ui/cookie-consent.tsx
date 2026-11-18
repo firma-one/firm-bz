@@ -25,6 +25,7 @@ import {
   readAnalyticsNoticeSeen,
   readCookieConsentFromStorage,
   type CookieConsentUIPreferences,
+  isAnalyticsFreePath,
 } from "@/lib/cookie-consent-storage"
 import { useAnalyticsMode } from "@/components/analytics/analytics-mode-context"
 import { cn } from "@/lib/utils"
@@ -252,6 +253,7 @@ export function CookieConsent() {
     }
   }
 
+  if (isAnalyticsFreePath(pathname)) return null
   if (!showBanner && !showSavedToast && !showNotice) return null
 
   return (

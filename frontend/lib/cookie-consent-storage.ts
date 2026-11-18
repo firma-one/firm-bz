@@ -4,6 +4,7 @@
  */
 
 import type { AnalyticsMode } from './analytics-zone'
+import { SECURE_OPEN_PATH } from './secure-open/holding-tab'
 
 export const FM_COOKIE_CONSENT_KEY = 'fm_cookie_consent'
 
@@ -91,6 +92,14 @@ export function isPublicAnalyticsPath(pathname: string | null | undefined): bool
   return PUBLIC_ANALYTICS_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`))
 }
 
+/**
+ * Pages with no analytics and no cookie banner at all, whatever was saved: the secure-open tab
+ * (`/open`) names the file being opened in its title, and is gone in a few seconds anyway.
+ */
+export function isAnalyticsFreePath(pathname: string | null | undefined): boolean {
+  return pathname === SECURE_OPEN_PATH
+}
+
 /** The browser's Global Privacy Control signal. When it's on, Google Analytics never loads. */
 export function globalPrivacyControlOn(): boolean {
   if (typeof navigator === 'undefined') return false
@@ -99,6 +108,7 @@ export function globalPrivacyControlOn(): boolean {
 
 /**
  * Whether Google Analytics may run, in this order:
+ * 0. Never on an analytics-free page (`isAnalyticsFreePath`).
  * 1. A saved choice wins, whichever way it went.
  * 2. Global Privacy Control means no.
  * 3. App pages need a saved Accept, so with no saved choice it's no.
@@ -115,6 +125,7 @@ export function analyticsAllowed({
   gpc: boolean
   pathname: string | null | undefined
 }): boolean {
+  if (isAnalyticsFreePath(pathname)) return false
   if (stored) return stored.analytics
   if (gpc) return false
   if (!isPublicAnalyticsPath(pathname)) return false

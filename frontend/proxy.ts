@@ -14,6 +14,12 @@ function requestHeadersWithInvokePath(request: NextRequest): Headers {
 }
 
 export async function proxy(request: NextRequest) {
+    // The secure-open tab (/open, lib/secure-open/holding-tab.ts) does no server work and needs no
+    // session, so it skips the user lookup below and paints as soon as it can.
+    if (request.nextUrl.pathname === '/open') {
+        return NextResponse.next()
+    }
+
     let response = NextResponse.next({
         request: {
             headers: requestHeadersWithInvokePath(request),

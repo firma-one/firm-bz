@@ -40,6 +40,7 @@ import {
     TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
+import { differenceInCalendarDays } from 'date-fns'
 import { READ_ONLY_PILL_CLASS, type PersonOption } from '@/components/ui/property-cells'
 import { FILES_DROP_TARGET_ROW_CLASS } from '@/components/projects/files-drop-zone'
 import { formatFileSize } from '@/lib/utils'
@@ -828,30 +829,37 @@ function EngagementFileRowInner({
                         onOthersChanged={onShareSaved}
                         onError={(message) => onAddToast({ type: 'error', title: "Couldn't set due date", message })}
                         onWarning={(message) => onAddToast({ type: 'warning', title: 'Due date set', message })}
+                        approved={shownStage === 'approved'}
                     />
                 ) : (
                     // Inset as the editable picker's button is, so a locked row's Due lines up with the others.
                     <span className={READ_ONLY_PILL_CLASS}>
                     {/* Folders other than deliverables have no Due, whatever an older value says */}
                     {file.dueDate && (!isFolder || file.isDeliverable) ? (() => {
-                        const due = new Date(file.dueDate)
-                        const now = Date.now()
-                        const diffMs = due.getTime() - now
-                        const diffDays = diffMs / 86400000
-                        const isUrgent = diffDays >= 0 && diffDays <= 7
-                        const isOverdue = diffDays < 0
-
-                        let relativeLabel: string
-                        if (isOverdue) {
-                            const days = Math.floor(-diffDays)
-                            relativeLabel = days === 0 ? 'today' : days === 1 ? '1d overdue' : `${days}d overdue`
-                        } else {
-                            const days = Math.floor(diffDays)
-                            relativeLabel = days === 0 ? 'today' : days === 1 ? 'in 1d' : `in ${days}d`
+                        // Approved: the date is history, not a countdown. Just the date, muted.
+                        if (shownStage === 'approved') {
+                            return (
+                                <RelativeDateTime
+                                    date={file.dueDate}
+                                    displayFormat="short"
+                                    textClassName="text-[0.8125rem] text-fg-muted"
+                                    iconClassName="text-line hover:text-fg-muted"
+                                    tooltipSide="top"
+                                    tooltipPrefix="Due on:"
+                                />
+                            )
                         }
+                        // By calendar day: a date earlier today is "today", not overdue.
+                        const days = differenceInCalendarDays(new Date(file.dueDate), new Date())
+                        const isOverdue = days < 0
+                        const isUrgent = days >= 0 && days <= 7
+                        const relativeLabel = days === 0 ? 'today'
+                            : days < 0 ? (days === -1 ? '1d overdue' : `${-days}d overdue`)
+                            : days === 1 ? 'in 1d' : `in ${days}d`
 
-                        const colorClass = isOverdue || isUrgent ? 'text-red-500' : 'text-fg-muted'
-                        const iconColor = isOverdue || isUrgent ? 'text-red-300 hover:text-red-500' : 'text-line hover:text-fg-muted'
+                        // Red only for a date that has passed; today and the next week are a heads-up, amber.
+                        const colorClass = isOverdue ? 'text-danger' : isUrgent ? 'text-tag-yellow-fg' : 'text-fg-muted'
+                        const iconColor = isOverdue ? 'text-danger/50 hover:text-danger' : isUrgent ? 'text-tag-yellow-fg/60 hover:text-tag-yellow-fg' : 'text-line hover:text-fg-muted'
 
                         return (
                             <RelativeDateTime

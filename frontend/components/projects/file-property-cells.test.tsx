@@ -208,3 +208,21 @@ describe('FileAssigneeCell answers (P1-65)', () => {
         await waitFor(() => expect(onError).toHaveBeenCalledWith('Only a Lead can change the assignee.'))
     })
 })
+
+// Approved work's date is history: never drawn as overdue.
+describe('FileDueDateCell on approved work', () => {
+    const cell = (approved: boolean) => render(
+        <FileDueDateCell projectId="p1" documentId="d1" dueDate="2020-01-10" placeholder="Not set"
+            onSaved={vi.fn()} onError={vi.fn()} onWarning={vi.fn()} approved={approved} />)
+
+    it('marks a past date as overdue while the work is open', () => {
+        const { container } = cell(false)
+        expect(container.innerHTML).toMatch(/problem|danger|red/)
+    })
+
+    it('shows a past date plainly once approved', () => {
+        const { container } = cell(true)
+        expect(container.textContent).toContain('2020')
+        expect(container.innerHTML).not.toMatch(/problem|danger|red/)
+    })
+})

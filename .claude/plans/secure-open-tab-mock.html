@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Secure open tab · mock</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@700&display=swap" rel="stylesheet">
+<style>
+  /* App tokens (app/ui-tokens.css) */
+  :root {
+    --surface: #ffffff;
+    --surface-sidebar: #f9f9f8;
+    --surface-muted: #f1f1ef;
+    --fg: #37352f;
+    --fg-muted: #6f6e69;
+    --fg-subtle: #a5a4a1;
+    --line: rgba(55, 53, 47, 0.09);
+    --line-strong: rgba(55, 53, 47, 0.16);
+    --action: #047857;
+    --underway: #5a9bd4;
+    --done: #5aa77a;
+    --red-bg: #ffe2dd;
+    --red-fg: #b1403b;
+    --r-control: 4px;
+    --r-card: 6px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: #ecebe8;
+    color: var(--fg);
+    font: 14px/1.5 Inter, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .doc { max-width: 1180px; margin: 0 auto; padding: 32px 16px 64px; }
+  .doc > h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; }
+  .doc > p.lede { color: var(--fg-muted); margin: 0 0 28px; max-width: 760px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(520px, 1fr)); gap: 28px; }
+  @media (max-width: 600px) { .grid { grid-template-columns: 1fr; } }
+  .state h2 { font-size: 13px; font-weight: 600; margin: 0 0 2px; }
+  .state p.note { font-size: 12px; color: var(--fg-muted); margin: 0 0 10px; }
+
+  /* Browser frame: tab strip and address bar, so the tab title and address are visible */
+  .browser { border-radius: 10px; overflow: hidden; background: var(--surface); box-shadow: 0 0 0 1px rgba(15,15,15,.08), 0 6px 18px rgba(15,15,15,.08); }
+  .chrome { background: #dfdedb; padding: 8px 10px 0; }
+  .tabs { display: flex; gap: 4px; align-items: flex-end; }
+  .tab { display: flex; align-items: center; gap: 7px; max-width: 280px; padding: 7px 12px; border-radius: 8px 8px 0 0; font-size: 12px; color: #555; background: transparent; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tab.active { background: var(--surface-sidebar); color: #222; }
+  .tab .fav { width: 14px; height: 14px; flex: none; }
+  .tab span { overflow: hidden; text-overflow: ellipsis; }
+  .bar { background: var(--surface-sidebar); padding: 6px 10px; border-bottom: 1px solid var(--line); }
+  .url { background: #fff; border-radius: 999px; padding: 4px 12px; font-size: 12px; color: #444; display: flex; align-items: center; gap: 6px; }
+  .url .lock { width: 11px; height: 11px; color: #777; }
+  .url b { font-weight: 400; color: #111; }
+
+  /* The page itself */
+  .page { position: relative; height: 380px; background: var(--surface); display: flex; align-items: center; justify-content: center; }
+  .lockup { position: absolute; top: 16px; left: 20px; display: flex; align-items: center; gap: 6px; }
+  .lockup svg { width: 18px; height: 18px; }
+  .wordmark { font-family: 'Space Grotesk', system-ui, sans-serif; font-weight: 700; letter-spacing: -0.02em; font-size: 15px;
+    background-image: linear-gradient(90deg, #4d4d4d, #2d6d3a, #4aba5e); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .stack { width: 100%; max-width: 400px; padding: 0 16px; display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; }
+  .file { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--r-card); text-align: left; }
+  .file .ico { width: 28px; height: 28px; flex: none; display: grid; place-items: center; }
+  .file .meta { min-width: 0; }
+  .file .name { font-weight: 500; font-size: 13px; color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .file .where { font-size: 12px; color: var(--fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .line { font-size: 14px; color: var(--fg-muted); margin: 0; }
+  .line strong { color: var(--fg); font-weight: 500; }
+  .sub { font-size: 12px; color: var(--fg-muted); margin: -6px 0 0; }
+  .err-tile { width: 32px; height: 32px; border-radius: var(--r-control); background: var(--red-bg); color: var(--red-fg); display: grid; place-items: center; }
+  .err-title { font-size: 15px; font-weight: 600; margin: 0; color: var(--fg); }
+  .reason { font-size: 13px; color: var(--fg); margin: -4px 0 0; line-height: 1.55; }
+  .actions { display: flex; gap: 8px; justify-content: center; margin-top: 2px; }
+  .btn { font: 500 13px/1 Inter, system-ui, sans-serif; padding: 8px 12px; border-radius: var(--r-control); border: 1px solid var(--line-strong); background: #fff; color: var(--fg); cursor: default; }
+  .btn.primary { background: var(--action); border-color: var(--action); color: #fff; }
+  .variants { display: flex; gap: 6px; margin: 0 0 8px; flex-wrap: wrap; }
+  .variants button { font: 500 12px Inter, system-ui, sans-serif; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line-strong); background: #fff; color: var(--fg-muted); cursor: pointer; }
+  .variants button[aria-pressed="true"] { background: var(--fg); color: #fff; border-color: var(--fg); }
+
+  /* Workspace loader mark (components/app/workspace-loader.tsx, copied verbatim) */
+  @keyframes wl-fill { 0% { stroke-dashoffset: 18.85 } 50% { stroke-dashoffset: 0 } 100% { stroke-dashoffset: -18.85 } }
+  @keyframes wl-turn { to { transform: rotate(360deg) } }
+  @keyframes wl-pop { 0% { transform: scale(.55); opacity: 0 } 70% { transform: scale(1.06); opacity: 1 } 100% { transform: scale(1); opacity: 1 } }
+  @keyframes wl-tick { to { stroke-dashoffset: 0 } }
+  .wl-turn { transform-box: fill-box; transform-origin: center; animation: wl-turn 2.8s linear infinite }
+  .wl-fill { animation: wl-fill 1.6s cubic-bezier(.65,0,.35,1) infinite }
+  .wl-pop { transform-box: fill-box; transform-origin: center; animation: wl-pop .38s cubic-bezier(.2,.8,.2,1) both }
+  .wl-tick { stroke-dasharray: 13; stroke-dashoffset: 13; animation: wl-tick .28s cubic-bezier(.65,0,.35,1) .18s forwards }
+  @media (prefers-reduced-motion: reduce) {
+    .wl-turn, .wl-fill, .wl-pop { animation: none }
+    .wl-fill { stroke-dashoffset: 4.7 }
+    .wl-tick { animation: none; stroke-dashoffset: 0 }
+  }
+
+  .spec { margin-top: 40px; background: #fff; border-radius: 10px; padding: 20px 24px; box-shadow: 0 0 0 1px rgba(15,15,15,.06); }
+  .spec h2 { font-size: 15px; margin: 0 0 8px; }
+  .spec h3 { font-size: 13px; margin: 18px 0 6px; }
+  .spec table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  .spec td, .spec th { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .spec th { font-weight: 600; color: var(--fg-muted); font-size: 12px; }
+  .spec ul { margin: 4px 0; padding-left: 18px; }
+  .spec li { margin: 3px 0; }
+  code { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--surface-muted); padding: 1px 4px; border-radius: 3px; }
+</style>
+</head>
+<body>
+<div class="doc">
+  <h1>Secure open tab</h1>
+  <p class="lede">The tab that opens when someone opens a document from Firma, while Firma checks or grants access and before it hands over to OneDrive or Google Drive. Today it's <code>about:blank</code> with one gray line. Each frame below shows the tab title and address bar too. The first frame plays the real sequence; the rest hold one state each.</p>
+
+  <div class="grid">
+
+    <!-- 0. Live sequence -->
+    <section class="state">
+      <h2>Live sequence</h2>
+      <p class="note">Waiting, then the slow line at 6s, then the Done check and the hand-off. <button class="btn" id="replay" style="padding:3px 8px;font-size:12px">Replay</button></p>
+      <div class="browser" id="live"></div>
+    </section>
+
+    <!-- 1. Waiting -->
+    <section class="state">
+      <h2>1 · Waiting (0 to 6s)</h2>
+      <p class="note">The workspace loader's mark and motion. The file, where it lives, and what is happening.</p>
+      <div class="browser" data-state="waiting" data-provider="onedrive"></div>
+    </section>
+
+    <!-- 2. Slow -->
+    <section class="state">
+      <h2>2 · Slow (after 6s)</h2>
+      <p class="note">Same layout, the line changes. A OneDrive grant has been measured at 16s.</p>
+      <div class="browser" data-state="slow" data-provider="onedrive"></div>
+    </section>
+
+    <!-- 3. Handing off -->
+    <section class="state">
+      <h2>3 · Access ready, handing off</h2>
+      <p class="note">The mark turns into the Done check, as the workspace loader does on arrival, then the tab moves to the document. Shown for about 400ms; not a pause added for show.</p>
+      <div class="browser" data-state="done" data-provider="onedrive"></div>
+    </section>
+
+    <!-- 4. Google Drive, provider name -->
+    <section class="state">
+      <h2>1 · Waiting, Google Drive</h2>
+      <p class="note">The same page for a Google Drive file. If the caller doesn't know the provider, the line drops the name: "Checking your access, then opening it".</p>
+      <div class="browser" data-state="waiting" data-provider="google"></div>
+    </section>
+
+    <!-- 5. Failure -->
+    <section class="state">
+      <h2>4 · Couldn't open</h2>
+      <p class="note">Says why, in the route's own words, and gives a way back. Color only on the alert tile.</p>
+      <div class="variants" id="variants">
+        <button aria-pressed="true" data-v="access">No access</button>
+        <button aria-pressed="false" data-v="session">Session ended</button>
+        <button aria-pressed="false" data-v="policy">SharePoint policy</button>
+        <button aria-pressed="false" data-v="network">Timed out</button>
+        <button aria-pressed="false" data-v="gone">Removed</button>
+      </div>
+      <div class="browser" id="failure" data-state="error" data-provider="onedrive"></div>
+    </section>
+
+    <!-- 6. Google email -->
+    <section class="state">
+      <h2>5 · Check your email (Google, optional)</h2>
+      <p class="note">Today the tab just closes when Google sends its sharing email. It could say so instead. Your call.</p>
+      <div class="browser" data-state="email" data-provider="google"></div>
+    </section>
+
+  </div>
+
+  <div class="spec">
+    <h2>Copy and behavior</h2>
+    <table>
+      <tr><th style="width:22%">State</th><th style="width:38%">Tab title</th><th>Page line</th></tr>
+      <tr><td>Waiting</td><td>Opening Deepak article #7.docx · Firma</td><td>Checking your access, then opening it in OneDrive</td></tr>
+      <tr><td>Slow (6s)</td><td>Opening Deepak article #7.docx · Firma</td><td>Still working · this can take a moment the first time. This tab moves to the document on its own.</td></tr>
+      <tr><td>Handing off</td><td>Opening Deepak article #7.docx · Firma</td><td>Access ready · opening OneDrive</td></tr>
+      <tr><td>Couldn't open</td><td>Couldn't open Deepak article #7.docx · Firma</td><td>Heading "Couldn't open this document", then the reason from <code>regrantRefusalReason</code> / <code>failureReason</code>, unchanged</td></tr>
+      <tr><td>Check your email</td><td>Check your email · Firma</td><td>Google sent a link to you@example.com. Open it to reach the document.</td></tr>
+    </table>
+    <h3>Notes</h3>
+    <ul>
+      <li>"Where it lives" is the storage name only (OneDrive, SharePoint, Google Drive). The hook doesn't know the provider until the grant answers, so callers would pass it in (the Files list already knows <code>isOneDriveClient</code>); when it's unknown the line leaves the name out.</li>
+      <li>Firma's favicon in the tab, and the lockup top-left, both neutral. The mark and its colors come from the workspace loader unchanged: blue Underway ring while waiting, green Done check on hand-off, red only on the alert tile.</li>
+      <li>"Back to Firma" closes this tab (allowed, since Firma opened it) and lands on the page it came from, where the dialog shows the same reason. "Try again" asks for access again from this tab.</li>
+      <li>No em dashes; a middle dot between label parts. The <code>role="status"</code> region announces the line changes.</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+  const FILE = 'Deepak article #7.docx'
+  const PROVIDERS = {
+    onedrive: { name: 'OneDrive', where: 'OneDrive · SharePoint', },
+    google: { name: 'Google Drive', where: 'Google Drive' },
+  }
+  const REASONS = {
+    access: "You don't have access to this document. Ask the engagement's Lead if you need it.",
+    session: 'Your session has ended. Sign in to Firma again, then open the document.',
+    policy: "SharePoint's sharing policy doesn't allow sharing with people outside the organization. Ask the firm's Microsoft admin to allow external sharing for this site.",
+    network: 'Opening this document is taking too long. Check your connection and try again.',
+    gone: 'This document is no longer in this engagement. Refresh the list.',
+  }
+
+  const firmaMark = (cls = '') => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <defs><linearGradient id="fm" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4d4d4d"/><stop offset=".5" stop-color="#2d6d3a"/><stop offset="1" stop-color="#4aba5e"/></linearGradient></defs>
+    <g stroke="url(#fm)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><path d="M9 17c2 0 2.8-1 2.8-2.8V10c0-2 1-3.3 3.2-3"/><path d="M9 11.2h5.7"/>
+    </g></svg>`
+  const loadingMark = `<span aria-hidden="true" style="color:var(--underway);display:inline-flex"><svg width="28" height="28" viewBox="0 0 24 24" fill="none"><g class="wl-turn"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><circle class="wl-fill" cx="12" cy="12" r="3" stroke="currentColor" stroke-width="6" stroke-dasharray="18.85" transform="rotate(-90 12 12)"/></g></svg></span>`
+  const doneMark = `<span aria-hidden="true" style="color:var(--done);display:inline-flex"><svg width="28" height="28" viewBox="0 0 24 24" fill="none"><g class="wl-pop"><circle cx="12" cy="12" r="10.5" fill="currentColor"/><path class="wl-tick" d="M7.6 12.4l3 3 5.8-6.2" stroke="white" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></g></svg></span>`
+  const alertTile = `<div class="err-tile" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg></div>`
+  const mailTile = `<div class="err-tile" style="background:var(--surface-muted);color:var(--fg-muted)" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg></div>`
+  const wordIcon = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M6 2.5h8l4.5 4.5V20a1.5 1.5 0 0 1-1.5 1.5H6A1.5 1.5 0 0 1 4.5 20V4A1.5 1.5 0 0 1 6 2.5Z" fill="#fff" stroke="#a5a4a1"/><path d="M14 2.5V7h4.5" stroke="#a5a4a1"/><rect x="2.5" y="10" width="11" height="9" rx="1.5" fill="#2b579a"/><path d="M4.6 12.2l1 4.6 1.4-3.6 1.4 3.6 1-4.6" stroke="#fff" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+  const lockIcon = `<svg class="lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>`
+
+  function fileCard(p) {
+    return `<div class="file"><div class="ico">${wordIcon}</div><div class="meta"><div class="name" title="${FILE}">${FILE}</div><div class="where">${p.where}</div></div></div>`
+  }
+
+  function render(state, providerKey, reasonKey = 'access') {
+    const p = PROVIDERS[providerKey]
+    let title, body
+    if (state === 'waiting' || state === 'slow' || state === 'done') {
+      title = `Opening ${FILE} · Firma`
+      const mark = state === 'done' ? doneMark : loadingMark
+      const line = state === 'waiting'
+        ? `<p class="line">Checking your access, then opening it in ${p.name}</p>`
+        : state === 'slow'
+          ? `<p class="line">Still working · this can take a moment the first time</p><p class="sub">This tab moves to the document on its own.</p>`
+          : `<p class="line"><strong>Access ready</strong> · opening ${p.name}</p>`
+      body = `<div class="stack" role="status" aria-live="polite">${mark}${fileCard(p)}${line}</div>`
+    } else if (state === 'error') {
+      title = `Couldn't open ${FILE} · Firma`
+      body = `<div class="stack" role="alert">${alertTile}<p class="err-title">Couldn't open this document</p>${fileCard(p)}<p class="reason">${REASONS[reasonKey]}</p>
+        <div class="actions"><button class="btn">Back to Firma</button>${reasonKey === 'network' ? '<button class="btn primary">Try again</button>' : ''}${reasonKey === 'session' ? '<button class="btn primary">Sign in</button>' : ''}</div></div>`
+    } else if (state === 'email') {
+      title = `Check your email · Firma`
+      body = `<div class="stack" role="status">${mailTile}<p class="err-title">Check your email</p>${fileCard(p)}<p class="reason" style="color:var(--fg-muted)">Google sent a link to <strong style="color:var(--fg);font-weight:500">you@example.com</strong>. Open it to reach the document.</p>
+        <div class="actions"><button class="btn">Back to Firma</button></div></div>`
+    }
+    return `<div class="chrome"><div class="tabs">
+        <div class="tab">${firmaMark('fav')}<span>Engagement · Files · Firma</span></div>
+        <div class="tab active">${firmaMark('fav')}<span>${title}</span></div>
+      </div></div>
+      <div class="bar"><div class="url">${lockIcon}<span><b>app.firma.bz</b>/open</span></div></div>
+      <div class="page"><div class="lockup">${firmaMark()}<span class="wordmark">firmä</span></div>${body}</div>`
+  }
+
+  document.querySelectorAll('.browser[data-state]').forEach((el) => {
+    el.innerHTML = render(el.dataset.state, el.dataset.provider)
+  })
+
+  const failure = document.getElementById('failure')
+  document.getElementById('variants').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return
+    document.querySelectorAll('#variants button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)))
+    failure.innerHTML = render('error', 'onedrive', b.dataset.v)
+  })
+
+  // Live sequence: waiting → slow at 6s → done at 9s → the provider's page.
+  const live = document.getElementById('live')
+  let timers = []
+  function play() {
+    timers.forEach(clearTimeout); timers = []
+    live.innerHTML = render('waiting', 'onedrive')
+    timers.push(setTimeout(() => { live.innerHTML = render('slow', 'onedrive') }, 6000))
+    timers.push(setTimeout(() => { live.innerHTML = render('done', 'onedrive') }, 9000))
+    timers.push(setTimeout(() => {
+      live.innerHTML = `<div class="chrome"><div class="tabs"><div class="tab">${firmaMark('fav')}<span>Engagement · Files · Firma</span></div><div class="tab active"><span>Deepak article #7.docx · Microsoft Word</span></div></div></div>
+        <div class="bar"><div class="url">${lockIcon}<span><b>contoso-my.sharepoint.com</b>/:w:/r/personal/…</span></div></div>
+        <div class="page" style="background:#f3f2f1;color:#605e5c;font-size:13px">OneDrive opens the document here</div>`
+    }, 9500))
+  }
+  document.getElementById('replay').addEventListener('click', play)
+  play()
+</script>
+</body>
+</html>

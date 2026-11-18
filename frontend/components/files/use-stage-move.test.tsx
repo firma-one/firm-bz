@@ -107,3 +107,42 @@ describe('toast titles for a stage move', () => {
         expect(stageDoneTitle('in_review')).toBe('Stage updated')
     })
 })
+
+// A move whose answer is lost (the connection dropped) may still have been made: it's read back.
+describe('a move whose answer never arrived', () => {
+    vi.mock('@/lib/supabase', () => ({ getSession: async () => ({ access_token: 't' }) }))
+
+    function Mover({ onResult }: { onResult: (r: StageMoveResult) => void }) {
+        const { move } = useStageMove()
+        return <button onClick={() => { void move('p1', 'd1', 'approved').then(onResult) }}>move</button>
+    }
+    const moveWith = async (readBack: () => Promise<Response>) => {
+        const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+            if (init?.method === 'PATCH') throw new TypeError('Failed to fetch')
+            return readBack()
+        })
+        vi.stubGlobal('fetch', fetchMock)
+        const onResult = vi.fn()
+        render(<Mover onResult={onResult} />)
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'move' })) })
+        await waitFor(() => expect(onResult).toHaveBeenCalled())
+        vi.unstubAllGlobals()
+        return { result: onResult.mock.calls[0][0] as StageMoveResult, fetchMock }
+    }
+
+    it('says it went through when the server has it at the new stage', async () => {
+        const { result, fetchMock } = await moveWith(async () => ({ ok: true, json: async () => ({ sharing: { settings: { activity: { status: 'approved' } } } }) }) as Response)
+        expect(result).toMatchObject({ ok: true, warning: expect.stringMatching(/the move went through/) })
+        expect(fetchMock.mock.calls[1][0]).toBe('/api/projects/p1/documents/d1/sharing')
+    })
+
+    it("says it couldn't reach the server when the stage didn't change", async () => {
+        const { result } = await moveWith(async () => ({ ok: true, json: async () => ({ sharing: { settings: { activity: { status: 'in_review' } } } }) }) as Response)
+        expect(result).toMatchObject({ ok: false, error: expect.stringMatching(/^Couldn't reach/) })
+    })
+
+    it('says it could not reach the server when the read-back fails too', async () => {
+        const { result } = await moveWith(async () => { throw new TypeError('Failed to fetch') })
+        expect(result).toMatchObject({ ok: false, error: expect.stringMatching(/^Couldn't reach/) })
+    })
+})
