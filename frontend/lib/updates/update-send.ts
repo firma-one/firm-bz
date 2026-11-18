@@ -68,3 +68,37 @@ export function updateSendText(outcome: UpdateSendOutcome, published = false): {
     }
     return { type: 'warning', title: published ? 'Published, emailed to some' : 'Sent to some', message: `Sent to ${sent} of ${total}. Couldn't reach ${who || `${total - sent} of them`}.` }
 }
+
+/**
+ * Vercel caps one request to a server function at 4.5 MB, and the Overview report PDF travels inside
+ * one, written as base64 text, which is a third bigger than the file. Kept a little under the cap
+ * for the rest of the request. Checked in the browser before sending, so a PDF that wouldn't fit
+ * says so plainly instead of failing as "The server answered 413". Larger reports wait on the
+ * storage upload (.claude/plans/publish-and-send-update.md).
+ */
+export const MAX_ATTACHMENT_REQUEST_BYTES = 4_400_000
+/** The largest PDF that fits, once written as base64 (about 3.3 MB). */
+export const MAX_REPORT_PDF_BYTES = Math.floor((MAX_ATTACHMENT_REQUEST_BYTES * 3) / 4)
+
+/** A file's size the way macOS and Windows show it: "4.1 MB". */
+export function megabytes(bytes: number): string {
+    return `${(bytes / 1_000_000).toFixed(1)} MB`
+}
+
+/** The PDF's size from its base64 text. */
+export function base64Bytes(base64: string): number {
+    const padding = base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0
+    return Math.floor((base64.length * 3) / 4) - padding
+}
+
+/** Whether a PDF written as base64 is too large to send. */
+export function reportPdfTooLarge(base64: string): boolean {
+    return base64.length > MAX_ATTACHMENT_REQUEST_BYTES
+}
+
+/** What to say when it is: its size, the limit, and what to do next (`next`; empty says nothing more). */
+export function reportPdfTooLargeText(base64OrBytes: string | number, next = 'Send it without the PDF.'): string {
+    const bytes = typeof base64OrBytes === 'string' ? base64Bytes(base64OrBytes) : base64OrBytes
+    const said = `The Overview report is too large to attach (${megabytes(bytes)}; the limit is ${megabytes(MAX_REPORT_PDF_BYTES)}).`
+    return next ? `${said} ${next}` : said
+}

@@ -10,6 +10,8 @@ import {
     MAX_UPDATE_EMAILS,
     MAX_UPDATE_NOTE,
     normalizeEmail,
+    reportPdfTooLarge,
+    reportPdfTooLargeText,
     type UpdateRecipient,
     type UpdateRecipientsInfo,
     type UpdateSendOutcome,
@@ -392,15 +394,19 @@ export function UpdateEmailFields({ state, pdf = true }: { state: UpdateEmailSta
  * when nothing went; answers what each send did otherwise.
  */
 export async function sendPublishedUpdate(projectId: string, state: UpdateEmailState, pdfBase64?: string | null): Promise<UpdateSendOutcome> {
+    // Too large to travel to the server (Vercel's 4.5 MB per request): said before anything is sent.
+    if (pdfBase64 && reportPdfTooLarge(pdfBase64)) throw new Error(reportPdfTooLargeText(pdfBase64))
     const res = await fetch(`/api/projects/${projectId}/send-update`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userIds: state.chosenIds, emails: state.emails, note: state.note, ...(pdfBase64 ? { pdfBase64 } : {}) }),
     })
+    // Refused by the platform before our route ran, when the estimate above is off.
+    if (res.status === 413) throw new Error(pdfBase64 ? reportPdfTooLargeText(pdfBase64) : 'The update was too large to send. Try again.')
     const json = await res.json().catch(() => ({})) as Partial<UpdateSendOutcome> & { error?: string }
     if (!res.ok && !(typeof json.sent === 'number' && json.sent > 0)) {
-        if (typeof json.sent === 'number') return { sent: json.sent, total: json.total ?? state.count, failed: json.failed ?? [] }
+        if (typeof json.sent === 'number') return { sent: json.sent, total: json.total ?? state.count, failed: json.failed ?? [], copied: json.copied }
         throw new Error(json.error ?? `The server answered ${res.status}. Try again.`)
     }
-    return { sent: json.sent ?? 0, total: json.total ?? state.count, failed: json.failed ?? [] }
+    return { sent: json.sent ?? 0, total: json.total ?? state.count, failed: json.failed ?? [], copied: json.copied }
 }

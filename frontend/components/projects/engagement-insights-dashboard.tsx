@@ -101,7 +101,7 @@ import { DeliverablesTimeline } from './deliverables-timeline'
 // (.claude/plans/publish-and-send-update.md); its component stays, unmounted, until sign-off.
 import { EmailUpdateSheet } from './email-update-sheet'
 import { sendPublishedUpdate, useUpdateEmail } from './update-email-fields'
-import { updateSendText } from '@/lib/updates/update-send'
+import { reportPdfTooLarge, reportPdfTooLargeText, updateSendText } from '@/lib/updates/update-send'
 import { BrioWorkingSparkle } from '@/components/brio/brio-working-sparkle'
 import { MissingSectionsWarning } from './summary-draft-review'
 import { dropUnfilledLeadSections, hasRisks, missingLeadSections, withLeadSections } from '@/lib/ai/summary-sections'
@@ -2865,6 +2865,14 @@ export function EngagementInsightsDashboard({
             for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i])
             const pdfBase64 = btoa(binary)
             if (!pdfBase64) throw new Error('PDF generation produced empty output')
+            // Too large to reach the server (Vercel's 4.5 MB per request): said before sending.
+            if (reportPdfTooLarge(pdfBase64)) {
+                const reason = reportPdfTooLargeText(pdfBase64, '')
+                setShareError(reason)
+                setShareState('error')
+                addToast({ type: 'error', title: 'Report not sent', message: reason })
+                return
+            }
 
             setShareState('sending')
             const pageUrl = typeof window !== 'undefined' ? window.location.href : ''
@@ -2873,6 +2881,7 @@ export function EngagementInsightsDashboard({
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
                 body: JSON.stringify({ pdfBase64, pageUrl }),
             })
+            if (res.status === 413) throw new Error(reportPdfTooLargeText(pdfBase64, ''))
             const json = await res.json().catch(() => ({})) as Partial<ShareReportOutcome> & { error?: string }
             if (!res.ok) throw new Error(json?.error ?? `The server answered ${res.status}. Try again.`)
             // What the sends really did (OT-3): all of them, or "Sent to 3 of 5. Couldn't reach Ana, Raj."
@@ -2964,6 +2973,13 @@ export function EngagementInsightsDashboard({
                 pdf = await capturePdfBase64()
             } catch {
                 addToast({ type: 'error', title: 'Published, but not emailed', message: "Couldn't create the PDF. Email it from the mail icon, with or without one." })
+                resetEmailOnPublish()
+                return
+            }
+            // Too large to send (Vercel's 4.5 MB per request): nothing goes, and the person decides.
+            if (reportPdfTooLarge(pdf)) {
+                addToast({ type: 'error', title: 'Published, but not emailed', message: reportPdfTooLargeText(pdf, 'Email it from the mail icon without the PDF.') })
+                resetEmailOnPublish()
                 return
             }
         }
