@@ -32,9 +32,14 @@ import {
  * POST: emails the engagement's PUBLISHED update, whole, to the people chosen and any addresses typed
  * in. The text is read here, never taken from the request, so only what a Lead published goes out.
  * People on the engagement also get it in their Inbox and a link into it; an address that isn't on
- * the engagement gets the email only, with Reply-To set to the sender. An optional note goes above
+ * the engagement gets the email in their mailbox but can't open it in Firma, with Reply-To set to
+ * the sender. An optional note goes above
  * it, and the Overview as a PDF can go with it (captured in the browser, as Download PDF does; it is
  * why this is a route and not a server action: the PDF is too big for one).
+ *
+ * The sender always gets a copy (Deepak, 2026-11-18: "a system email … add myself in the cc field by
+ * default, non-removable"). Each person gets an email of their own, so no one sees anyone else's
+ * address; the sender's copy says who it went to.
  *
  * Leads only, and not on a completed engagement. Sending calls no model, so it costs no credit.
  */
@@ -66,6 +71,9 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
             recipients: people.filter((p) => p.userId !== auth.user.id).map(({ userId, name, role, email }) => ({ userId, name, role, email })),
             lastSent: last
                 ? { sentAt: last.sentAt, to: [...last.recipientUserIds.map((id) => nameOf.get(id) ?? 'someone no longer on it'), ...(last.recipientEmails ?? [])] }
+                : null,
+            cc: auth.user.email
+                ? { name: resolveDisplayName(auth.user.user_metadata ?? {}, auth.user.email) || auth.user.email, email: auth.user.email }
                 : null,
         }
         return NextResponse.json(info)
@@ -124,6 +132,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             if (member) ids.add(member.userId)
             else emails.add(email)
         }
+        // The sender is in Cc, always: never a second time in To.
+        ids.delete(user.id)
+        if (user.email) emails.delete(user.email.toLowerCase())
         if (emails.size > MAX_UPDATE_EMAILS) {
             return NextResponse.json({ error: `Add up to ${MAX_UPDATE_EMAILS} email addresses at a time.`, code: 'too_many' }, { status: 400 })
         }
@@ -210,12 +221,20 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             ...memberIds.map((id) => ({ to: byId.get(id)!.email, label: byId.get(id)!.name, mail: forMembers, options: undefined })),
             ...Array.from(emails).map((email) => ({ to: email, label: email, mail: forAddresses, options: replyTo })),
         ]
-        const sends = await Promise.allSettled(targets.map((t) => sendEmail(t.to, t.mail.subject, t.mail.html, attachments, t.options)))
+        // The sender's copy: the members' email (with the link), saying who it went to.
+        const copy = user.email
+            ? renderEngagementUpdateEmail({ ...base, ctaUrl, copyOf: targets.map((t) => t.label) })
+            : null
+        const [sends, copySend] = await Promise.all([
+            Promise.allSettled(targets.map((t) => sendEmail(t.to, t.mail.subject, t.mail.html, attachments, t.options))),
+            copy && user.email ? sendEmail(user.email, copy.subject, copy.html, attachments).then((v) => !!v, () => false) : Promise.resolve(false),
+        ])
         const reached = (i: number) => sends[i].status === 'fulfilled' && !!(sends[i] as PromiseFulfilledResult<unknown>).value
         const outcome: UpdateSendOutcome = {
             sent: targets.filter((_, i) => reached(i)).length,
             total: targets.length,
             failed: targets.filter((_, i) => !reached(i)).map((t) => t.label),
+            copied: copySend,
         }
 
         await emitAuditEvent({

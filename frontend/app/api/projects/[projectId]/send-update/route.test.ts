@@ -82,6 +82,8 @@ describe('GET: who it goes to', () => {
         expect(json.recipients.map((r: { userId: string }) => r.userId)).toEqual(['dana', 'sam'])
         expect(json.recipients[0]).toEqual({ userId: 'dana', name: 'Dana Whitfield', role: 'Reviewer', email: 'dana@client.com' })
         expect(json.lastSent).toEqual({ sentAt: '2026-10-21T09:00:00Z', to: ['Dana Whitfield', 'jo@acme.com'] })
+        // The sender, always copied.
+        expect(json.cc).toEqual({ name: 'Priya Shah', email: 'priya@firm.co' })
     })
 
     it('is for Leads only', async () => {
@@ -94,10 +96,13 @@ describe('POST: sending the published update', () => {
     it('emails the whole published update, with Inbox and a link for members, and keeps the send', async () => {
         const res = await post({ userIds: ['dana', 'sam'], emails: ['Jordan.Lee@AcmeRobotics.com'], note: 'Ahead of Friday.' })
         expect(res.status).toBe(200)
-        expect(await res.json()).toEqual({ sent: 3, total: 3, failed: [] })
+        expect(await res.json()).toEqual({ sent: 3, total: 3, failed: [], copied: true })
 
         const calls = sendEmail.mock.calls as unknown as Array<[string, string, string, unknown, { headers?: Record<string, string> } | undefined]>
-        expect(calls.map((c) => c[0])).toEqual(['dana@client.com', 'sam@firm.co', 'jordan.lee@acmerobotics.com'])
+        expect(calls.map((c) => c[0])).toEqual(['dana@client.com', 'sam@firm.co', 'jordan.lee@acmerobotics.com', 'priya@firm.co'])
+        // The sender's copy says who it went to.
+        expect(calls[3][2]).toContain('Your copy. Sent to Dana Whitfield, Sam Patel and jordan.lee@acmerobotics.com.')
+        expect(calls[0][2]).not.toContain('Your copy')
         const [, subject, memberHtml] = calls[0]
         expect(subject).toBe('Update from Halden Advisory · Q4 Positioning')
         expect(memberHtml).toContain('On track.')
@@ -123,6 +128,11 @@ describe('POST: sending the published update', () => {
     it('never sends text from the request, only what was published', async () => {
         await post({ userIds: ['dana'], text: 'Something else entirely' })
         expect((sendEmail.mock.calls[0] as unknown as string[])[2]).not.toContain('Something else entirely')
+    })
+
+    it('never sends the sender a second email as a recipient: they get their copy', async () => {
+        await post({ userIds: ['dana', 'lead'], emails: ['Priya@Firm.co'] })
+        expect((sendEmail.mock.calls as unknown as string[][]).map((c) => c[0])).toEqual(['dana@client.com', 'priya@firm.co'])
     })
 
     it('treats a typed address that belongs to someone on the engagement as that person', async () => {
@@ -169,6 +179,6 @@ describe('POST: sending the published update', () => {
     it('says who it could not reach', async () => {
         sendEmail.mockRejectedValueOnce(new Error('bounced'))
         const res = await post({ userIds: ['dana', 'sam'] })
-        expect(await res.json()).toEqual({ sent: 1, total: 2, failed: ['Dana Whitfield'] })
+        expect(await res.json()).toEqual({ sent: 1, total: 2, failed: ['Dana Whitfield'], copied: true })
     })
 })

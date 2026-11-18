@@ -42,6 +42,8 @@ function tourRecipients(today: Date): UpdateRecipientsInfo {
             .sort((a, b) => (a.slug === 'eng_viewer' ? -1 : b.slug === 'eng_viewer' ? 1 : a.name.localeCompare(b.name)))
             .map((m) => ({ userId: `tour-${m.email}`, name: m.name, role: ROLE_NAME[m.slug], email: m.email })),
         lastSent: { sentAt: new Date(today.getTime() - 14 * 86400000).toISOString(), to: ['Morgan Ellis'] },
+        // The tour's signed-in Lead, always copied, as in the app.
+        cc: { name: 'Demo User', email: 'demo@beacongrowth.com' },
     }
 }
 

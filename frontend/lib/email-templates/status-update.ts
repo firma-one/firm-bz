@@ -49,6 +49,8 @@ interface EngagementUpdateEmailParams {
     note?: string | null
     /** Into the engagement, for its members. People emailed by address get none: it wouldn't open. */
     ctaUrl?: string | null
+    /** The sender's copy: who it went to, said at the top. */
+    copyOf?: string[]
 }
 
 const SECTION_LABEL = 'margin:0 0 6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#6B7A75;'
@@ -70,7 +72,7 @@ function proseBlock(block: string): string {
  * Overview shows and the PDF prints, so the three never disagree.
  */
 export function renderEngagementUpdateEmail(params: EngagementUpdateEmailParams): { subject: string; html: string } {
-    const { firmName, engagementName, senderName, summary, byline, note, ctaUrl } = params
+    const { firmName, engagementName, senderName, summary, byline, note, ctaUrl, copyOf } = params
     const subject = `Update from ${firmName} · ${engagementName}`
 
     const sections = summary.split(/^## /m)
@@ -90,7 +92,15 @@ export function renderEngagementUpdateEmail(params: EngagementUpdateEmailParams)
         ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#F4F6F5" style="background-color:#F4F6F5;border-radius:10px;margin:0 0 24px;"><tr><td style="padding:14px 18px;font-size:15px;line-height:1.6;color:#3F5650;">${escHtml(note.trim()).replace(/\n/g, '<br>')}<br><span style="color:#6B7A75;">${escHtml(senderName)}</span></td></tr></table>`
         : ''
 
+    const listed = (copyOf ?? []).length <= 1
+        ? (copyOf ?? [])[0] ?? ''
+        : `${copyOf!.slice(0, -1).join(', ')} and ${copyOf![copyOf!.length - 1]}`
+    const copyHtml = copyOf
+        ? `<p style="margin:0 0 18px;font-size:13px;line-height:1.5;color:#6B7A75;">Your copy. Sent to ${escHtml(listed)}.</p>`
+        : ''
+
     const body = [
+        copyHtml,
         emailHeading(`${engagementName}: an update`),
         noteHtml,
         ...blocks,

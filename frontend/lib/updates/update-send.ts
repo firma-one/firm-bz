@@ -19,6 +19,8 @@ export interface UpdateRecipient {
 export interface UpdateRecipientsInfo {
     recipients: UpdateRecipient[]
     lastSent: { sentAt: string; to: string[] } | null
+    /** The sender, always copied (Cc), not removable. */
+    cc?: { name: string; email: string } | null
 }
 
 /** What a send did: how many it reached, of how many, and who it couldn't (by name or address). */
@@ -26,6 +28,8 @@ export interface UpdateSendOutcome {
     sent: number
     total: number
     failed: string[]
+    /** Whether the sender's own copy went. */
+    copied?: boolean
 }
 
 /** Addresses typed in beside the engagement's people, per send. */
@@ -50,8 +54,9 @@ function listOf(items: string[]): string {
 export function updateSendText(outcome: UpdateSendOutcome, published = false): { type: 'success' | 'warning' | 'error'; title: string; message: string } {
     const { sent, total, failed } = outcome
     const people = (n: number) => `${n} ${n === 1 ? 'person' : 'people'}`
+    const copy = outcome.copied === false ? " Your copy didn't go through." : outcome.copied ? ' You got a copy.' : ''
     if (sent >= total && total > 0) {
-        return { type: 'success', title: published ? 'Published and emailed' : 'Update sent', message: `Emailed to ${people(total)}.` }
+        return { type: 'success', title: published ? 'Published and emailed' : 'Update sent', message: `Emailed to ${people(total)}.${copy}` }
     }
     const who = failed.length ? listOf(failed.slice(0, 4)) + (failed.length > 4 ? ` and ${failed.length - 4} more` : '') : ''
     if (sent === 0) {

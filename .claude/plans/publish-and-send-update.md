@@ -12,8 +12,12 @@ Mock: https://claude.ai/artifact/HrnCvBZYPn32HKaFBRMvU6 (row "Publish & send"). 
   Lead's: the review pane keeps a box for each; left empty, they're left out when published (no more
   "NA" to get past the gate). Warn before publishing and before sending when they're missing.
 - Recipients: everyone on the engagement (any role, not the sender) is filled in, each removable;
-  any email address can be added. Addresses not on the engagement are "email only": no Inbox, no
-  link into Firma, Reply-To is the sender.
+  any email address can be added. An address not on the engagement is marked "· not on this
+  engagement": they get the email in their mailbox but can't open it in Firma (no Inbox item, no
+  link), and replies come to the sender. A suggestion row under To says what Enter will add.
+- Cc: the sender, always, as a read-only field under To (Deepak, 2026-11-18: "a system email … add
+  myself in the cc field by default, non-removable"). Each recipient gets their own email; the
+  sender gets one copy saying who it went to.
 - Optional note from the sender, above the update.
 - Optional: attach the Overview as a PDF (the same capture as Download PDF).
 - Simplified (Deepak, 2026-11-18): **one email form**, Email this update, and the pencil opens the

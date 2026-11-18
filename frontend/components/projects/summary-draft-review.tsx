@@ -303,7 +303,7 @@ export function SummaryDraftReview({
                     <p className="flex items-start gap-1.5 text-caption text-fg-muted">
                         <span>
                             {emailing
-                                ? `Publishing saves this as the engagement summary everyone on it sees, then emails it from you to ${peopleCount(email!.state.count)}.`
+                                ? `Publishing saves this as the engagement summary everyone on it sees, then emails it from you to ${peopleCount(email!.state.count)}${email!.state.info?.cc ? ', with a copy to you' : ''}.`
                                 : 'Publishing saves this as the engagement summary everyone on it sees.'}
                         </span>
                         <InfoHint
