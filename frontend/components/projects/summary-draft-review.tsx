@@ -7,7 +7,7 @@ import { Brio } from '@/components/ui/brio'
 import { BrioSections } from '@/components/ui/brio-sections'
 import { BrioTypedText, ThinkingDots, useTypedText } from '@/components/brio/brio-typing'
 import { InfoHint } from './overview-charts'
-import { EmailOnPublish, peopleCount, type UpdateEmailState } from './update-email-fields'
+import { AlsoEmailIt, peopleCount, type UpdateEmailState } from './update-email-fields'
 import { cn, formatRelativeTime } from '@/lib/utils'
 import { LEAD_PLACEHOLDER, LEAD_SECTIONS, hasRisks, isPlaceholderText, splitSections, withLeadSections, writeSection } from '@/lib/ai/summary-sections'
 
@@ -55,14 +55,15 @@ export interface SummaryDraftReviewProps {
      */
     kind?: 'draft' | 'edit'
     /**
-     * "Also email it to …" by the Publish button (Deepak, 2026-11-18): ticked, Publish publishes and
-     * then emails the people it names; Change opens Email this update to choose. Absent: no email.
+     * "Also email it" at the top of the pane (Deepak, 2026-11-18): ticked, Email this update's fields
+     * open under it, and Publish publishes, then emails them. Absent: no email.
      */
     email?: {
         on: boolean
         onToggle: (on: boolean) => void
         state: UpdateEmailState
-        onChange: () => void
+        /** The Overview can be attached as a PDF (not on the /tour). */
+        pdf: boolean
     }
     busyAction: 'publish' | 'dismiss' | null
     onPublish: () => void
@@ -173,8 +174,9 @@ export function SummaryDraftReview({
     const missing = LEAD_SECTIONS.filter((h) => unfilledSections.includes(h) || !sections.some((s) => s.heading === h && !isPlaceholderText(s.body)))
     const editing = kind === 'edit'
     const emailing = !!email?.on && email.state.count > 0
-    // Ticked, but who to send to hasn't loaded yet: wait for it rather than publish without the email.
-    const emailNotReady = !!email?.on && !email.state.info
+    // Ticked, but no one to send to yet (still loading, or everyone removed): wait, rather than
+    // publish without the email the person asked for.
+    const emailNotReady = !!email?.on && (!email.state.info || email.state.count === 0)
     // A summary in sections can be missing the lead's; one written by hand without any isn't.
     const structured = /^## /m.test(value)
     const warnMissing = structured ? missing : []
@@ -215,6 +217,13 @@ export function SummaryDraftReview({
             </div>
 
             <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4">
+                {/* Who it goes to and your note, first: the email's own order (who, your note, then
+                    the update below), the same fields as the mail icon's pane. */}
+                {email && !writing && (
+                    <div className="-mx-4 -mt-4 mb-5 border-b border-line bg-surface-subtle px-4 py-3">
+                        <AlsoEmailIt on={email.on} onToggle={email.onToggle} state={email.state} pdf={email.pdf} />
+                    </div>
+                )}
                 {/* Said before publishing: the draft describes the engagement as it was when Brio
                     wrote it. Publishing it anyway is the lead's call, and records today's data. */}
                 {draftBehind && !writing && (
@@ -290,7 +299,6 @@ export function SummaryDraftReview({
                     {note && <p className="text-caption text-action">{note}</p>}
                     {/* Warned, not blocked: unwritten, they're left out of what publishes. */}
                     <MissingSectionsWarning missing={warnMissing} risks={hasRisks(withLead)} />
-                    {email && <EmailOnPublish on={email.on} onToggle={email.onToggle} state={email.state} onChange={email.onChange} />}
                     {/* One line: what publishing does. The detail is in the tip. */}
                     <p className="flex items-start gap-1.5 text-caption text-fg-muted">
                         <span>

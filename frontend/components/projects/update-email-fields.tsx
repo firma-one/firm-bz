@@ -116,60 +116,25 @@ function listOf(items: string[]): string {
 }
 
 /**
- * Who it goes to, in words, for "Also email it to …": the people chosen and the addresses typed,
- * "Morgan Ellis, Sam Rivera and Jordan Lee", or the first two and "4 others" when it's a longer list.
- * Empty when no one is chosen; null while who to send to is still loading.
- */
-export function recipientSentence(state: Pick<UpdateEmailState, 'info' | 'chosenIds' | 'emails'>): string | null {
-    if (!state.info) return null
-    const names = [
-        ...state.info.recipients.filter((r) => state.chosenIds.includes(r.userId)).map((r) => r.name),
-        ...state.emails,
-    ]
-    if (names.length <= 3) return listOf(names)
-    return listOf([...names.slice(0, 2), `${names.length - 2} others`])
-}
-
-/**
- * The review pane's "Also email it" (Deepak, 2026-11-18): one checkbox that says who, by name, beside
- * the one Publish button; Change opens Email this update to choose. Ticked, Publish publishes and then
+ * "Also email it" at the top of the review and edit pane (Deepak, 2026-11-18): ticked, the same
+ * fields as Email this update open under it (everyone on the engagement filled in, addresses to
+ * add, a note, the PDF), in the email's own order above the update. Publish then publishes and
  * emails them.
  */
-export function EmailOnPublish({ on, onToggle, state, onChange }: {
+export function AlsoEmailIt({ on, onToggle, state, pdf = true }: {
     on: boolean
     onToggle: (on: boolean) => void
     state: UpdateEmailState
-    /** Opens Email this update to choose who, add addresses, a note or the PDF. */
-    onChange: () => void
+    pdf?: boolean
 }) {
-    const who = recipientSentence(state)
-    const extras = [state.note.trim() && 'your note', state.withPdf && 'the PDF'].filter(Boolean) as string[]
-    const nobody = who === ''
     return (
-        <div className="flex flex-wrap items-start gap-x-1.5 gap-y-1 text-small text-fg">
-            <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-2">
-                <Checkbox
-                    checked={on && !nobody}
-                    onCheckedChange={(v) => onToggle(v === true)}
-                    disabled={nobody}
-                    className="mt-0.5"
-                />
-                <span className="min-w-0">
-                    {who === null
-                        ? 'Also email it to everyone on this engagement'
-                        : nobody
-                            ? <span className="text-fg-muted">No one to email yet: add an address with Change</span>
-                            : <>Also email it to <span className="font-medium">{who}</span></>}
-                    {!nobody && extras.length > 0 && <span className="text-fg-muted"> · with {listOf(extras)}</span>}
-                </span>
+        <div className="flex flex-col gap-3">
+            <label className="flex w-fit cursor-pointer items-center gap-2 text-small font-medium text-fg">
+                <Checkbox checked={on} onCheckedChange={(v) => onToggle(v === true)} />
+                Also email it
+                {!on && <span className="font-normal text-fg-muted">· to everyone on the engagement, and any address you add</span>}
             </label>
-            <button
-                type="button"
-                onClick={onChange}
-                className="shrink-0 rounded-control text-small text-fg-muted underline-offset-2 hover:text-fg hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action/30"
-            >
-                Change
-            </button>
+            {on && <UpdateEmailFields state={state} pdf={pdf} />}
         </div>
     )
 }

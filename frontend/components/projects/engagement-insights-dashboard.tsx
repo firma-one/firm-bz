@@ -2931,11 +2931,10 @@ export function EngagementInsightsDashboard({
     // One email form: the sheet the card's mail icon opens (the toolbar's Email opens it with the PDF
     // ticked, and Publish & send… opens it once the update is published).
     const [emailSheet, setEmailSheet] = useState<{ pdf: boolean } | null>(null)
-    // The review pane's "Also email it to …" (Deepak, 2026-11-18): who, loaded while a draft or an
-    // edit is open; Change edits it in the same form, in its choose mode.
+    // The review and edit pane's "Also email it" at the top (Deepak, 2026-11-18): who, loaded while a
+    // draft or an edit is open, in the same fields as Email this update.
     const [emailOnPublish, setEmailOnPublish] = useState(false)
     const publishEmail = useUpdateEmail({ projectId, active: isFirmAdmin && (aiStreaming || !!data?.insightsSummaryDraft || summaryEditing) })
-    const [choosingRecipients, setChoosingRecipients] = useState(false)
     /** Unticked, everyone, no address, no note: each draft or edit starts there. */
     const resetEmailOnPublish = () => {
         setEmailOnPublish(false)
@@ -3296,7 +3295,7 @@ export function EngagementInsightsDashboard({
         // Stopping throws the unfinished draft away, as Discard does; with nothing left to
         // review the pane closes itself, and the published summary stays as it was.
         onStop: () => { void discardDraft() },
-        email: { on: emailOnPublish, onToggle: setEmailOnPublish, state: publishEmail, onChange: () => setChoosingRecipients(true) },
+        email: { on: emailOnPublish, onToggle: setEmailOnPublish, state: publishEmail, pdf: true },
     }
     // The pencil's edit, in the same pane: every section a box, Cancel instead of Discard.
     const editProps: SummaryDraftReviewProps = {
@@ -3311,7 +3310,7 @@ export function EngagementInsightsDashboard({
         unfilledSections: findUnfilledSections(summaryDraft),
         busyAction: summarySaving ? 'publish' : null,
         onPublish: () => { void handleSummarySave() },
-        email: { on: emailOnPublish, onToggle: setEmailOnPublish, state: publishEmail, onChange: () => setChoosingRecipients(true) },
+        email: { on: emailOnPublish, onToggle: setEmailOnPublish, state: publishEmail, pdf: true },
         onDismiss: () => { if (editChanged) setConfirmDiscard('edit'); else setSummaryEditing(false) },
         onCopy: () => copySummary(summaryDraft, 'draft'),
         copied: summaryCopied === 'draft',
@@ -3399,21 +3398,6 @@ export function EngagementInsightsDashboard({
             Team Status moved to the Members tab; File Organization, the Action Center's housekeeping
             and Document Activity to the Files tab's Health and Recent views. */}
         {navSlot ? createPortal(overviewToolbar, navSlot) : null}
-        {isFirmAdmin && (
-            // "Also email it · Change": the same form, editing the review pane's choices.
-            <EmailUpdateSheet
-                mode="choose"
-                open={choosingRecipients}
-                onOpenChange={setChoosingRecipients}
-                projectId={projectId}
-                summary=""
-                publishedAt={null}
-                stale={false}
-                state={publishEmail}
-                capturePdf={capturePdfBase64}
-                onDone={() => setEmailOnPublish(publishEmail.count > 0)}
-            />
-        )}
         {isFirmAdmin && data?.insightsSummary && (
             <EmailUpdateSheet
                 open={!!emailSheet}

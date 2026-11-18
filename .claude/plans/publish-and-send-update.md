@@ -18,11 +18,11 @@ Mock: https://claude.ai/artifact/HrnCvBZYPn32HKaFBRMvU6 (row "Publish & send"). 
 - Optional: attach the Overview as a PDF (the same capture as Download PDF).
 - Simplified (Deepak, 2026-11-18): **one email form**, Email this update, and the pencil opens the
   **same pane** as Brio's drafts, every section a box (Cancel instead of Discard).
-- Checkbox, not two buttons (Deepak, 2026-11-18: "Publish & send" didn't say email or to whom): by the
-  one Publish button, "☐ Also email it to Morgan Ellis, Sam Rivera and Jordan Lee · Change" (first two
-  and "N others" when longer). Ticked, the button reads "Publish & email 3 people" and one click
-  publishes then emails. Change opens Email this update in its choose mode (To, addresses, note, PDF,
-  Done). Unticked each time a draft or edit starts. In the review and edit pane alike.
+- "Also email it" at the TOP of the review and edit pane (Deepak, 2026-11-18, after trying a
+  bottom checkbox naming who): ticked, the same fields as Email this update open under it (everyone
+  filled in and removable, add an address, note, PDF), then the update below. One Publish button,
+  "Publish & email N people" when ticked. Rejected along the way: two buttons "Publish" / "Publish &
+  send…" (didn't say email or to whom) and a bottom checkbox with Change.
 
 ## Build
 

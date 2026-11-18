@@ -66,13 +66,12 @@ export function DemoSummaryCard({ input, today }: { input: DemoSummaryInput; tod
     const [copied, setCopied] = useState<'published' | 'draft' | null>(null)
     const timer = useRef<number | null>(null)
     const { addToast } = useToast()
-    // Email this update and "Also email it to …", as the app has them, with the tour's people;
+    // Email this update and "Also email it", as the app has them, with the tour's people;
     // nothing is sent.
     const tourInfo = useMemo(() => tourRecipients(today), [today])
     const [emailSheetOpen, setEmailSheetOpen] = useState(false)
     const [emailOnPublish, setEmailOnPublish] = useState(false)
     const publishEmail = useUpdateEmail({ projectId: 'tour', active: true, demo: tourInfo })
-    const [choosingRecipients, setChoosingRecipients] = useState(false)
 
     // The pane, exactly as the app's Overview drives it (engagement-insights-dashboard.tsx).
     const rightPane = useRightPane()
@@ -184,8 +183,8 @@ export function DemoSummaryCard({ input, today }: { input: DemoSummaryInput; tod
         onRewrite: rewrite,
         // As in the app: stopping throws the unfinished draft away and closes the pane.
         onStop: () => { discard(); clearPaneRef.current() },
-        // As the app: "Also email it to …" by the Publish button; Change opens the email form.
-        email: { on: emailOnPublish, onToggle: setEmailOnPublish, state: publishEmail, onChange: () => setChoosingRecipients(true) },
+        // As the app: "Also email it" at the top, the email's fields under it.
+        email: { on: emailOnPublish, onToggle: setEmailOnPublish, state: publishEmail, pdf: false },
     }
     useLayoutEffect(() => {
         summaryReviewStore.set(reviewing ? reviewProps : null)
@@ -245,18 +244,6 @@ export function DemoSummaryCard({ input, today }: { input: DemoSummaryInput; tod
                 byline={<BrioByline source="ai" publisherName={TOUR_PUBLISHER} date={published.publishedAt} />}
             />
 
-            <EmailUpdateSheet
-                mode="choose"
-                open={choosingRecipients}
-                onOpenChange={setChoosingRecipients}
-                projectId="tour"
-                summary=""
-                publishedAt={null}
-                stale={false}
-                state={publishEmail}
-                demo={tourInfo}
-                onDone={() => setEmailOnPublish(publishEmail.count > 0)}
-            />
             <EmailUpdateSheet
                 open={emailSheetOpen}
                 onOpenChange={setEmailSheetOpen}
