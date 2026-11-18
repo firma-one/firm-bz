@@ -319,24 +319,28 @@ export function NeedsYou({ mine, others, othersCount, passed, loading }: {
 // ─── 3 · Latest update ───────────────────────────────────────────────────────
 
 /**
- * The published summary in two parts: its first section, and the rest. A summary without headings
- * (written by hand) is all first part.
+ * The published summary, one entry per section (`## Summary`, `## Progress`, …). Anything before the
+ * first heading goes with the first section. A summary without headings (written by hand) is one section.
  */
-export function splitUpdate(content: string): { first: string; rest: string | null; restSections: number } {
+export function splitUpdate(content: string): string[] {
     const lines = content.split('\n')
     const headings = lines.map((l, i) => (/^#{1,6}\s+/.test(l) ? i : -1)).filter((i) => i >= 0)
-    if (headings.length < 2) return { first: content, rest: null, restSections: 0 }
-    return {
-        first: lines.slice(0, headings[1]).join('\n').trim(),
-        rest: lines.slice(headings[1]).join('\n').trim(),
-        restSections: headings.length - 1,
-    }
+    if (headings.length < 2) return [content.trim()]
+    const starts = [0, ...headings.slice(1)]
+    return starts
+        .map((start, i) => lines.slice(start, starts[i + 1] ?? lines.length).join('\n').trim())
+        .filter(Boolean)
 }
 
+const moreSections = (n: number) => `Read the full update · ${n} more section${n === 1 ? '' : 's'}`
+
 /**
- * The latest update: the published summary, its first section on screen and the rest behind "Read the
- * full update" (it was the Engagement Summary card, every section always open). The whole of it is in
- * the export. The caller brings the controls (review a draft, write with Brio, copy) and the byline.
+ * The latest update, in a card of its own (mock: https://claude.ai/artifact/HrnCvBZYPn32HKaFBRMvU6,
+ * option A). Its sections sit in two columns on a wide page, one on a narrow one, so the text uses the
+ * width without running into long lines. Closed, it shows the first row: Summary and Progress side by
+ * side, or Summary alone in one column. The rest is behind "Read the full update". The card's footer
+ * holds that and the byline. The whole of it is in the export. The caller brings the controls (review
+ * a draft, write with Brio, copy) and the byline.
  */
 export function LatestUpdate({ content, meta, actions, notice, editor, empty, byline }: {
     content: string | null
@@ -352,34 +356,62 @@ export function LatestUpdate({ content, meta, actions, notice, editor, empty, by
     byline?: React.ReactNode
 }) {
     const [open, setOpen] = useState(false)
-    const parts = content ? splitUpdate(content) : null
+    const sections = content ? splitUpdate(content) : null
+    const count = sections?.length ?? 0
+    // What "Read the full update" holds back: all but the first section in one column, all but the
+    // first two in two.
+    const moreNarrow = count - 1
+    const moreWide = Math.max(0, count - 2)
     return (
         <section aria-labelledby="latest-update-h" className="flex flex-col gap-3" data-demo-tour="engagement-ai-summary" {...(content ? {} : { 'data-no-export': '' })}>
             <OverviewSectionHeading id="latest-update-h" icon={FileText} title="Latest update" after={meta} actions={actions} />
             {notice && <div data-no-export="">{notice}</div>}
             {editor ? (
                 <div data-no-export="">{editor}</div>
-            ) : parts ? (
-                <div className="flex max-w-3xl flex-col gap-3">
-                    <BrioSections content={parts.first} className="text-fg" />
-                    {parts.rest && (
-                        <div {...(open ? {} : { 'data-export-only': '', style: { display: 'none' } })}>
-                            <BrioSections content={parts.rest} className="text-fg" />
+            ) : sections ? (
+                <div className="@container overflow-hidden rounded-card border border-line bg-surface">
+                    <div className={cn('grid grid-cols-1 gap-x-12 gap-y-6 px-6 py-5', count > 1 && '@4xl:grid-cols-2')}>
+                        {sections.map((section, i) => {
+                            const shown = open || i === 0
+                            return (
+                                <div
+                                    key={i}
+                                    // Held back: hidden on screen (the second only in one column), still in
+                                    // the export, which drops the `hidden` of anything export-only.
+                                    {...(shown ? {} : { 'data-export-only': '' })}
+                                    className={cn('min-w-0', count === 1 && 'max-w-3xl', !shown && (i === 1 ? 'hidden @4xl:block' : 'hidden'))}
+                                >
+                                    <BrioSections content={section} className="text-fg" />
+                                </div>
+                            )
+                        })}
+                    </div>
+                    {(moreNarrow > 0 || byline) && (
+                        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 border-t border-line px-6 py-2.5">
+                            {moreNarrow > 0 && (
+                                <button
+                                    type="button"
+                                    data-no-export=""
+                                    aria-expanded={open}
+                                    onClick={() => setOpen((o) => !o)}
+                                    // Two sections in two columns: both are already showing.
+                                    className={cn(
+                                        'inline-flex items-center gap-1 rounded-control text-small font-medium text-fg-muted transition-colors hover:text-fg',
+                                        moreWide === 0 && '@4xl:hidden',
+                                    )}
+                                >
+                                    {open ? 'Show less' : (
+                                        <>
+                                            <span className="@4xl:hidden">{moreSections(moreNarrow)}</span>
+                                            <span className="hidden @4xl:inline">{moreSections(moreWide)}</span>
+                                        </>
+                                    )}
+                                    {open ? <ChevronUp className="h-3.5 w-3.5" aria-hidden /> : <ChevronDown className="h-3.5 w-3.5" aria-hidden />}
+                                </button>
+                            )}
+                            {byline}
                         </div>
                     )}
-                    {parts.rest && (
-                        <button
-                            type="button"
-                            data-no-export=""
-                            aria-expanded={open}
-                            onClick={() => setOpen((o) => !o)}
-                            className="inline-flex items-center gap-1 self-start rounded-control text-small font-medium text-fg-muted transition-colors hover:text-fg"
-                        >
-                            {open ? 'Show less' : `Read the full update · ${parts.restSections} more section${parts.restSections === 1 ? '' : 's'}`}
-                            {open ? <ChevronUp className="h-3.5 w-3.5" aria-hidden /> : <ChevronDown className="h-3.5 w-3.5" aria-hidden />}
-                        </button>
-                    )}
-                    {byline}
                 </div>
             ) : (
                 <div data-no-export="">{empty}</div>

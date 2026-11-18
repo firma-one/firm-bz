@@ -206,10 +206,18 @@ describe('engagement actions (P1-06, P1-10, P1-11)', () => {
         expect(await provisionEngagementDriveFolder('e1')).toMatchObject({ ok: false, code: 'no_connector' })
     })
 
-    it('the publish gate reaches the person: "Complete these sections before publishing"', async () => {
+    it('publishing leaves out a lead section nobody wrote, rather than refusing it', async () => {
+        // It used to refuse ("Complete these sections before publishing"), so "NA" got typed in to
+        // get past it (.claude/plans/publish-and-send-update.md).
         const text = '## Summary\nOn track.\n\n## Next Steps\n_Awaiting the Lead\u2019s input._'
         db.engagement.findFirst.mockResolvedValue({ settings: { insightsSummary: { draft: { text, status: 'pending_review' } } } })
-        expect(await approveEngagementAiSummary('e1')).toEqual({ ok: false, code: 'unfilled_sections', error: 'Complete these sections before publishing: Next Steps' })
+        expect(await approveEngagementAiSummary('e1')).toMatchObject({ ok: true, data: { published: '## Summary\nOn track.' } })
+    })
+
+    it('a summary that is nothing but unwritten lead sections is refused as empty', async () => {
+        const text = '## Next Steps\n_Awaiting the Lead\u2019s input._'
+        db.engagement.findFirst.mockResolvedValue({ settings: { insightsSummary: { draft: { text, status: 'pending_review' } } } })
+        expect(await approveEngagementAiSummary('e1')).toMatchObject({ ok: false, code: 'empty_summary' })
         expect(db.engagement.update).not.toHaveBeenCalled()
     })
 

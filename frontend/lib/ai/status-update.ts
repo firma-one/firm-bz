@@ -26,6 +26,12 @@ export interface SentStatusUpdate {
     sentByUserId: string
     recipientUserIds: string[]
     text: string
+    /** Addresses typed in that aren't on the engagement (Publish & send, 2026-11-17). */
+    recipientEmails?: string[]
+    /** The sender's note above the update. */
+    note?: string | null
+    /** Whether the Overview went with it as a PDF. */
+    withPdf?: boolean
 }
 
 const MAX_KEPT_UPDATES = 50
@@ -143,6 +149,51 @@ export async function clientSideRecipients(engagementId: string): Promise<Status
     return named
         .filter((r): r is NonNullable<typeof r> => r !== null)
         .sort((a, b) => (a.role === b.role ? a.name.localeCompare(b.name) : a.role === ROLE_NAME.eng_viewer ? -1 : 1))
+}
+
+/** Who reads first in the To field: the client side, then the firm's own people. */
+const ROLE_ORDER = ['eng_viewer', 'eng_ext_collaborator', 'eng_member', 'eng_admin'] as const
+
+export interface EngagementRecipient {
+    userId: string
+    name: string
+    /** The role's display name ("Reviewer", "Contributor · Full Access"). */
+    role: string
+    email: string
+}
+
+/**
+ * Everyone on the engagement an update can go to (.claude/plans/publish-and-send-update.md): every
+ * role, named as the comment box names them, with their address. Brio's own account and anyone whose
+ * address can't be read are left out. Client side first, then the firm's people, each by name.
+ */
+export async function engagementRecipients(engagementId: string): Promise<EngagementRecipient[]> {
+    const members = await prisma.engagementMember.findMany({
+        where: { engagementId },
+        select: { userId: true, role: true },
+    })
+    if (members.length === 0) return []
+    const { createAdminClient } = await import('@/utils/supabase/admin')
+    const { isAgentUserId } = await import('@/lib/ai/files-agent/agent-identity')
+    const { isAgentEmail } = await import('@/lib/ai/agent-email')
+    const admin = createAdminClient()
+    const named = await Promise.all(members.filter((m) => !isAgentUserId(m.userId)).map(async (m) => {
+        try {
+            const { data } = await admin.auth.admin.getUserById(m.userId)
+            const u = data?.user
+            const email = u?.email ?? ''
+            if (!email || isAgentEmail(email)) return null
+            const name = formatDisplayName(resolveDisplayName(u?.user_metadata ?? {}, email), email) || email
+            return { userId: m.userId, name, role: ROLE_NAME[m.role as keyof typeof ROLE_NAME] ?? m.role, email, rank: ROLE_ORDER.indexOf(m.role as typeof ROLE_ORDER[number]) }
+        } catch (error) {
+            logger.warn(`Update recipients: could not name member ${m.userId}`, error as Error)
+            return null
+        }
+    }))
+    return named
+        .filter((r): r is NonNullable<typeof r> => r !== null)
+        .sort((a, b) => (a.rank === b.rank ? a.name.localeCompare(b.name) : (a.rank === -1 ? 99 : a.rank) - (b.rank === -1 ? 99 : b.rank)))
+        .map(({ rank: _rank, ...r }) => r)
 }
 
 /** Everything the composer shows and Brio is given, read from the engagement itself. */

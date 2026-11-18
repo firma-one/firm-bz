@@ -8,7 +8,6 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '@/lib/auth-context'
 import {
     MessagesSquare,
-    Square,
     CalendarClock,
     FolderOpen,
     HardDrive,
@@ -98,7 +97,12 @@ import {
     type ReportInputs,
 } from './engagement-overview-sections'
 import { DeliverablesTimeline } from './deliverables-timeline'
-import { StatusUpdateAction } from './status-update-action'
+// Draft an update (status-update-action.tsx) is folded into Publish & send and Email this update
+// (.claude/plans/publish-and-send-update.md); its component stays, unmounted, until sign-off.
+import { EmailUpdateSheet } from './email-update-sheet'
+import { BrioWorkingSparkle } from '@/components/brio/brio-working-sparkle'
+import { MissingSectionsWarning } from './summary-draft-review'
+import { dropUnfilledLeadSections, hasRisks, missingLeadSections, withLeadSections } from '@/lib/ai/summary-sections'
 import { WaitingOnClient } from './waiting-on-client'
 import { ReviewerBrioPanel } from './reviewer-brio-panel'
 import type { ChartSegment } from './overview-charts'
@@ -2757,8 +2761,11 @@ export function EngagementInsightsDashboard({
         // Reveal export-only blocks (the report identity header). They are hidden on screen
         // because the page already shows a breadcrumb, but the exported file has no other
         // indication of which firm, client and engagement it belongs to.
+        // The Latest update's held-back sections hide by class (`hidden`, `hidden @4xl:block`), so that
+        // goes too.
         clone.querySelectorAll('[data-export-only]').forEach((node) => {
             (node as HTMLElement).style.display = ''
+            node.classList.remove('hidden')
         })
         // Strip interactive controls — they mean nothing in a static export.
         clone.querySelectorAll('[data-no-export]').forEach((node) => node.remove())
@@ -2918,14 +2925,34 @@ export function EngagementInsightsDashboard({
             .finally(() => setLoading(false))
     }, [projectId, session?.access_token, refreshTick])
 
-    const handleSummarySave = async () => {
+    // ── Publish & send, and Email this update (.claude/plans/publish-and-send-update.md) ─────────
+    // One email form: the sheet the card's mail icon opens (the toolbar's Email opens it with the PDF
+    // ticked, and Publish & send… opens it once the update is published).
+    const [emailSheet, setEmailSheet] = useState<{ pdf: boolean } | null>(null)
+
+    /** The Overview as a PDF, base64: the capture Download PDF makes. */
+    const capturePdfBase64 = async (): Promise<string> => {
+        const pdf = await captureHealthCard()
+        const bytes = new Uint8Array(pdf.output('arraybuffer') as ArrayBuffer)
+        let binary = ''
+        for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i])
+        const base64 = btoa(binary)
+        if (!base64) throw new Error('PDF generation produced empty output')
+        return base64
+    }
+
+    /** Whether the published update differs from what the edit pane opened with. */
+    const [editBaseline, setEditBaseline] = useState('')
+
+    const handleSummarySave = async (): Promise<boolean> => {
         setSummarySaving(true)
         try {
-            const text = summaryDraft.trim() || null
+            // As the server publishes it: a lead section with nothing written in it is left out.
+            const text = (summaryDraft.trim() && dropUnfilledLeadSections(summaryDraft)) || null
             const result = await updateEngagementInsightsSummary(projectId, text)
             if (!result.ok) {
                 addToast({ type: 'error', title: text ? 'Not published' : "Couldn't remove the summary", message: result.error })
-                return
+                return false
             }
             // A hand-written summary clears the fingerprint server-side, so it can never be stale.
             setData((prev) => prev ? {
@@ -2942,8 +2969,10 @@ export function EngagementInsightsDashboard({
                 : { type: 'success', title: 'Summary removed' })
             setSummaryEditing(false)
             setRefreshTick((t) => t + 1)
+            return true
         } catch (e) {
             addToast({ type: 'error', title: summaryDraft.trim() ? 'Not published' : "Couldn't remove the summary", message: failureReason(e) })
+            return false
         } finally {
             setSummarySaving(false)
         }
@@ -2963,9 +2992,9 @@ export function EngagementInsightsDashboard({
     const [reviewMode, setReviewMode] = useState<ReviewMode>('preview')
     const draftGeneratedAt = data?.insightsSummaryDraft?.generatedAt ?? null
     useEffect(() => { setReviewMode('preview') }, [draftGeneratedAt])
-    const openSummaryReview = useCallback(() => {
+    const openSummaryReview = useCallback((title: string = 'Summary draft') => {
         if (!rightPane.hasRightPane || summaryReviewStore.isOpen()) return
-        rightPane.setTitle('Summary draft')
+        rightPane.setTitle(title)
         rightPane.setHeaderIcon(<FileText className="h-4 w-4" />)
         rightPane.setHeaderSubtitle('')
         rightPane.setHeaderActions(null)
@@ -2974,10 +3003,25 @@ export function EngagementInsightsDashboard({
         rightPane.setBeforeClose(() => closeGuardRef.current())
     }, [rightPane])
     const hasDraftOrStream = aiStreaming || !!aiStreamText || !!data?.insightsSummaryDraft
-    // Published, dismissed or failed: nothing left to review, so the pane closes itself.
+    // Published, dismissed, cancelled or failed: nothing left to review or edit, so the pane closes itself.
     useEffect(() => {
-        if (!hasDraftOrStream && summaryReviewStore.isOpen()) clearPaneRef.current()
-    }, [hasDraftOrStream])
+        if (!hasDraftOrStream && !summaryEditing && summaryReviewStore.isOpen()) clearPaneRef.current()
+    }, [hasDraftOrStream, summaryEditing])
+
+    /**
+     * The pencil (Deepak, 2026-11-18): the published update opens in the same pane as Brio's drafts,
+     * every section a box, the lead's two where they belong. Without a right pane (outside /d) it
+     * edits in the card, as before. `text` opens it with something else (Email this update's Add them).
+     */
+    const openEditPane = (text?: string) => {
+        const start = withLeadSections(text ?? data?.insightsSummary ?? '')
+        setSummaryDraft(start)
+        setEditBaseline(start)
+        setReviewMode('preview')
+        setSummaryEditing(true)
+        openSummaryReview('Edit update')
+    }
+    const editChanged = summaryEditing && summaryDraft !== editBaseline
     // Leaving the Overview takes its review pane with it.
     useEffect(() => () => {
         if (summaryReviewStore.isOpen()) clearPaneRef.current()
@@ -2998,18 +3042,24 @@ export function EngagementInsightsDashboard({
         try { void (await dismissEngagementAiSummary(projectId)) } catch { /* swept on the next load */ }
     }, [projectId])
 
-    // Closing the pane (its ×) discards the draft. If the lead has typed in it, ask first.
-    const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false)
+    // Discard throws the draft away. If the lead has typed in it, ask first.
+    const [confirmDiscard, setConfirmDiscard] = useState<null | 'draft' | 'edit'>(null)
     const draftTyped = !!data?.insightsSummaryDraft && !aiStreaming
         && aiDraftEdit.trim() !== data.insightsSummaryDraft.content.trim()
     const closeGuardRef = useRef<() => boolean>(() => true)
     useEffect(() => {
+        // Closing the pane only closes it (Deepak, 2026-11-18): while Brio writes, the sparkle turns into
+        // a working sparkle that opens the pane again (Stop is in the pane); a finished draft waits
+        // behind Review, with anything typed into it. Only Discard throws a draft away. It used to
+        // discard on close, which lost a draft whose last words were still being typed out on screen.
+        // Editing by hand is the exception: closing it is Cancel, asking first when something changed.
         closeGuardRef.current = () => {
-            if (draftTyped) {
-                setConfirmDiscardOpen(true)
+            if (!summaryEditing) return true
+            if (editChanged) {
+                setConfirmDiscard('edit')
                 return false
             }
-            void discardDraft()
+            setSummaryEditing(false)
             return true
         }
     })
@@ -3099,6 +3149,10 @@ export function EngagementInsightsDashboard({
                     // Just written from today's data.
                     insightsSummaryDraftStale: false,
                 } : prev)
+                // Finished with its pane closed: say so, wherever on the page the person is.
+                if (!summaryReviewStore.isOpen()) {
+                    addToast({ type: 'success', title: `${ASSISTANT.name}'s draft is ready`, message: 'Review it on the Latest update, then publish or send it.' })
+                }
             } else if (!noted) {
                 // The stream ended without a `done` event and without an `error` event — a
                 // connection dropped cleanly mid-generation. `finally` is about to clear the
@@ -3116,21 +3170,21 @@ export function EngagementInsightsDashboard({
         }
     }
 
-    const handleAiSummaryApprove = async () => {
+    const handleAiSummaryApprove = async (): Promise<boolean> => {
         const content = aiDraftEdit.trim()
-        if (!content) return
+        if (!content) return false
         setAiDraftAction('publish')
         try {
             const result = await approveEngagementAiSummary(projectId, content)
             if (!result.ok) {
-                // "Complete these sections before publishing: Next steps", among others.
                 addToast({ type: 'error', title: 'Not published', message: result.error })
-                return
+                return false
             }
-            // Optimistic update for immediate feedback...
+            // Optimistic update for immediate feedback, with the text as published (the lead's
+            // sections left unwritten are left out)...
             setData((prev) => prev ? {
                 ...prev,
-                insightsSummary: content,
+                insightsSummary: result.data.published,
                 insightsSummaryDraft: null,
                 // ...but staleness and publishedAt are computed server-side against the freshly
                 // stored fingerprint, so clear them here and let the refetch below supply the
@@ -3140,11 +3194,13 @@ export function EngagementInsightsDashboard({
                 insightsSummarySource: 'ai',
                 insightsSummaryPublishedBy: myDisplayName,
             } : prev)
-            addToast({ type: 'success', title: 'Summary published', message: 'Visible to everyone on the engagement and in exports.' })
             setAiGenerateNote(null)
+            addToast({ type: 'success', title: 'Summary published', message: 'Visible to everyone on the engagement and in exports.' })
             setRefreshTick((t) => t + 1)
+            return true
         } catch (e) {
             addToast({ type: 'error', title: 'Not published', message: failureReason(e) })
+            return false
         } finally {
             setAiDraftAction(null)
         }
@@ -3184,7 +3240,7 @@ export function EngagementInsightsDashboard({
         unfilledSections,
         busyAction: aiDraftAction,
         onPublish: handleAiSummaryApprove,
-        onDismiss: handleAiSummaryDismiss,
+        onDismiss: () => { if (draftTyped) setConfirmDiscard('draft'); else void handleAiSummaryDismiss() },
         onCopy: () => copySummary(aiDraftEdit, 'draft'),
         copied: summaryCopied === 'draft',
         note: aiGenerateNote,
@@ -3194,11 +3250,36 @@ export function EngagementInsightsDashboard({
         // Stopping throws the unfinished draft away, as Discard does; with nothing left to
         // review the pane closes itself, and the published summary stays as it was.
         onStop: () => { void discardDraft() },
+        // Publish & send…: publishes, then opens Email this update, the one email form.
+        onPublishAndSend: () => { void handleAiSummaryApprove().then((ok) => { if (ok) setEmailSheet({ pdf: false }) }) },
     }
+    // The pencil's edit, in the same pane: every section a box, Cancel instead of Discard.
+    const editProps: SummaryDraftReviewProps = {
+        kind: 'edit',
+        streaming: false,
+        streamText: '',
+        generatedAt: null,
+        value: summaryDraft,
+        onChange: setSummaryDraft,
+        mode: reviewMode,
+        onModeChange: setReviewMode,
+        unfilledSections: findUnfilledSections(summaryDraft),
+        busyAction: summarySaving ? 'publish' : null,
+        onPublish: () => { void handleSummarySave() },
+        onPublishAndSend: () => { void handleSummarySave().then((ok) => { if (ok) setEmailSheet({ pdf: false }) }) },
+        onDismiss: () => { if (editChanged) setConfirmDiscard('edit'); else setSummaryEditing(false) },
+        onCopy: () => copySummary(summaryDraft, 'draft'),
+        copied: summaryCopied === 'draft',
+        note: null,
+        published: null,
+        draftBehind: false,
+        onRewrite: () => {},
+    }
+    const editingInPane = isFirmAdmin && summaryEditing && rightPane.hasRightPane
     const reviewing = isFirmAdmin && hasDraftOrStream
-    // Every render, so the pane shows the current draft, stream and button states.
+    // Every render, so the pane shows the current draft (or edit), stream and button states.
     useLayoutEffect(() => {
-        summaryReviewStore.set(reviewing ? reviewProps : null)
+        summaryReviewStore.set(editingInPane ? editProps : reviewing ? reviewProps : null)
     })
 
     // A failed load is never zero counts and "nothing overdue" (P1-66). A failed refresh keeps the
@@ -3208,6 +3289,9 @@ export function EngagementInsightsDashboard({
             <LoadFailed className="py-16" what="this overview" reason={loadError} onRetry={() => setRefreshTick((t) => t + 1)} />
         )
     }
+
+    // A Lead with an update published emails it from the sheet (Email this update), PDF and all.
+    const emailsUpdate = isFirmAdmin && !!data?.insightsSummary && !!data?.insightsSummaryPublishedAt
 
     // The Overview's one toolbar, on the tab row (it was two Refresh buttons and the Health card's icons).
     // Download and Email send the report below; settings is firm admins' only.
@@ -3245,10 +3329,14 @@ export function EngagementInsightsDashboard({
                     {dlState === 'capturing' ? <RefreshCw className="h-4 w-4 animate-spin" /> : dlState === 'done' ? <Check className="h-4 w-4 text-action" /> : <Download className="h-4 w-4" />}
                 </button>
             </Hint>
-            <Hint label={shareState === 'error' ? (shareError ?? 'Something went wrong. Try again.') : `Email the report PDF to ${data?.memberCount ?? 0} team member${(data?.memberCount ?? 0) === 1 ? '' : 's'}`}>
+            <Hint label={emailsUpdate
+                ? 'Email the update, with the Overview as a PDF'
+                : shareState === 'error' ? (shareError ?? 'Something went wrong. Try again.') : `Email the report PDF to ${data?.memberCount ?? 0} team member${(data?.memberCount ?? 0) === 1 ? '' : 's'}`}>
                 <button
                     type="button"
-                    onClick={handleShareHealth}
+                    // With an update published, one email flow: Email this update, the PDF ticked.
+                    // Without one, the report PDF to the team, as before.
+                    onClick={emailsUpdate ? () => setEmailSheet({ pdf: true }) : handleShareHealth}
                     disabled={(shareState !== 'idle' && shareState !== 'error') || !data}
                     className={`rounded-control p-1.5 transition-colors${shareState !== 'idle' && shareState !== 'error' ? ' cursor-wait opacity-50' : shareState === 'error' ? ' text-danger' : ' text-fg-subtle hover:bg-surface-hover hover:text-fg'}`}
                     aria-label="Email the report PDF to the team"
@@ -3266,6 +3354,24 @@ export function EngagementInsightsDashboard({
             Team Status moved to the Members tab; File Organization, the Action Center's housekeeping
             and Document Activity to the Files tab's Health and Recent views. */}
         {navSlot ? createPortal(overviewToolbar, navSlot) : null}
+        {isFirmAdmin && data?.insightsSummary && (
+            <EmailUpdateSheet
+                open={!!emailSheet}
+                onOpenChange={(open) => { if (!open) setEmailSheet(null) }}
+                projectId={projectId}
+                summary={data.insightsSummary}
+                publishedAt={data.insightsSummaryPublishedAt ?? null}
+                stale={!!data.insightsSummaryStale}
+                onRewrite={handleGenerateSummary}
+                // The lead's sections to fill in, where they belong; left empty, they're left out again.
+                onAddSections={() => {
+                    if (rightPane.hasRightPane) openEditPane()
+                    else { setSummaryDraft(withLeadSections(data.insightsSummary ?? '')); setSummaryEditing(true) }
+                }}
+                capturePdf={capturePdfBase64}
+                pdfByDefault={!!emailSheet?.pdf}
+            />
+        )}
         <div className="flex min-w-0 flex-col gap-10 pb-6">
             {!navSlot && <div className="-mb-6 flex justify-end">{overviewToolbar}</div>}
             {!data ? (
@@ -3378,7 +3484,7 @@ export function EngagementInsightsDashboard({
                             when empty, as the one place to add or generate one. */}
                         {(data.insightsSummary || isFirmAdmin) && (
                             <LatestUpdate
-                                content={summaryEditing ? null : data.insightsSummary ?? null}
+                                content={summaryEditing && !rightPane.hasRightPane ? null : data.insightsSummary ?? null}
                                 meta={(
                                     <>
                                         {publishedOn && data.insightsSummary && <span className="text-small text-fg-muted">{publishedOn}</span>}
@@ -3420,43 +3526,30 @@ export function EngagementInsightsDashboard({
                                     </>
                                 )}
                                 actions={isFirmAdmin ? (
-                                    // A pending draft: the notice and Review take the controls' place. The
+                                    // A finished draft: the notice and Review take the controls' place. The
                                     // review opens in the right pane; the published summary stays below.
-                                    hasDraftOrStream && rightPane.hasRightPane ? (
+                                    // While Brio writes, the controls stay and the sparkle turns into a
+                                    // working one that opens the pane (Stop is in the pane).
+                                    !aiStreaming && data.insightsSummaryDraft && rightPane.hasRightPane ? (
                                         <>
                                             <span className="inline-flex items-center gap-1.5 text-small text-fg-muted">
-                                                {aiStreaming
-                                                    ? <><Brio className="animate-pulse" /> is writing a new summary…</>
-                                                    : <><Brio /> drafted a new summary</>}
+                                                <Brio /> drafted a new summary
                                             </span>
-                                            {!aiStreaming && data.insightsSummaryDraft && (
-                                                <span className="text-caption text-fg-subtle">{formatRelativeTime(data.insightsSummaryDraft.generatedAt)}</span>
-                                            )}
+                                            <span className="text-caption text-fg-subtle">{formatRelativeTime(data.insightsSummaryDraft.generatedAt)}</span>
                                             <button
-                                                onClick={openSummaryReview}
+                                                onClick={() => openSummaryReview()}
                                                 disabled={paneOpen}
                                                 className="inline-flex h-7 items-center gap-1.5 rounded-control border border-line bg-surface px-2 text-small font-medium text-action transition-colors hover:border-line-strong hover:bg-surface-hover disabled:cursor-default disabled:text-fg-subtle disabled:hover:bg-surface"
                                             >
-                                                {paneOpen ? 'Reviewing' : aiStreaming ? 'Watch' : 'Review'}
+                                                {paneOpen ? 'Reviewing' : 'Review'}
                                             </button>
-                                            {aiStreaming && (
-                                                <button
-                                                    onClick={() => { void discardDraft() }}
-                                                    className="inline-flex h-7 items-center gap-1.5 rounded-control border border-line bg-surface px-2 text-small text-fg-muted transition-colors hover:border-line-strong hover:bg-surface-hover hover:text-fg"
-                                                >
-                                                    <Square className="h-3 w-3 fill-current" /> Stop
-                                                </button>
-                                            )}
                                         </>
-                                    ) : !aiStreaming && !data.insightsSummaryDraft && !summaryEditing ? (
+                                    ) : summaryEditing && rightPane.hasRightPane ? (
+                                        <span className="inline-flex items-center gap-1.5 text-small text-fg-muted">
+                                            <Pencil className="h-3.5 w-3.5" aria-hidden /> Editing in the side pane
+                                        </span>
+                                    ) : aiStreaming || (!data.insightsSummaryDraft && !summaryEditing) ? (
                                         <>
-                                            {/* A status update is written from the APPROVED summary, so it is
-                                                offered only once one is published. */}
-                                            {data.insightsSummary && data.insightsSummaryPublishedAt && (
-                                                <div className="mr-1.5">
-                                                    <StatusUpdateAction projectId={projectId} firmName={firmName} />
-                                                </div>
-                                            )}
                                             {data.insightsSummary && (
                                                 <Hint label={summaryCopied === 'published' ? 'Copied' : 'Copy as Markdown'}>
                                                     <button
@@ -3471,27 +3564,64 @@ export function EngagementInsightsDashboard({
                                                     </button>
                                                 </Hint>
                                             )}
-                                            <Hint label={data.insightsSummary ? 'Edit' : 'Add a summary'}>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => { setSummaryDraft(data.insightsSummary ?? ''); setSummaryEditing(true) }}
-                                                    aria-label={data.insightsSummary ? 'Edit the summary' : 'Add a summary'}
-                                                    className={SUMMARY_ICON_BUTTON}
-                                                >
-                                                    {data.insightsSummary ? <Pencil className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-                                                </button>
-                                            </Hint>
-                                            <Hint label={<>{data.insightsSummary ? 'Rewrite with' : 'Write with'} <Brio /></>}>
-                                                <button
-                                                    type="button"
-                                                    onClick={handleGenerateSummary}
-                                                    aria-label={`${data.insightsSummary ? 'Rewrite' : 'Write'} with ${ASSISTANT.name}`}
-                                                    className={SUMMARY_ICON_BUTTON}
-                                                >
-                                                    {/* Brio's sparkle, in Brio's green: the one place its color is used. */}
-                                                    <Sparkles className="h-4 w-4" style={{ color: BRIO_GREEN }} />
-                                                </button>
-                                            </Hint>
+                                            {/* Not while Brio writes a new one: its draft would replace the edit. */}
+                                            {!aiStreaming && (
+                                                <Hint label={data.insightsSummary ? 'Edit' : 'Add a summary'}>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            if (rightPane.hasRightPane) openEditPane()
+                                                            else { setSummaryDraft(data.insightsSummary ?? ''); setSummaryEditing(true) }
+                                                        }}
+                                                        aria-label={data.insightsSummary ? 'Edit the summary' : 'Add a summary'}
+                                                        className={SUMMARY_ICON_BUTTON}
+                                                    >
+                                                        {data.insightsSummary ? <Pencil className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                                                    </button>
+                                                </Hint>
+                                            )}
+                                            {aiStreaming ? (
+                                                // Brio is still writing, pane open or closed: the working sparkle
+                                                // opens the pane to watch, and Stop is there.
+                                                <Hint label={<><Brio /> is writing a new summary{paneOpen ? '' : ' · Open it'}</>}>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => openSummaryReview()}
+                                                        aria-label={`${ASSISTANT.name} is writing a new summary. Open it`}
+                                                        aria-busy="true"
+                                                        className={SUMMARY_ICON_BUTTON}
+                                                    >
+                                                        <BrioWorkingSparkle />
+                                                    </button>
+                                                </Hint>
+                                            ) : (
+                                                <Hint label={<>{data.insightsSummary ? 'Rewrite with' : 'Write with'} <Brio /></>}>
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleGenerateSummary}
+                                                        aria-label={`${data.insightsSummary ? 'Rewrite' : 'Write'} with ${ASSISTANT.name}`}
+                                                        className={SUMMARY_ICON_BUTTON}
+                                                    >
+                                                        {/* Brio's sparkle, in Brio's green: the one place its color is used. */}
+                                                        <Sparkles className="h-4 w-4" style={{ color: BRIO_GREEN }} />
+                                                    </button>
+                                                </Hint>
+                                            )}
+                                            {/* Last (Deepak, 2026-11-18: Copy, Edit, Rewrite, Email). Emails the published update as it
+                                                is: no Brio call, no credit. Only once
+                                                one is published, since only published text goes out. */}
+                                            {data.insightsSummary && data.insightsSummaryPublishedAt && (
+                                                <Hint label="Email this update">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setEmailSheet({ pdf: false })}
+                                                        aria-label="Email this update"
+                                                        className={SUMMARY_ICON_BUTTON}
+                                                    >
+                                                        <Mail className="h-4 w-4" />
+                                                    </button>
+                                                </Hint>
+                                            )}
                                         </>
                                     ) : null
                                 ) : undefined}
@@ -3509,9 +3639,10 @@ export function EngagementInsightsDashboard({
                                         )}
                                     </>
                                 ) : undefined}
-                                editor={isFirmAdmin && summaryEditing ? (
-                                    // Manual edit of the published summary.
-                                    <div className="flex max-w-3xl flex-col gap-2 rounded-card bg-surface-subtle p-3">
+                                editor={isFirmAdmin && summaryEditing && !rightPane.hasRightPane ? (
+                                    // Without a right pane (outside /d), the hand edit stays in the card.
+                                    // Sending is the mail icon's job, once it's published.
+                                    <div className="flex flex-col gap-3 rounded-card border border-line bg-surface-subtle p-3">
                                         <textarea
                                             value={summaryDraft}
                                             onChange={(e) => setSummaryDraft(e.target.value)}
@@ -3519,18 +3650,21 @@ export function EngagementInsightsDashboard({
                                             autoFocus
                                             aria-label="Engagement summary"
                                             placeholder="Add a summary for this engagement…"
-                                            className="h-[10rem] w-full resize-y rounded-control border border-line bg-surface px-3 py-2 text-ui leading-relaxed text-fg placeholder:text-fg-subtle focus:border-action/60 focus:outline-none focus:ring-2 focus:ring-action/20 disabled:opacity-60"
+                                            className="min-h-[18rem] w-full resize-y rounded-control border border-line bg-surface px-3 py-2 text-ui leading-relaxed text-fg placeholder:text-fg-subtle focus:border-action/60 focus:outline-none focus:ring-2 focus:ring-action/20 disabled:opacity-60"
                                         />
+                                        {/^## /m.test(summaryDraft) && (
+                                            <MissingSectionsWarning missing={missingLeadSections(summaryDraft)} risks={hasRisks(summaryDraft)} />
+                                        )}
                                         <p className="text-caption text-fg-muted">
-                                            Visible to everyone on the engagement and included in PDF and email exports.
+                                            Visible to everyone on the engagement and included in the PDF. A section left empty is left out.
                                         </p>
                                         <div className="flex items-center justify-end gap-2">
                                             <Button size="sm" variant="ghost" onClick={() => setSummaryEditing(false)} disabled={summarySaving}>
                                                 Cancel
                                             </Button>
-                                            <Button size="sm" onClick={handleSummarySave} disabled={summarySaving}>
+                                            <Button size="sm" onClick={() => { void handleSummarySave() }} disabled={summarySaving}>
                                                 {summarySaving && <RefreshCw className="h-3 w-3 animate-spin" />}
-                                                {summarySaving ? 'Saving…' : 'Save'}
+                                                {summarySaving ? 'Saving…' : 'Publish'}
                                             </Button>
                                         </div>
                                     </div>
@@ -3548,7 +3682,6 @@ export function EngagementInsightsDashboard({
                                         source={data.insightsSummarySource === 'manual' ? 'manual' : 'ai'}
                                         publisherName={data.insightsSummaryPublishedBy}
                                         date={data.insightsSummaryPublishedAt}
-                                        className="pt-1"
                                     />
                                 )}
                             />
@@ -3576,20 +3709,27 @@ export function EngagementInsightsDashboard({
             })()}
         </div>
         <ConfirmDialog
-            open={confirmDiscardOpen}
-            onOpenChange={setConfirmDiscardOpen}
+            open={!!confirmDiscard}
+            onOpenChange={(open) => { if (!open) setConfirmDiscard(null) }}
             icon={<Trash2 />}
             iconVariant="amber"
-            title="Discard this draft?"
-            description="What you typed in it will be lost. The published summary stays as it is."
-            cancelLabel="Keep reviewing"
+            title={confirmDiscard === 'edit' ? 'Discard your changes?' : 'Discard this draft?'}
+            description={confirmDiscard === 'edit'
+                ? 'The published update stays as it was.'
+                : 'What you typed in it will be lost. The published summary stays as it is.'}
+            cancelLabel={confirmDiscard === 'edit' ? 'Keep editing' : 'Keep reviewing'}
             confirmLabel="Discard"
             confirmVariant="red"
-            onCancel={() => setConfirmDiscardOpen(false)}
+            onCancel={() => setConfirmDiscard(null)}
             onConfirm={() => {
-                setConfirmDiscardOpen(false)
-                void discardDraft()
-                rightPane.clearPane()
+                const what = confirmDiscard
+                setConfirmDiscard(null)
+                // Either way the pane closes: an edit by its own effect once editing stops.
+                if (what === 'edit') setSummaryEditing(false)
+                else {
+                    void discardDraft()
+                    rightPane.clearPane()
+                }
             }}
         />
 

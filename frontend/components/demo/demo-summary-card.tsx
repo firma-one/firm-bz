@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { Check, Copy, FileText, Sparkles, Square, Trash2 } from 'lucide-react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { Check, Copy, FileText, Mail, Sparkles, Trash2 } from 'lucide-react'
 import { Brio } from '@/components/ui/brio'
 import { BrioByline } from '@/components/ui/brio-byline'
 import { Hint } from '@/components/ui/tooltip'
@@ -16,10 +16,13 @@ import {
     type SummaryDraftReviewProps,
 } from '@/components/projects/summary-draft-review'
 import { useRightPane } from '@/lib/right-pane-context'
-import { findUnfilledSections } from '@/lib/ai/summary-sections'
+import { dropUnfilledLeadSections, findUnfilledSections } from '@/lib/ai/summary-sections'
 import { buildDemoSummary, type DemoSummaryInput } from '@/lib/demo/demo-summary'
-import { StatusUpdateAction } from '@/components/projects/status-update-action'
-import type { StatusUpdateComposer } from '@/lib/actions/status-update'
+import { EmailUpdateSheet } from '@/components/projects/email-update-sheet'
+import { BrioWorkingSparkle } from '@/components/brio/brio-working-sparkle'
+import type { UpdateRecipientsInfo } from '@/lib/updates/update-send'
+import { ROLE_NAME } from '@/lib/persona-ui-groups'
+import { DEMO_ENGAGEMENT_MEMBERS } from './demo-engagement-members'
 
 const CONTROL = 'inline-flex h-7 items-center gap-1.5 rounded-control border border-line bg-surface px-2 text-small transition-colors hover:border-line-strong hover:bg-surface-hover'
 /** The header's actions, as in the app: 28px icon buttons named by a Hint and an aria-label. */
@@ -27,33 +30,17 @@ const ICON_BUTTON = 'inline-flex h-7 w-7 items-center justify-center rounded-con
 /** The tour's signed-in person, who published the sample and publishes any rewrite. */
 const TOUR_PUBLISHER = 'Demo User'
 
-/** The tour's status update: the sample's own deliverables, a canned draft, nobody emailed. */
-function statusUpdateDemo(input: DemoSummaryInput, today: Date): { composer: StatusUpdateComposer; draft: string } {
-    const ref = (d: { docId: string | null; name: string }) => (d.docId ? `${d.docId} · ${d.name}` : d.name)
-    const approved = input.deliverables.filter((d) => d.stage === 'approved')
-    const inReview = input.deliverables.filter((d) => d.stage === 'in_review')
-    const changes = [
-        ...(approved.length ? [{ kind: 'approved' as const, text: `${approved.map(ref).join(', ')} approved` }] : []),
-        ...(inReview.length ? [{ kind: 'inReview' as const, text: `${inReview.map(ref).join(', ')} in review` }] : []),
-        ...(input.resolvedThreads ? [{ kind: 'resolved' as const, text: `${input.resolvedThreads} threads resolved` }] : []),
-    ]
-    const name = (d: { docId: string | null; name: string }) => (d.docId ? `${d.name} (${d.docId})` : d.name)
-    const draft = [
-        approved.length
-            ? `Since our last update, ${approved.map(name).join(' and ')} ${approved.length === 1 ? 'has' : 'have'} been approved.`
-            : `Since our last update, work on ${input.engagementName} has moved forward.`,
-        inReview.length ? `${inReview.map(name).join(' and ')} ${inReview.length === 1 ? 'is' : 'are'} now with you for review.` : '',
-        '[Add next steps]',
-    ].filter(Boolean).join('\n\n')
+/**
+ * Who the tour's update goes to: its engagement's people (demo-engagement-members.tsx) but the tour's
+ * own signed-in Lead, as the app fills them in. Nothing is sent from the tour.
+ */
+function tourRecipients(today: Date): UpdateRecipientsInfo {
     return {
-        composer: {
-            changes,
-            since: new Date(today.getTime() - 14 * 86400000).toISOString(),
-            sinceIsLastUpdate: true,
-            hasSummary: true,
-            recipients: [{ userId: 'tour-reviewer', name: 'Dana Whitfield', role: 'Reviewer' }],
-        },
-        draft,
+        recipients: DEMO_ENGAGEMENT_MEMBERS
+            .filter((m) => m.slug !== 'eng_admin')
+            .sort((a, b) => (a.slug === 'eng_viewer' ? -1 : b.slug === 'eng_viewer' ? 1 : a.name.localeCompare(b.name)))
+            .map((m) => ({ userId: `tour-${m.email}`, name: m.name, role: ROLE_NAME[m.slug], email: m.email })),
+        lastSent: { sentAt: new Date(today.getTime() - 14 * 86400000).toISOString(), to: ['Morgan Ellis'] },
     }
 }
 
@@ -78,6 +65,9 @@ export function DemoSummaryCard({ input, today }: { input: DemoSummaryInput; tod
     const [copied, setCopied] = useState<'published' | 'draft' | null>(null)
     const timer = useRef<number | null>(null)
     const { addToast } = useToast()
+    // Email this update, as the app has it, with the tour's people; nothing is sent.
+    const tourInfo = useMemo(() => tourRecipients(today), [today])
+    const [emailSheetOpen, setEmailSheetOpen] = useState(false)
 
     // The pane, exactly as the app's Overview drives it (engagement-insights-dashboard.tsx).
     const rightPane = useRightPane()
@@ -99,18 +89,10 @@ export function DemoSummaryCard({ input, today }: { input: DemoSummaryInput; tod
         setDraftEdit('')
     }
 
-    // Closing the pane (its ×) discards the draft; with typed text, ask first.
+    // As in the app: closing the pane only closes it. Brio keeps writing (the working sparkle opens it
+    // again), and a finished draft waits behind Review. Discard throws it away; with typed text, ask first.
     const closeGuardRef = useRef<() => boolean>(() => true)
-    useEffect(() => {
-        closeGuardRef.current = () => {
-            if (draft && draftEdit.trim() !== draft.content.trim()) {
-                setConfirmOpen(true)
-                return false
-            }
-            discard()
-            return true
-        }
-    })
+    const draftTyped = !!draft && draftEdit.trim() !== draft.content.trim()
 
     const openPane = () => {
         if (summaryReviewStore.isOpen()) return
@@ -144,12 +126,16 @@ export function DemoSummaryCard({ input, today }: { input: DemoSummaryInput; tod
                 setStreamText('')
                 setDraft({ content: text, generatedAt: new Date().toISOString() })
                 setDraftEdit(text)
+                if (!summaryReviewStore.isOpen()) {
+                    addToast({ type: 'success', title: `${ASSISTANT.name}'s draft is ready`, message: 'Review it on the Latest update, then publish or send it.' })
+                }
             }
         }, 45)
     }
 
     const publish = () => {
-        setPublished({ content: draftEdit.trim(), publishedAt: new Date().toISOString() })
+        // As the app publishes it: the lead's sections left unwritten are left out.
+        setPublished({ content: dropUnfilledLeadSections(draftEdit) || draftEdit.trim(), publishedAt: new Date().toISOString() })
         setDraft(null)
         setDraftEdit('')
         clearPaneRef.current()
@@ -177,7 +163,7 @@ export function DemoSummaryCard({ input, today }: { input: DemoSummaryInput; tod
         unfilledSections: findUnfilledSections(draftEdit),
         busyAction: null,
         onPublish: publish,
-        onDismiss: () => { discard(); clearPaneRef.current() },
+        onDismiss: () => { if (draftTyped) setConfirmOpen(true); else { discard(); clearPaneRef.current() } },
         onCopy: () => copy(draftEdit, 'draft'),
         copied: copied === 'draft',
         note: null,
@@ -186,6 +172,8 @@ export function DemoSummaryCard({ input, today }: { input: DemoSummaryInput; tod
         onRewrite: rewrite,
         // As in the app: stopping throws the unfinished draft away and closes the pane.
         onStop: () => { discard(); clearPaneRef.current() },
+        // As the app: Publish & send… publishes, then opens Email this update.
+        onPublishAndSend: () => { publish(); setEmailSheetOpen(true) },
     }
     useLayoutEffect(() => {
         summaryReviewStore.set(reviewing ? reviewProps : null)
@@ -204,39 +192,56 @@ export function DemoSummaryCard({ input, today }: { input: DemoSummaryInput; tod
             <LatestUpdate
                 content={published.content}
                 meta={<span className="text-small text-fg-muted">{new Date(published.publishedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>}
-                actions={reviewing ? (
+                actions={reviewing && !streaming ? (
                     <>
                         <span className="inline-flex items-center gap-1.5 text-small text-fg-muted">
-                            {streaming ? <><Brio className="animate-pulse" /> is writing a new summary…</> : <><Brio /> drafted a new summary</>}
+                            <Brio /> drafted a new summary
                         </span>
                         <button type="button" disabled={paneOpen} onClick={openPane} className={`${CONTROL} font-medium text-action disabled:cursor-default disabled:text-fg-subtle disabled:hover:bg-surface`}>
                             {paneOpen ? 'Reviewing' : 'Review'}
                         </button>
-                        {streaming && (
-                            <button type="button" onClick={() => { discard(); clearPaneRef.current() }} className={`${CONTROL} text-fg-muted hover:text-fg`}>
-                                <Square className="h-3 w-3 fill-current" /> Stop
-                            </button>
-                        )}
                     </>
                 ) : (
                     <>
-                        {/* As the app: an update to the client, drafted from the published summary. */}
-                        <div className="mr-1.5">
-                            <StatusUpdateAction projectId="tour" firmName="Your firm" demo={statusUpdateDemo(input, today)} />
-                        </div>
                         <Hint label={copied === 'published' ? 'Copied' : 'Copy as Markdown'}>
                             <button type="button" onClick={() => copy(published.content, 'published')} aria-label="Copy the summary as Markdown" className={ICON_BUTTON}>
                                 {copied === 'published' ? <Check className="h-4 w-4 text-status-done-icon" /> : <Copy className="h-4 w-4" />}
                             </button>
                         </Hint>
-                        <Hint label={<>Rewrite with <Brio /></>}>
-                            <button type="button" onClick={rewrite} aria-label={`Rewrite with ${ASSISTANT.name}`} className={ICON_BUTTON}>
-                                <Sparkles className="h-4 w-4" style={{ color: BRIO_GREEN }} />
+                        {streaming ? (
+                            // As in the app: Brio is still writing; the working sparkle opens the pane.
+                            <Hint label={<><Brio /> is writing a new summary{paneOpen ? '' : ' · Open it'}</>}>
+                                <button type="button" onClick={openPane} aria-label={`${ASSISTANT.name} is writing a new summary. Open it`} aria-busy="true" className={ICON_BUTTON}>
+                                    <BrioWorkingSparkle />
+                                </button>
+                            </Hint>
+                        ) : (
+                            <Hint label={<>Rewrite with <Brio /></>}>
+                                <button type="button" onClick={rewrite} aria-label={`Rewrite with ${ASSISTANT.name}`} className={ICON_BUTTON}>
+                                    <Sparkles className="h-4 w-4" style={{ color: BRIO_GREEN }} />
+                                </button>
+                            </Hint>
+                        )}
+                        {/* As the app: last, the published update emailed as it is. */}
+                        <Hint label="Email this update">
+                            <button type="button" onClick={() => setEmailSheetOpen(true)} aria-label="Email this update" className={ICON_BUTTON}>
+                                <Mail className="h-4 w-4" />
                             </button>
                         </Hint>
                     </>
                 )}
-                byline={<BrioByline source="ai" publisherName={TOUR_PUBLISHER} date={published.publishedAt} className="pt-1" />}
+                byline={<BrioByline source="ai" publisherName={TOUR_PUBLISHER} date={published.publishedAt} />}
+            />
+
+            <EmailUpdateSheet
+                open={emailSheetOpen}
+                onOpenChange={setEmailSheetOpen}
+                projectId="tour"
+                summary={published.content}
+                publishedAt={published.publishedAt}
+                stale={false}
+                onRewrite={rewrite}
+                demo={tourInfo}
             />
 
             <ConfirmDialog

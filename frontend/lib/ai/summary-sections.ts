@@ -93,6 +93,63 @@ export function splitSections(text: string): { heading: string | null; body: str
 }
 
 /**
+ * The summary as it publishes (.claude/plans/publish-and-send-update.md): a lead section nobody
+ * wrote, still the placeholder or empty, is left out, heading and all, and so is any other heading
+ * with nothing under it. Publishing used to refuse them instead, so "NA" was typed to get past.
+ * Leaving them out keeps the old promise: the client-facing summary never claims a mitigation plan
+ * or next steps that no person wrote. Text that loses nothing comes back as it was.
+ */
+export function dropUnfilledLeadSections(text: string): string {
+    const sections = splitSections(text)
+    const kept = sections.filter((s) => {
+        if (s.heading === null) return true
+        if (LEAD_SECTIONS.includes(s.heading)) return !isPlaceholderText(s.body)
+        return s.body.trim() !== ''
+    })
+    if (kept.length === sections.length) return text.trim()
+    return kept.map((s) => (s.heading === null ? s.body : `## ${s.heading}\n${s.body}`)).join('\n\n').trim()
+}
+
+/** The lead sections a summary doesn't have written: absent, empty or still the placeholder. */
+export function missingLeadSections(text: string): string[] {
+    const sections = splitSections(text)
+    return LEAD_SECTIONS.filter((heading) => {
+        const section = sections.find((s) => s.heading === heading)
+        return !section || isPlaceholderText(section.body)
+    })
+}
+
+/** Whether the summary names any risk: a Risks section with something in it. */
+export function hasRisks(text: string): boolean {
+    return splitSections(text).some((s) => s.heading === 'Risks' && s.body.trim() !== '')
+}
+
+const canonicalIndex = (heading: string | null) => (heading === null ? -1 : SUMMARY_SECTIONS.findIndex((s) => s.heading === heading))
+
+/**
+ * The summary with an empty heading for each lead section it lacks, placed where it belongs in
+ * summary order, so an editor can offer them to fill in. Left empty, they're dropped again when
+ * published (dropUnfilledLeadSections).
+ */
+export function withLeadSections(text: string): string {
+    const sections = splitSections(text)
+    let added = false
+    for (const heading of LEAD_SECTIONS) {
+        if (sections.some((s) => s.heading === heading)) continue
+        const at = canonicalIndex(heading)
+        let insertAt = sections.length && sections[0].heading === null ? 1 : 0
+        sections.forEach((s, i) => {
+            const ci = canonicalIndex(s.heading)
+            if (ci !== -1 && ci < at) insertAt = i + 1
+        })
+        sections.splice(insertAt, 0, { heading, body: '' })
+        added = true
+    }
+    if (!added) return text
+    return sections.map((s) => (s.heading === null ? s.body : `## ${s.heading}\n${s.body}`)).join('\n\n').trim() + '\n'
+}
+
+/**
  * Replaces one section's body, leaving every other section exactly as it was. A heading the draft
  * does not have is appended at the end.
  */

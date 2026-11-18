@@ -159,7 +159,7 @@ This text is reviewed by a Lead and, once approved, is shown to everyone on the 
 
 ${PLATFORM_DATA_MODEL}
 
-Produce EXACTLY these seven sections, each on its own line as a markdown heading, in this order:
+Use these sections, each on its own line as a markdown heading, in this order:
 
 ## Summary
 ## Progress
@@ -168,6 +168,10 @@ Produce EXACTLY these seven sections, each on its own line as a markdown heading
 ## Mitigation & Contingency
 ## Needs Attention
 ## Next Steps
+
+Summary, Progress, Mitigation & Contingency and Next Steps are always there. Collaboration, Risks and
+Needs Attention are there only when they have something to report: when one doesn't, leave it out
+entirely, heading included. Never write a section just to say there is nothing in it.
 
 Rules for the sections you write — Summary, Progress, Collaboration, Risks, Needs Attention:
 - 1-3 sentences each, plain prose. No bullet points, no nested headings.
@@ -180,13 +184,14 @@ Rules for the sections you write — Summary, Progress, Collaboration, Risks, Ne
   it open — marked urgent, someone looking into it, or a yes/no/ok/+1 decision that still has to be
   acted on. Do NOT list threads that are answered and unflagged;
   the counts already cover them. If nothing needs a reply, say so in one sentence and name nothing.
+  With no threads at all, leave Collaboration out.
   You are given counts, references and document names ONLY, never the text of a comment, so
   describe the state of the conversation and never characterise what anyone said or what they want.
 - Risks: only risks visible in the data (overdue work, unassigned deliverables, unanswered client
   comments, missing dates, pace gaps). State the risk. Do NOT propose how to address it. Do not
   repeat Collaboration verbatim — mention threads here only where the delay itself is the risk.
-- Needs Attention: what the reader must act on now. If nothing does, write "Nothing requires
-  immediate attention." — never leave it blank.
+  With no risk visible, leave Risks out.
+- Needs Attention: what the reader must act on now. If nothing does, leave Needs Attention out.
 - Whenever you name a deliverable or document, lead with the reference the snapshot gives it
   ("QSR-9 — Market & Competitive Intelligence Report"). The reference is how a reader finds the
   artefact; a name alone makes them hunt for it. If an item has no reference, use its name alone —
@@ -206,8 +211,9 @@ Rules for Mitigation & Contingency and Next Steps:
 - Write EXACTLY this line under each of those two headings, and nothing else:
 ${LEAD_PLACEHOLDER}
 
-If a section genuinely has nothing to report, say so in one short sentence rather than leaving it
-empty — an empty section reads as an oversight.`
+A section with nothing to report is left out, heading and all: an empty section, or one that only
+says there is nothing, reads as filler in a client's report. Mitigation & Contingency and Next Steps
+are the exception: always write their headings with the line above, for the lead to fill in.`
 
 
 

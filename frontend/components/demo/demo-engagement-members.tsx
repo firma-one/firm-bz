@@ -41,7 +41,7 @@ function Internal({ children }: { children: ReactNode }) {
 }
 
 /** The app's engagement roles, tagged as member-list.tsx tags them. */
-const DEMO_ENGAGEMENT_MEMBERS: DemoEngagementMember[] = [
+export const DEMO_ENGAGEMENT_MEMBERS: DemoEngagementMember[] = [
     { name: 'Alex Jordan', email: 'alex@beacongrowth.com', slug: 'eng_admin', role: <Internal><Tag color="purple">Lead</Tag></Internal>, addedDaysAgo: 88 },
     { name: 'Sam Rivera', email: 'sam@beacongrowth.com', slug: 'eng_member', role: <Internal><Tag color="gray">Contributor · Full Access</Tag></Internal>, addedDaysAgo: 85 },
     { name: 'Jordan Lee', email: 'jordan@beacongrowth.com', slug: 'eng_member', role: <Internal><Tag color="gray">Contributor · Full Access</Tag></Internal>, addedDaysAgo: 60 },
