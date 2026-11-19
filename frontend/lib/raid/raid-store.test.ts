@@ -197,6 +197,29 @@ describe('Actions', () => {
         )
     })
 
+    it("a person's Risk turned into an Action: no priority, theirs, due next week, and the reminder told", async () => {
+        db.engagementRaidItem.findFirst.mockResolvedValue(suggestion({ type: 'RISK', status: 'OPEN', sourceKind: 'MANUAL', priority: 'MEDIUM', ownerUserId: null, dueDate: null }))
+        await editRaidItem('e1', ACTOR, ITEM, { type: 'ACTION' })
+        expect(db.engagementRaidItem.update.mock.calls[0][0].data).toEqual({
+            updatedBy: 'u-lead', type: 'ACTION', status: 'OPEN', priority: null, prioritySetBy: null,
+            dueDate: new Date(`${nextWeekStart()}T00:00:00Z`), ownerUserId: 'u-lead',
+        })
+        expect(sync).toHaveBeenCalled()
+    })
+
+    it('a Decision is recorded, and a Risk gets a priority back; only for entries a person or Brio wrote', async () => {
+        db.engagementRaidItem.findFirst.mockResolvedValue(suggestion({ type: 'ACTION', status: 'OPEN', sourceKind: 'MANUAL', priority: null, ownerUserId: 'u-lead', dueDate: new Date('2026-11-27T00:00:00Z') }))
+        await editRaidItem('e1', ACTOR, ITEM, { type: 'DECISION' })
+        expect(db.engagementRaidItem.update.mock.calls[0][0].data).toMatchObject({ type: 'DECISION', status: 'RECORDED', priority: null, dueDate: null })
+        await editRaidItem('e1', ACTOR, ITEM, { type: 'RISK', priority: 'HIGH' })
+        expect(db.engagementRaidItem.update.mock.calls[1][0].data).toMatchObject({ type: 'RISK', status: 'OPEN', priority: 'HIGH', prioritySetBy: 'u-lead' })
+
+        db.engagementRaidItem.findFirst.mockResolvedValue(suggestion({ type: 'RISK', status: 'OPEN', sourceKind: 'HEALTH' }))
+        await expect(editRaidItem('e1', ACTOR, ITEM, { type: 'ACTION' })).rejects.toThrow("This entry's type follows the engagement's own data")
+        await expect(editRaidItem('e1', ACTOR, ITEM, { type: 'ASSUMPTION' })).rejects.toThrow('Choose Risk, Action, Issue or Decision.')
+        expect(db.engagementRaidItem.update).toHaveBeenCalledTimes(2)
+    })
+
     it("refuses a due date on anything but an Action", async () => {
         db.engagementRaidItem.findFirst.mockResolvedValue(suggestion({ status: 'OPEN' }))
         await expect(editRaidItem('e1', ACTOR, ITEM, { dueDate: '2026-11-27' })).rejects.toThrow('Only Actions have a due date.')

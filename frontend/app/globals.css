@@ -837,3 +837,18 @@
     --tw-exit-rotate: 0 !important;
   }
 }
+
+/* One sweep of Brio's green across a button, when something new from Brio arrives (the RAID log's
+   Suggested button, 2026-11-19). Once, never on a loop; nothing at all with reduced motion. */
+@keyframes fm-shimmer-once {
+  from { background-position: 130% 0; }
+  to { background-position: -30% 0; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .fm-shimmer-once {
+    background-image: linear-gradient(100deg, transparent 30%, hsl(var(--ui-action) / 0.2) 50%, transparent 70%);
+    background-size: 250% 100%;
+    background-repeat: no-repeat;
+    animation: fm-shimmer-once 1.1s ease-out 1 both;
+  }
+}

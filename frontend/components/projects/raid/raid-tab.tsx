@@ -16,6 +16,8 @@ import {
     NotionTableRow,
 } from '@/components/ui/notion-table'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet'
 import { Tag } from '@/components/ui/tag'
 import { Hint, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Brio } from '@/components/ui/brio'
@@ -38,6 +40,7 @@ import { RaidPriorityMark, RaidPriorityPicker } from './raid-priority'
 import {
     RAID_CHANGED_EVENT,
     RAID_NOTES_MAX,
+    RAID_PRIORITY_LABEL,
     RAID_TITLE_MAX,
     RAID_TYPES,
     RAID_TYPE_LABEL,
@@ -45,6 +48,7 @@ import {
     RAID_TYPE_STAGE,
     RAID_TYPE_PLURAL,
     attachPhrase,
+    displayTypeOf,
     dueDay,
     filterRaidItems,
     hasPriority,
@@ -53,7 +57,6 @@ import {
     isLive,
     lastCheckedPhrase,
     memoReviewHref,
-    memoSuggestionGroups,
     nextWeekStart,
     raidCountsByType,
     raidOpenCount,
@@ -112,6 +115,38 @@ export function RaidTypeBadge({ type, decorative = false, small = false }: {
                 {!decorative && <span className="sr-only">{RAID_TYPE_LABEL[type]}</span>}
             </span>
         </Hint>
+    )
+}
+
+/**
+ * The type of an entry a person or Brio wrote, changeable after it's in the log (Deepak, 2026-11-19: an
+ * Action added as a Risk by mistake). The letter, like the plain cell, with the four to choose from.
+ */
+function RaidTypePicker({ value, onChange, label, disabled }: {
+    value: RaidType
+    onChange: (type: RaidType) => void
+    /** "Type of …", for screen readers. */
+    label: string
+    disabled?: boolean
+}) {
+    return (
+        <Select value={value} onValueChange={(v) => onChange(v as RaidType)} disabled={disabled}>
+            <SelectTrigger aria-label={label} className="-mx-1 h-7 w-auto gap-1 border-transparent bg-transparent px-1 text-small hover:bg-surface-hover">
+                <SelectValue>
+                    <RaidTypeBadge type={value} decorative />
+                </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+                {RAID_TYPES.map((t) => (
+                    <SelectItem key={t} value={t}>
+                        <span className="inline-flex items-center gap-2">
+                            <RaidTypeBadge type={t} decorative small />
+                            {RAID_TYPE_LABEL[t]}
+                        </span>
+                    </SelectItem>
+                ))}
+            </SelectContent>
+        </Select>
     )
 }
 
@@ -251,7 +286,7 @@ function InlineText({ value, placeholder, label, maxLength, onSave, className }:
                     if (e.key === 'Enter') { e.preventDefault(); void commit() }
                     if (e.key === 'Escape') { e.preventDefault(); setDraft(value ?? ''); setEditing(false) }
                 }}
-                className="h-7 min-w-[12rem] px-2 text-small"
+                className="h-7 w-full min-w-0 px-2 text-small"
             />
         )
     }
@@ -259,7 +294,8 @@ function InlineText({ value, placeholder, label, maxLength, onSave, className }:
         <button
             type="button"
             onClick={() => { setDraft(value ?? ''); setEditing(true) }}
-            className={cn('-mx-1 rounded-control px-1 text-left hover:bg-surface-hover', className)}
+            className={cn('-mx-1 block max-w-[calc(100%+0.5rem)] truncate rounded-control px-1 text-left hover:bg-surface-hover', className)}
+            title={value ?? undefined}
             aria-label={`${label}: ${value || 'none'}. Edit`}
         >
             {value || <span className="text-fg-subtle">{placeholder}</span>}
@@ -276,7 +312,7 @@ function OwnerCell({ item, members, readOnly, onChange }: {
     readOnly: boolean
     onChange: (ownerUserId: string | null) => void
 }) {
-    if (readOnly || !isLive(item)) return item.ownerName ? <span>{item.ownerName}</span> : <span className="text-fg-subtle">·</span>
+    if (readOnly || !isLive(item)) return item.ownerName ? <span className="block truncate" title={item.ownerName}>{item.ownerName}</span> : <span className="text-fg-subtle">·</span>
     // Someone no longer on the engagement still shows as the owner until changed.
     const options = item.ownerUserId && !members.some((m) => m.userId === item.ownerUserId)
         ? [...members, { userId: item.ownerUserId, name: item.ownerName ?? 'Former member' }]
@@ -285,9 +321,10 @@ function OwnerCell({ item, members, readOnly, onChange }: {
         <Select value={item.ownerUserId ?? NO_OWNER} onValueChange={(v) => onChange(v === NO_OWNER ? null : v)}>
             <SelectTrigger
                 aria-label={`Owner of ${item.title}`}
-                className="-mx-1 h-7 w-auto min-w-[6rem] gap-1 border-transparent bg-transparent px-1 text-small hover:bg-surface-hover"
+                className="-mx-1 h-7 w-auto min-w-[6rem] max-w-[calc(100%+0.5rem)] gap-1 border-transparent bg-transparent px-1 text-small hover:bg-surface-hover"
+                title={item.ownerName ?? undefined}
             >
-                <SelectValue placeholder="Assign">{item.ownerName ?? <span className="text-fg-subtle">Assign</span>}</SelectValue>
+                <SelectValue placeholder="Assign">{item.ownerName ? <span className="truncate">{item.ownerName}</span> : <span className="text-fg-subtle">Assign</span>}</SelectValue>
             </SelectTrigger>
             <SelectContent>
                 <SelectItem value={NO_OWNER}>No owner</SelectItem>
@@ -314,9 +351,62 @@ export interface RaidNewItem {
 /** The owner picker's own choice for "the person adding it", which the server fills in. */
 const ME = '__me'
 
-function AddItemForm({ members, onAdd, onCancel }: { members: RaidMember[]; onAdd: (input: RaidNewItem) => Promise<string | null>; onCancel: () => void }) {
+/** What each type is, under the pane's title. */
+const TYPE_HINT: Record<RaidType, string> = {
+    ASSUMPTION: 'What people agreed.',
+    RISK: 'What could go wrong.',
+    ACTION: 'Who does what, by when.',
+    ISSUE: 'What has already gone wrong.',
+    DECISION: 'What people agreed.',
+}
+
+/** Low to High, as a person reads a scale; the picker in the table lists High first. */
+const PRIORITY_SCALE: readonly RaidPriority[] = ['LOW', 'MEDIUM', 'HIGH']
+
+/** A row of choices, one pressed, in the pane: a Risk's or an Issue's priority. */
+function Segmented<T extends string>({ label, value, options, onChange }: {
+    label: string
+    value: T
+    options: readonly { value: T; label: string; badge?: RaidType }[]
+    onChange: (next: T) => void
+}) {
+    return (
+        <div className="flex flex-wrap items-center gap-1" role="radiogroup" aria-label={label}>
+            {options.map((o) => (
+                <button
+                    key={o.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={value === o.value}
+                    onClick={() => onChange(o.value)}
+                    className={cn(
+                        'inline-flex h-7 items-center gap-1.5 rounded-control px-2.5 text-small font-medium',
+                        value === o.value ? 'bg-surface-selected text-fg' : 'text-fg-muted hover:bg-surface-hover',
+                    )}
+                >
+                    {o.badge && <RaidTypeBadge type={o.badge} decorative small />}
+                    {o.label}
+                </button>
+            ))}
+        </div>
+    )
+}
+
+/**
+ * + Add's side pane (2026-11-19, the approved mock): the log stays where it is behind it. The fields
+ * follow the row it makes, title first, and only those its type uses: an Action asks an owner and a
+ * due date and no priority; a Decision is its title.
+ */
+function AddItemSheet({ open, initialType, members, onAdd, onOpenChange }: {
+    open: boolean
+    /** The type filter's, when one is on; otherwise none, so the person picks it on purpose. */
+    initialType: RaidType | null
+    members: RaidMember[]
+    onAdd: (input: RaidNewItem) => Promise<string | null>
+    onOpenChange: (open: boolean) => void
+}) {
     const titleId = useId()
-    const [type, setType] = useState<RaidType>('RISK')
+    const [type, setType] = useState<RaidType | null>(initialType)
     const [priority, setPriority] = useState<RaidPriority>('MEDIUM')
     const [title, setTitle] = useState('')
     const [notes, setNotes] = useState('')
@@ -328,6 +418,7 @@ function AddItemForm({ members, onAdd, onCancel }: { members: RaidMember[]; onAd
 
     const submit = async (e: React.FormEvent) => {
         e.preventDefault()
+        if (!type) { setError('Choose a type.'); return }
         if (!title.trim()) { setError('Give the entry a title.'); return }
         if (isAction && !dueDate) { setError('Choose a due date.'); return }
         setBusy(true)
@@ -344,78 +435,100 @@ function AddItemForm({ members, onAdd, onCancel }: { members: RaidMember[]; onAd
     }
 
     return (
-        <form onSubmit={(e) => void submit(e)} className="flex flex-col gap-3 rounded-card border border-line bg-surface p-3.5" aria-label="Add a RAID entry">
-            <div className="flex flex-wrap items-center gap-1" role="radiogroup" aria-label="Type">
-                {RAID_TYPES.map((t) => (
-                    <button
-                        key={t}
-                        type="button"
-                        role="radio"
-                        aria-checked={type === t}
-                        onClick={() => setType(t)}
-                        className={cn(
-                            'inline-flex h-7 items-center gap-1.5 rounded-control px-2.5 text-small font-medium',
-                            type === t ? 'bg-surface-selected text-fg' : 'text-fg-muted hover:bg-surface-hover',
+        <Sheet open={open} onOpenChange={(next) => { if (!busy) onOpenChange(next) }}>
+            <SheetContent side="right" className="flex w-full flex-col sm:max-w-[460px]">
+                <form onSubmit={(e) => void submit(e)} className="flex min-h-0 flex-1 flex-col" aria-label="Add a RAID entry">
+                    <div className="flex flex-col gap-1 border-b border-line px-5 pb-3.5 pt-4">
+                        <div className="flex items-center gap-2 pr-8">
+                            {type && <RaidTypeBadge type={type} decorative />}
+                            <SheetTitle className="text-h3 text-fg">{type ? `New ${RAID_TYPE_LABEL[type]}` : 'New entry'}</SheetTitle>
+                        </div>
+                        <SheetDescription className="text-small text-fg-muted">{type ? TYPE_HINT[type] : 'Choose its type first.'} Internal only.</SheetDescription>
+                    </div>
+                    <div className="flex min-h-0 flex-1 flex-col gap-[18px] overflow-y-auto px-5 py-[18px]">
+                        <div className="flex flex-col gap-1.5">
+                            <span id={`${titleId}-type`} className="text-caption text-fg-muted">Type</span>
+                            <Select value={type ?? undefined} onValueChange={(v) => { setType(v as RaidType); setError(null) }}>
+                                <SelectTrigger aria-labelledby={`${titleId}-type`} className="h-9 text-small" autoFocus={!type}>
+                                    <SelectValue placeholder="Choose a type">
+                                        {/* The pick alone: its hint is already under the pane's title. */}
+                                        {type && <span className="inline-flex items-center gap-2"><RaidTypeBadge type={type} decorative small />{RAID_TYPE_LABEL[type]}</span>}
+                                    </SelectValue>
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {RAID_TYPES.map((t) => (
+                                        <SelectItem key={t} value={t}>
+                                            <span className="inline-flex items-center gap-2">
+                                                <RaidTypeBadge type={t} decorative small />
+                                                {RAID_TYPE_LABEL[t]}
+                                                <span className="text-fg-subtle">{TYPE_HINT[t]}</span>
+                                            </span>
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                            <label htmlFor={titleId} className="text-caption text-fg-muted">Title</label>
+                            <Input id={titleId} value={title} maxLength={RAID_TITLE_MAX} onChange={(e) => setTitle(e.target.value)} placeholder="Short, in your words" autoFocus={!!type} />
+                        </div>
+                        {type && hasPriority(type) && (
+                            <div className="flex flex-col gap-1.5">
+                                <span className="text-caption text-fg-muted">Priority</span>
+                                <Segmented
+                                    label="Priority"
+                                    value={priority}
+                                    onChange={setPriority}
+                                    options={PRIORITY_SCALE.map((p) => ({ value: p, label: RAID_PRIORITY_LABEL[p] }))}
+                                />
+                            </div>
                         )}
-                    >
-                        <RaidTypeBadge type={t} decorative />
-                        {RAID_TYPE_LABEL[t]}
-                    </button>
-                ))}
-            </div>
-            <div className="flex flex-col gap-1">
-                <label htmlFor={titleId} className="text-caption text-fg-muted">Title</label>
-                <Input id={titleId} value={title} maxLength={RAID_TITLE_MAX} onChange={(e) => setTitle(e.target.value)} placeholder="Short, in your words" autoFocus />
-            </div>
-            {hasPriority(type) && (
-                <div className="flex items-center gap-2">
-                    <span className="text-caption text-fg-muted">Priority</span>
-                    <RaidPriorityPicker value={priority} onChange={setPriority} label="Priority" className="mx-0" />
-                </div>
-            )}
-            {isAction && (
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <div className="flex flex-col gap-1">
-                        <span id={`${titleId}-owner`} className="text-caption text-fg-muted">Owner</span>
-                        <Select value={owner} onValueChange={setOwner}>
-                            <SelectTrigger aria-labelledby={`${titleId}-owner`} className="h-9 text-small">
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value={ME}>You</SelectItem>
-                                {members.map((m) => <SelectItem key={m.userId} value={m.userId}>{m.name}</SelectItem>)}
-                                <SelectItem value={NO_OWNER}>No owner</SelectItem>
-                            </SelectContent>
-                        </Select>
+                        {isAction && (
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="flex flex-col gap-1.5">
+                                    <span id={`${titleId}-owner`} className="text-caption text-fg-muted">Owner</span>
+                                    <Select value={owner} onValueChange={setOwner}>
+                                        <SelectTrigger aria-labelledby={`${titleId}-owner`} className="h-9 text-small">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value={ME}>You</SelectItem>
+                                            {members.map((m) => <SelectItem key={m.userId} value={m.userId}>{m.name}</SelectItem>)}
+                                            <SelectItem value={NO_OWNER}>No owner</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="flex flex-col gap-1.5">
+                                    <label htmlFor={`${titleId}-due`} className="text-caption text-fg-muted">Due</label>
+                                    <Input id={`${titleId}-due`} type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="h-9 text-small" />
+                                </div>
+                            </div>
+                        )}
+                        {type && type !== 'DECISION' && (
+                            <div className="flex flex-col gap-1.5">
+                                <label htmlFor={`${titleId}-notes`} className="text-caption text-fg-muted">
+                                    {isAction ? 'Next step' : 'Mitigation · next step'} <span className="text-fg-subtle">(optional)</span>
+                                </label>
+                                <Textarea id={`${titleId}-notes`} value={notes} maxLength={RAID_NOTES_MAX} onChange={(e) => setNotes(e.target.value)} rows={3} className="resize-none text-ui" />
+                            </div>
+                        )}
+                        {error && (
+                            <p className="flex items-start gap-1 text-small text-danger" role="alert">
+                                <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+                                {error}
+                            </p>
+                        )}
                     </div>
-                    <div className="flex flex-col gap-1">
-                        <label htmlFor={`${titleId}-due`} className="text-caption text-fg-muted">Due</label>
-                        <Input id={`${titleId}-due`} type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="h-9 text-small" />
+                    <div className="flex justify-end gap-2 border-t border-line px-5 py-3.5">
+                        <Button type="button" variant="ghost" size="sm" onClick={() => onOpenChange(false)} disabled={busy}>Cancel</Button>
+                        <Button type="submit" size="sm" disabled={busy}>
+                            {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
+                            Add to the log
+                        </Button>
                     </div>
-                </div>
-            )}
-            {type !== 'DECISION' && (
-                <div className="flex flex-col gap-1">
-                    <label htmlFor={`${titleId}-notes`} className="text-caption text-fg-muted">
-                        {isAction ? 'Next step' : 'Mitigation · next step'} <span className="text-fg-subtle">(optional)</span>
-                    </label>
-                    <Input id={`${titleId}-notes`} value={notes} maxLength={RAID_NOTES_MAX} onChange={(e) => setNotes(e.target.value)} />
-                </div>
-            )}
-            {error && (
-                <p className="flex items-start gap-1 text-small text-danger" role="alert">
-                    <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
-                    {error}
-                </p>
-            )}
-            <div className="flex justify-end gap-2">
-                <Button type="button" variant="ghost" size="sm" onClick={onCancel} disabled={busy}>Cancel</Button>
-                <Button type="submit" size="sm" disabled={busy}>
-                    {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
-                    Add to the log
-                </Button>
-            </div>
-        </form>
+                </form>
+            </SheetContent>
+        </Sheet>
     )
 }
 
@@ -481,13 +594,14 @@ function CheckStatus({ state, lastCheckedAt, checking, now }: {
 
 /** What changes an entry: each answers with the words to show when it didn't work, or null. */
 export interface RaidHandlers {
-    onCheckNow: () => Promise<{ message: string | null; error: string | null }>
+    /** `suggested`: how many new suggestions the check made, for the note that offers to review them. */
+    onCheckNow: () => Promise<{ message: string | null; error: string | null; suggested?: number }>
     /** `priority`: the one chosen on the card, when it differs from Brio's. */
     /** `priority` and `title`: as changed on the card before accepting, if they were. */
     onAccept: (item: RaidItemView, priority?: RaidPriority, title?: string) => Promise<string | null>
     onDismiss: (item: RaidItemView) => Promise<string | null>
     onAdd: (input: RaidNewItem) => Promise<string | null>
-    onEdit: (item: RaidItemView, patch: { title?: string | null; notes?: string | null; ownerUserId?: string | null; priority?: RaidPriority; dueDate?: string | null }) => Promise<string | null>
+    onEdit: (item: RaidItemView, patch: { title?: string | null; notes?: string | null; ownerUserId?: string | null; priority?: RaidPriority; dueDate?: string | null; type?: RaidType }) => Promise<string | null>
     onClose: (item: RaidItemView) => Promise<string | null>
     onReopen: (item: RaidItemView) => Promise<string | null>
 }
@@ -555,19 +669,162 @@ function RaidLogSkeleton() {
     )
 }
 
+/**
+ * The Suggested view (2026-11-19): Brio's suggestions on their own, apart from the log, each with the
+ * line it came from. A thread's is accepted or dismissed here, its title and priority editable first; a
+ * memo's waits on the memo, with its action items, and links there.
+ */
+function SuggestedList({ suggestions, engagementBase, readOnly, busyIds, titleFor, onTitle, priorityFor, onPriority, onAccept, onDismiss }: {
+    suggestions: RaidItemView[]
+    engagementBase: string
+    readOnly: boolean
+    busyIds: ReadonlySet<string>
+    titleFor: (s: RaidItemView) => string
+    onTitle: (s: RaidItemView, title: string) => void
+    priorityFor: (s: RaidItemView) => RaidPriority | null
+    onPriority: (s: RaidItemView, p: RaidPriority) => void
+    onAccept: (s: RaidItemView) => void
+    onDismiss: (s: RaidItemView) => void
+}) {
+    return (
+        <section aria-label={`${ASSISTANT.name}'s suggestions`} className="flex flex-col gap-3">
+            <p className="text-small text-fg-muted">From new messages and memos. Nothing enters the log until someone accepts it.</p>
+            {suggestions.length === 0 ? (
+                <p className="border-y border-line px-2.5 py-2.5 text-small text-fg-muted">
+                    Nothing waiting. What <Brio noIcon /> suggests from threads and memos shows up here.
+                </p>
+            ) : (
+                <NotionTable>
+                    <NotionTableHeader>
+                        <NotionTableHead icon={<Shapes />} className="w-[72px]">Type</NotionTableHead>
+                        <NotionTableHead icon={<TypeIcon />}>Item · what it came from</NotionTableHead>
+                        <NotionTableHead icon={<SignalHigh />} className="w-[112px]">Priority</NotionTableHead>
+                        <NotionTableHead icon={<Link2 />}>Source</NotionTableHead>
+                        <NotionTableActionsHead />
+                    </NotionTableHeader>
+                    <NotionTableBody>
+                        {suggestions.map((s) => {
+                            const source = s.sources[0]
+                            const onMemo = waitsOnMemo(s)
+                            const memoId = s.sources.find((x) => x.kind === 'MEMO')?.memoId ?? null
+                            const editable = !readOnly && !onMemo && !s.attachedTo
+                            const busy = busyIds.has(s.id)
+                            return (
+                                <NotionTableRow key={s.id} data-testid={`raid-suggestion-${s.id}`}>
+                                    <NotionTableCell><RaidTypeBadge type={s.type} /></NotionTableCell>
+                                    <NotionTableCell className="min-w-[14rem] max-w-[24rem] py-1.5">
+                                        {editable ? (
+                                            // Editable before it's accepted, as a memo's action items are.
+                                            <Input
+                                                value={titleFor(s)}
+                                                onChange={(e) => onTitle(s, e.target.value)}
+                                                disabled={busy}
+                                                maxLength={RAID_TITLE_MAX}
+                                                aria-label={`${RAID_TYPE_LABEL[s.type]}: what the entry says`}
+                                                className="-ml-2 h-7 border-transparent bg-transparent px-2 text-ui font-medium shadow-none hover:border-line focus-visible:border-line-strong"
+                                            />
+                                        ) : (
+                                            <span className="block truncate font-medium text-fg" title={s.title}>{s.title}</span>
+                                        )}
+                                        <span className="mt-0.5 block truncate text-small text-fg-muted">
+                                            {onMemo
+                                                ? 'Waits on the memo, with its action items'
+                                                : [s.attachedTo ? attachPhrase(s.attachedTo) : null, source?.quote ? `“${source.quote}”` : null].filter(Boolean).join(' · ') || `${ASSISTANT.name}'s suggestion`}
+                                        </span>
+                                    </NotionTableCell>
+                                    <NotionTableCell className="whitespace-nowrap">
+                                        {s.priority && editable ? (
+                                            <RaidPriorityPicker
+                                                value={priorityFor(s) ?? s.priority}
+                                                onChange={(p) => onPriority(s, p)}
+                                                label={`Priority of ${s.title}`}
+                                                disabled={busy}
+                                            />
+                                        ) : (
+                                            <RaidPriorityMark priority={s.attachedTo ? null : s.priority} />
+                                        )}
+                                    </NotionTableCell>
+                                    <NotionTableCell className="whitespace-nowrap">
+                                        <span className="inline-flex items-center gap-1">
+                                            {source && <RaidSourceChip source={source} engagementBase={engagementBase} />}
+                                            {s.internalSource && <Tag color="gray">Internal source</Tag>}
+                                        </span>
+                                    </NotionTableCell>
+                                    {!readOnly && (
+                                        <NotionTableCell className="w-px whitespace-nowrap py-1 pr-2 text-right">
+                                            {onMemo ? (
+                                                <RaidLink href={memoReviewHref(engagementBase, memoId)} className="px-1.5 text-small font-medium text-action hover:underline">
+                                                    Review in Memos
+                                                </RaidLink>
+                                            ) : (
+                                                <span className="inline-flex items-center gap-1">
+                                                    <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={() => onDismiss(s)} aria-label={`Dismiss ${s.title}`}>
+                                                        Dismiss
+                                                    </Button>
+                                                    <Button type="button" variant="outline" size="sm" disabled={busy || !titleFor(s).trim()} onClick={() => onAccept(s)} aria-label={`Accept ${s.title}`}>
+                                                        Accept
+                                                    </Button>
+                                                </span>
+                                            )}
+                                        </NotionTableCell>
+                                    )}
+                                </NotionTableRow>
+                            )
+                        })}
+                    </NotionTableBody>
+                </NotionTable>
+            )}
+        </section>
+    )
+}
+
+/** Where the log remembers the suggestions this browser has seen, so only new ones shimmer the button. */
+const seenKey = (engagementBase: string) => `firma:raid-seen-suggestions:${engagementBase || 'tour'}`
+
+function readSeen(engagementBase: string): Set<string> | null {
+    try {
+        const raw = window.localStorage.getItem(seenKey(engagementBase))
+        return raw ? new Set(JSON.parse(raw) as string[]) : new Set()
+    } catch {
+        return null
+    }
+}
+
+function writeSeen(engagementBase: string, ids: string[]) {
+    try {
+        window.localStorage.setItem(seenKey(engagementBase), JSON.stringify(ids))
+    } catch {
+        // Without storage the button shimmers again next time; nothing else depends on it.
+    }
+}
+
+/** How long a row stays tinted after it's added or accepted: long enough to find it. */
+const FLASH_MS = 3_000
+
 export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly: readOnlyProp, now, ...handlers }: RaidTabViewProps) {
-    const strip = useId()
     const [typeFilter, setTypeFilter] = useState<RaidTypeFilter>('ALL')
     const [stateFilter, setStateFilter] = useState<RaidStateFilter>('open')
+    // The log, or Brio's suggestions in their own view (2026-11-19). `?view=suggested` opens on them.
+    const [view, setView] = useState<'log' | 'suggested'>(() =>
+        typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('view') === 'suggested' ? 'suggested' : 'log')
     const [adding, setAdding] = useState(false)
+    const [addKey, setAddKey] = useState(0)
     const [checking, setChecking] = useState(false)
-    const [checkNote, setCheckNote] = useState<{ text: string; error: boolean } | null>(null)
+    const [checkNote, setCheckNote] = useState<{ text: string; error: boolean; review?: boolean } | null>(null)
     const [actionError, setActionError] = useState<string | null>(null)
     const [busyIds, setBusyIds] = useState<ReadonlySet<string>>(new Set())
-    // A suggestion's priority as changed on its card, before it's accepted.
+    // A suggestion's priority as changed on its row, before it's accepted.
     const [chosenPriority, setChosenPriority] = useState<Record<string, RaidPriority>>({})
-    // A suggestion's title as edited on its card, before it's accepted.
+    // A suggestion's title as edited on its row, before it's accepted.
     const [editedTitle, setEditedTitle] = useState<Record<string, string>>({})
+    // Rows just added or accepted, tinted for a moment so the eye finds them.
+    const [flash, setFlash] = useState<ReadonlySet<string>>(new Set())
+    // The Suggested button's one shimmer when suggestions arrive that this browser hasn't seen.
+    const [shimmer, setShimmer] = useState(false)
+    // The log's ids just before an add, to find the one it made.
+    const beforeAdd = useRef<Set<string> | null>(null)
+    // Set when a suggestion is accepted or dismissed: the view returns to the log once none are left.
+    const handledSuggestion = useRef(false)
     const titleFor = (s: RaidItemView) => editedTitle[s.id] ?? s.title
     const changedTitle = (s: RaidItemView) => {
         const t = titleFor(s).trim()
@@ -575,6 +832,46 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
     }
 
     const readOnly = readOnlyProp || !!log?.readOnly
+    const items = log?.items
+    const suggestionIds = (log?.suggestions ?? []).map((s) => s.id).join(',')
+
+    const flashRows = useCallback((ids: string[]) => {
+        if (ids.length === 0) return
+        setFlash((f) => { const n = new Set(f); ids.forEach((id) => n.add(id)); return n })
+        window.setTimeout(() => setFlash((f) => { const n = new Set(f); ids.forEach((id) => n.delete(id)); return n }), FLASH_MS)
+    }, [])
+
+    // The row an add made: whichever id wasn't in the log before it.
+    useEffect(() => {
+        const before = beforeAdd.current
+        if (!before || !items) return
+        const added = items.filter((i) => !before.has(i.id)).map((i) => i.id)
+        if (added.length === 0) return
+        beforeAdd.current = null
+        flashRows(added)
+    }, [items, flashRows])
+
+    // Suggestions this browser hasn't seen shimmer the button once. Opening the view marks them seen.
+    useEffect(() => {
+        if (!suggestionIds || readOnly) return
+        const ids = suggestionIds.split(',')
+        if (view === 'suggested') { writeSeen(engagementBase, ids); return }
+        const seen = readSeen(engagementBase)
+        if (!seen || ids.every((id) => seen.has(id))) return
+        // After this paint, so the sweep is seen from its start.
+        const t = window.setTimeout(() => setShimmer(true), 0)
+        return () => window.clearTimeout(t)
+    }, [suggestionIds, view, engagementBase, readOnly])
+
+    // The last suggestion handled here: back to the whole log, open entries, where the accepted ones now
+    // are. A memo's that still wait are handled on the memo, so they don't hold the view open.
+    useEffect(() => {
+        if (view !== 'suggested' || !log || log.suggestions.some((s) => !waitsOnMemo(s)) || !handledSuggestion.current) return
+        handledSuggestion.current = false
+        setView('log')
+        setTypeFilter('ALL')
+        setStateFilter('open')
+    }, [view, log])
 
     const run = async (item: RaidItemView, act: () => Promise<string | null>): Promise<boolean> => {
         setBusyIds((s) => new Set(s).add(item.id))
@@ -585,13 +882,38 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
         return !failed
     }
 
+    const accept = async (s: RaidItemView) => {
+        const ok = await run(s, () => handlers.onAccept(s, chosenPriority[s.id] !== s.priority ? chosenPriority[s.id] : undefined, changedTitle(s)))
+        if (!ok) return
+        handledSuggestion.current = true
+        // One that adds to an entry merges into it: that entry is where it went.
+        flashRows([s.attachedTo?.id ?? s.id])
+    }
+
+    const dismiss = async (s: RaidItemView) => {
+        if (await run(s, () => handlers.onDismiss(s))) handledSuggestion.current = true
+    }
+
+    const showSuggested = () => {
+        setView('suggested')
+        setCheckNote(null)
+        setShimmer(false)
+    }
+
+    const showLog = (state: RaidStateFilter) => {
+        setView('log')
+        setStateFilter(state)
+    }
+
     const checkNow = async () => {
         setChecking(true)
         setCheckNote(null)
         const out = await handlers.onCheckNow()
         setChecking(false)
         if (out.error) setCheckNote({ text: out.error, error: true })
-        else if (out.message) setCheckNote({ text: out.message, error: false })
+        else if (out.suggested && view === 'log') {
+            setCheckNote({ text: `${out.suggested} new ${out.suggested === 1 ? 'suggestion' : 'suggestions'}`, error: false, review: true })
+        } else if (out.message) setCheckNote({ text: out.message, error: false })
     }
 
     if (loadError && !log) {
@@ -607,13 +929,17 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
     }
     if (!log) return <RaidLogSkeleton />
 
-    const counts = raidCountsByType(log.items, stateFilter)
+    const suggestedView = view === 'suggested'
+    const counts = suggestedView ? raidCountsByType(log.suggestions.map((s) => ({ ...s, status: 'OPEN' as const })), 'open') : raidCountsByType(log.items, stateFilter)
     const rows = filterRaidItems(log.items, typeFilter, stateFilter)
+    // Open and Closed count what they'd show under the type picked.
+    const stateCounts = { open: raidCountsByType(log.items, 'open')[typeFilter], closed: raidCountsByType(log.items, 'closed')[typeFilter] }
+    // A thread's first, to accept or dismiss here; a memo's last, as they're handled on the memo.
+    const suggestions = log.suggestions
+        .filter((s) => typeFilter === 'ALL' || displayTypeOf(s.type) === typeFilter)
+        .sort((a, b) => Number(waitsOnMemo(a)) - Number(waitsOnMemo(b)))
     // The Actions filter reads as an action list: no priority (the due date does that job), "Next step", "Done".
-    const actionsOnly = typeFilter === 'ACTION'
-    // A memo's suggestions wait on the memo, with its action items (§13): here, only a line to it.
-    const suggestions = log.suggestions.filter((s) => !waitsOnMemo(s))
-    const memoGroups = memoSuggestionGroups(log.suggestions)
+    const actionsOnly = typeFilter === 'ACTION' && !suggestedView
 
     return (
         <div className="flex flex-col gap-4" data-no-export="">
@@ -623,35 +949,43 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
                 {readOnly ? (
                     <span className="text-small text-fg-subtle">Read only · completed</span>
                 ) : (
-                    <div className="flex shrink-0 items-center gap-0.5" data-demo-tour="raid-brio-check">
-                        <CheckStatus state={log.conversation} lastCheckedAt={log.lastCheckedAt} checking={checking} now={now} />
-                        <Hint label={log.canCheck ? <>Check with <Brio /></> : `${ASSISTANT.name} isn't available right now`}>
-                            {/* aria-disabled, not disabled, when Brio is off: a disabled button shows no tooltip. */}
-                            <button
-                                type="button"
-                                onClick={() => { if (log.canCheck && !checking) void checkNow() }}
-                                aria-disabled={!log.canCheck || checking}
-                                aria-label={`Check with ${ASSISTANT.name}`}
-                                className={cn(ICON_BUTTON, checking && 'cursor-default', !log.canCheck && 'cursor-default opacity-50 hover:bg-transparent')}
-                            >
-                                {/* Brio's sparkle, in Brio's green. */}
-                                <Sparkles className={cn('h-4 w-4', checking && 'animate-pulse')} style={{ color: BRIO_GREEN }} />
-                            </button>
-                        </Hint>
-                        {/* Last in the row: the status and Brio's check read together, then adding your own. */}
-                        <Hint label="Add an item">
-                            <button type="button" onClick={() => setAdding(true)} disabled={adding} aria-label="Add an item" className={ICON_BUTTON}>
-                                <Plus className="h-4 w-4" />
-                            </button>
-                        </Hint>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                        <div className="flex items-center gap-0.5" data-demo-tour="raid-brio-check">
+                            <CheckStatus state={log.conversation} lastCheckedAt={log.lastCheckedAt} checking={checking} now={now} />
+                            <Hint label={log.canCheck ? <>Check with <Brio /></> : `${ASSISTANT.name} isn't available right now`}>
+                                {/* aria-disabled, not disabled, when Brio is off: a disabled button shows no tooltip. */}
+                                <button
+                                    type="button"
+                                    onClick={() => { if (log.canCheck && !checking) void checkNow() }}
+                                    aria-disabled={!log.canCheck || checking}
+                                    aria-label={`Check with ${ASSISTANT.name}`}
+                                    className={cn(ICON_BUTTON, checking && 'cursor-default', !log.canCheck && 'cursor-default opacity-50 hover:bg-transparent')}
+                                >
+                                    {/* Brio's sparkle, in Brio's green. */}
+                                    <Sparkles className={cn('h-4 w-4', checking && 'animate-pulse')} style={{ color: BRIO_GREEN }} />
+                                </button>
+                            </Hint>
+                        </div>
+                        {/* Adding your own, named: a bare + was easy to miss (2026-11-19). */}
+                        <Button type="button" variant="outline" size="sm" onClick={() => { setAddKey((k) => k + 1); setAdding(true) }} data-demo-tour="raid-add">
+                            <Plus className="h-3.5 w-3.5" aria-hidden />
+                            Add
+                        </Button>
                     </div>
                 )}
             </div>
 
             {checkNote && (
-                <p className={cn('flex items-start gap-1 text-small', checkNote.error ? 'text-danger' : 'text-fg-muted')} role={checkNote.error ? 'alert' : 'status'}>
-                    {checkNote.error && <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />}
-                    {checkNote.text}
+                <p className={cn('flex flex-wrap items-center gap-x-1.5 gap-y-1 text-small', checkNote.error ? 'text-danger' : 'text-fg-muted')} role={checkNote.error ? 'alert' : 'status'}>
+                    {checkNote.error && <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden />}
+                    {checkNote.review && <Sparkles className="h-3.5 w-3.5 shrink-0" style={{ color: BRIO_GREEN }} aria-hidden />}
+                    <span className={cn(checkNote.review && 'text-fg')}>{checkNote.text}</span>
+                    {checkNote.review && (
+                        <>
+                            <span className="text-fg-subtle" aria-hidden>·</span>
+                            <button type="button" onClick={showSuggested} className="font-medium text-action hover:underline">Review</button>
+                        </>
+                    )}
                 </p>
             )}
             {actionError && (
@@ -661,112 +995,29 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
                 </p>
             )}
 
-            {adding && !readOnly && (
-                <AddItemForm
+            {!readOnly && (
+                <AddItemSheet
+                    // A fresh pane for each opening: empty, on the type the log is filtered to, else on none.
+                    key={addKey}
+                    open={adding}
+                    initialType={typeFilter === 'ALL' ? null : typeFilter}
                     members={log.members}
-                    onCancel={() => setAdding(false)}
+                    onOpenChange={setAdding}
                     onAdd={async (input) => {
+                        beforeAdd.current = new Set(log.items.map((i) => i.id))
                         const failed = await handlers.onAdd(input)
-                        if (!failed) {
-                            setAdding(false)
-                            setStateFilter('open')
+                        if (failed) {
+                            beforeAdd.current = null
+                            return failed
                         }
-                        return failed
+                        setAdding(false)
+                        // Where the new entry shows: the open log, under its type or All.
+                        setView('log')
+                        setStateFilter('open')
+                        if (typeFilter !== 'ALL' && typeFilter !== input.type) setTypeFilter('ALL')
+                        return null
                     }}
                 />
-            )}
-
-            {suggestions.length > 0 && (
-                <section aria-labelledby={strip} className="overflow-hidden rounded-card border border-line bg-surface">
-                    <div className="flex flex-wrap items-center gap-2 px-3.5 py-2.5">
-                        <span id={strip} className="inline-flex flex-wrap items-baseline gap-x-1.5 text-small text-fg">
-                            <Brio className="text-ui text-action" />
-                            <span><strong className="font-semibold">suggests {suggestions.length}</strong> from new messages</span>
-                        </span>
-                        <span className="flex-1" />
-                        <span className="text-caption font-normal text-fg-muted">Nothing enters the log until someone accepts it</span>
-                    </div>
-                    <ul>
-                        {suggestions.map((s) => {
-                            const source = s.sources[0]
-                            return (
-                                <li key={s.id} className="flex items-start gap-2.5 border-t border-line px-3.5 py-2.5" data-testid={`raid-suggestion-${s.id}`}>
-                                    <RaidTypeBadge type={s.type} />
-                                    <div className="min-w-0 flex-1">
-                                        <div className="flex flex-wrap items-center gap-2">
-                                            {readOnly || s.attachedTo ? (
-                                                <strong className="text-ui font-semibold text-fg">{s.title}</strong>
-                                            ) : (
-                                                // Editable before it's accepted, as a memo's action items are.
-                                                <Input
-                                                    value={titleFor(s)}
-                                                    onChange={(e) => setEditedTitle((t) => ({ ...t, [s.id]: e.target.value }))}
-                                                    disabled={busyIds.has(s.id)}
-                                                    maxLength={RAID_TITLE_MAX}
-                                                    aria-label={`${RAID_TYPE_LABEL[s.type]}: what the entry says`}
-                                                    className="h-8 min-w-[16rem] flex-1 text-small"
-                                                />
-                                            )}
-                                            {source && <RaidSourceChip source={source} engagementBase={engagementBase} />}
-                                            {s.internalSource && <Tag color="gray">Internal source</Tag>}
-                                            {s.attachedTo && <span className="text-small text-fg-muted">· {attachPhrase(s.attachedTo)}</span>}
-                                        </div>
-                                        {s.priority && !s.attachedTo && (
-                                            <div className="mt-0.5 flex items-center gap-1.5 text-caption text-fg-muted">
-                                                <span>Priority</span>
-                                                {readOnly ? (
-                                                    <RaidPriorityMark priority={s.priority} />
-                                                ) : (
-                                                    <RaidPriorityPicker
-                                                        value={chosenPriority[s.id] ?? s.priority}
-                                                        onChange={(p) => setChosenPriority((c) => ({ ...c, [s.id]: p }))}
-                                                        label={`Priority of ${s.title}`}
-                                                        disabled={busyIds.has(s.id)}
-                                                        className="mx-0 h-6"
-                                                    />
-                                                )}
-                                                <span className="text-fg-subtle">· {ASSISTANT.name}&apos;s suggestion</span>
-                                            </div>
-                                        )}
-                                        {source?.quote ? (
-                                            <blockquote className="mt-1 border-l-2 border-line-strong pl-2 text-small text-fg-muted">“{source.quote}”</blockquote>
-                                        ) : source?.kind === 'MEMO' && sourceHref(engagementBase, source) ? (
-                                            <RaidLink href={sourceHref(engagementBase, source)!} className="mt-1 inline-block text-small text-action hover:underline">
-                                                Read it in the memo
-                                            </RaidLink>
-                                        ) : null}
-                                    </div>
-                                    {!readOnly && (
-                                        <div className="flex shrink-0 items-center gap-1">
-                                            <Button type="button" variant="ghost" size="sm" disabled={busyIds.has(s.id)} onClick={() => void run(s, () => handlers.onDismiss(s))} aria-label={`Dismiss ${s.title}`}>
-                                                Dismiss
-                                            </Button>
-                                            <Button type="button" variant="outline" size="sm" disabled={busyIds.has(s.id) || !titleFor(s).trim()} onClick={() => void run(s, () => handlers.onAccept(s, chosenPriority[s.id] !== s.priority ? chosenPriority[s.id] : undefined, changedTitle(s)))} aria-label={`Accept ${s.title}`}>
-                                                Accept
-                                            </Button>
-                                        </div>
-                                    )}
-                                </li>
-                            )
-                        })}
-                    </ul>
-                </section>
-            )}
-
-            {memoGroups.length > 0 && (
-                <ul aria-label="Suggestions waiting on memos" className="flex flex-col gap-1">
-                    {memoGroups.map((g) => (
-                        <li key={g.memoId ?? g.title} className="flex flex-wrap items-baseline gap-x-1.5 text-small text-fg-muted">
-                            <span>
-                                <strong className="font-semibold text-fg">{g.count} {g.count === 1 ? 'suggestion waits' : 'suggestions wait'}</strong>{' '}
-                                on the memo{g.title ? ` “${g.title}”` : ''}.
-                            </span>
-                            <RaidLink href={memoReviewHref(engagementBase, g.memoId)} className="text-action hover:underline">
-                                Review in Memos
-                            </RaidLink>
-                        </li>
-                    ))}
-                </ul>
             )}
 
             <div className="flex flex-wrap items-center gap-1" role="toolbar" aria-label="Filter the RAID log" data-demo-tour="raid-filters">
@@ -791,17 +1042,57 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
                     <button
                         key={st}
                         type="button"
-                        aria-pressed={stateFilter === st}
-                        onClick={() => setStateFilter(st)}
+                        aria-pressed={!suggestedView && stateFilter === st}
+                        onClick={() => showLog(st)}
                         className={cn(
-                            'inline-flex h-[26px] items-center rounded-control px-2.5 text-small font-medium',
-                            stateFilter === st ? 'bg-surface-selected text-fg' : 'text-fg-muted hover:bg-surface-hover',
+                            'inline-flex h-[26px] items-center gap-1.5 rounded-control px-2.5 text-small font-medium',
+                            !suggestedView && stateFilter === st ? 'bg-surface-selected text-fg' : 'text-fg-muted hover:bg-surface-hover',
                         )}
                     >
-                        {st === 'open' ? 'Open' : actionsOnly ? 'Done' : 'Closed'}
+                        {st === 'open' ? 'Open' : actionsOnly ? 'Done' : 'Closed'}{' '}
+                        <span className="text-fg-subtle">{stateCounts[st]}</span>
                     </button>
                 ))}
+                {!readOnly && (
+                    <>
+                        <span className="mx-1.5 h-4 w-px bg-line-strong" aria-hidden />
+                        {/* Brio's suggestions, apart from Open and Closed: a queue to review, not a state of the log. */}
+                        <button
+                            type="button"
+                            aria-pressed={suggestedView}
+                            onClick={showSuggested}
+                            onAnimationEnd={() => setShimmer(false)}
+                            data-demo-tour="raid-suggested"
+                            data-testid="raid-suggested-view"
+                            className={cn(
+                                'inline-flex h-[26px] items-center gap-1.5 rounded-control px-2.5 text-small font-medium',
+                                suggestedView ? 'bg-surface-selected text-fg' : 'text-fg-muted hover:bg-surface-hover',
+                                shimmer && 'fm-shimmer-once',
+                            )}
+                        >
+                            <Sparkles className="h-3.5 w-3.5" style={{ color: BRIO_GREEN }} aria-hidden />
+                            Suggested
+                            {log.suggestions.length > 0 && <span className="text-fg">{log.suggestions.length}</span>}
+                        </button>
+                    </>
+                )}
             </div>
+
+            {suggestedView ? (
+                <SuggestedList
+                    suggestions={suggestions}
+                    engagementBase={engagementBase}
+                    readOnly={readOnly}
+                    busyIds={busyIds}
+                    titleFor={titleFor}
+                    onTitle={(s, title) => setEditedTitle((t) => ({ ...t, [s.id]: title }))}
+                    priorityFor={(s) => chosenPriority[s.id] ?? s.priority}
+                    onPriority={(s, p) => setChosenPriority((c) => ({ ...c, [s.id]: p }))}
+                    onAccept={(s) => void accept(s)}
+                    onDismiss={(s) => void dismiss(s)}
+                />
+            ) : (
+            <>
 
             {/* The standard table (components/ui/notion-table.tsx, the grid the Files list follows): icon and
                 label headers, hairlines between columns, single-line rows, the row menu on hover. How an
@@ -814,18 +1105,20 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
                             : stateFilter === 'open' ? 'Nothing open here.' : actionsOnly ? 'Nothing done here yet.' : 'Nothing closed here yet.'}
                     </p>
                 ) : (
-                    <NotionTable data-demo-tour="raid-table">
+                    // Fixed columns, so the log fits a full-screen window: Item and Mitigation take what's left
+                    // and cut long text short (the whole of it on hover); Raised shows on wide screens only.
+                    <NotionTable data-demo-tour="raid-table" className="min-w-[60rem] table-fixed">
                         <NotionTableHeader>
                             <NotionTableHead icon={<Shapes />} className="w-[72px]">Type</NotionTableHead>
-                            {!actionsOnly && <NotionTableHead icon={<SignalHigh />} className="w-[112px]">Priority</NotionTableHead>}
+                            {!actionsOnly && <NotionTableHead icon={<SignalHigh />} className="w-[100px]">Priority</NotionTableHead>}
                             <NotionTableHead icon={<TypeIcon />}>{actionsOnly ? 'Action' : 'Item'}</NotionTableHead>
-                            <NotionTableHead icon={<Link2 />}>Source</NotionTableHead>
-                            <NotionTableHead icon={<UserRound />}>Owner</NotionTableHead>
-                            <NotionTableHead icon={<CalendarDays />}>Due</NotionTableHead>
-                            <NotionTableHead icon={<ListChecks />}>{actionsOnly ? 'Next step' : 'Mitigation · next step'}</NotionTableHead>
-                            <NotionTableHead icon={<CircleDot />}>Status</NotionTableHead>
-                            <NotionTableHead icon={<Clock3 />}>Raised</NotionTableHead>
-                            {!readOnly && <NotionTableActionsHead />}
+                            <NotionTableHead icon={<Link2 />} className="w-[140px]">Source</NotionTableHead>
+                            <NotionTableHead icon={<UserRound />} className="w-[136px]">Owner</NotionTableHead>
+                            <NotionTableHead icon={<CalendarDays />} className="w-[164px]">Due</NotionTableHead>
+                            <NotionTableHead icon={<ListChecks />} className="w-[15%]">{actionsOnly ? 'Next step' : 'Mitigation · next step'}</NotionTableHead>
+                            <NotionTableHead icon={<CircleDot />} className="w-[100px]">Status</NotionTableHead>
+                            <NotionTableHead icon={<Clock3 />} className="hidden w-[84px] 2xl:table-cell">Raised</NotionTableHead>
+                            {!readOnly && <NotionTableActionsHead className="w-[40px]" />}
                         </NotionTableHeader>
                         <NotionTableBody>
                             {rows.map((item) => {
@@ -833,8 +1126,19 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
                                 const source = item.sources[0]
                                 const more = item.sources.length - 1
                                 return (
-                                    <NotionTableRow key={item.id} data-testid={`raid-row-${item.id}`}>
-                                        <NotionTableCell><RaidTypeBadge type={item.type} /></NotionTableCell>
+                                    <NotionTableRow key={item.id} data-testid={`raid-row-${item.id}`} data-flash={flash.has(item.id) || undefined} className={cn('transition-colors duration-1000', flash.has(item.id) && 'bg-action/[0.07]')}>
+                                        <NotionTableCell>
+                                            {!readOnly && !auto && isLive(item) ? (
+                                                <RaidTypePicker
+                                                    value={item.type}
+                                                    onChange={(type) => void run(item, () => handlers.onEdit(item, { type }))}
+                                                    label={`Type of ${item.title}`}
+                                                    disabled={busyIds.has(item.id)}
+                                                />
+                                            ) : (
+                                                <RaidTypeBadge type={item.type} />
+                                            )}
+                                        </NotionTableCell>
                                         {!actionsOnly && (
                                             <NotionTableCell className="whitespace-nowrap">
                                                 {item.priority && !readOnly && isLive(item) ? (
@@ -849,7 +1153,7 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
                                                 )}
                                             </NotionTableCell>
                                         )}
-                                        <NotionTableCell className="min-w-[16rem] max-w-[28rem]">
+                                        <NotionTableCell className="overflow-hidden">
                                             <span className="flex min-w-0 items-center gap-1.5">
                                                 {readOnly || auto ? (
                                                     <span className="block truncate font-medium text-fg" title={item.title}>{item.title}</span>
@@ -867,13 +1171,13 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
                                                 {isLegacyAssumption(item) && <Tag color="gray">Assumption</Tag>}
                                             </span>
                                         </NotionTableCell>
-                                        <NotionTableCell className="whitespace-nowrap">
-                                            <span className="inline-flex items-center gap-1" title={item.autoLine ?? undefined}>
+                                        <NotionTableCell className="overflow-hidden whitespace-nowrap">
+                                            <span className="flex min-w-0 items-center gap-1" title={item.autoLine ?? undefined}>
                                                 {source && <RaidSourceChip source={source} engagementBase={engagementBase} />}
                                                 {more > 0 && <span className="text-caption text-fg-subtle" title={item.sources.slice(1).map((s) => s.label).join('\n')}>+{more}</span>}
                                             </span>
                                         </NotionTableCell>
-                                        <NotionTableCell className="whitespace-nowrap">
+                                        <NotionTableCell className="overflow-hidden whitespace-nowrap">
                                             <OwnerCell
                                                 item={item}
                                                 members={log.members}
@@ -884,7 +1188,7 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
                                         <NotionTableCell className="whitespace-nowrap">
                                             <DueCell item={item} readOnly={readOnly} onChange={(dueDate) => run(item, () => handlers.onEdit(item, { dueDate }))} />
                                         </NotionTableCell>
-                                        <NotionTableCell className="min-w-[12rem] max-w-[22rem]">
+                                        <NotionTableCell className="overflow-hidden">
                                             {item.type === 'DECISION' || isLegacyAssumption(item) ? (
                                                 <span className="text-fg-subtle">·</span>
                                             ) : readOnly || !isLive(item) ? (
@@ -904,7 +1208,7 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
                                                 <RaidStatusTag item={item} />
                                             </span>
                                         </NotionTableCell>
-                                        <NotionTableCell className="whitespace-nowrap text-fg-muted">{shortDay(item.raisedAt)}</NotionTableCell>
+                                        <NotionTableCell className="hidden whitespace-nowrap text-fg-muted 2xl:table-cell">{shortDay(item.raisedAt)}</NotionTableCell>
                                         {!readOnly && (
                                             <NotionTableActions>
                                                 {(isLive(item) || item.canReopen) && (
@@ -930,6 +1234,8 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
                     </NotionTable>
                 )}
             </section>
+            </>
+            )}
 
             <p className="text-small text-fg-muted">
                 Status, health and deliverable items keep themselves current. <Brio noIcon /> reads threads with new messages once a
@@ -952,8 +1258,8 @@ async function fetchRaidLog(projectId: string): Promise<RaidLogPayload> {
     return (await res.json() as { data: RaidLogPayload }).data
 }
 
-function announce(projectId: string, count: number) {
-    window.dispatchEvent(new CustomEvent<RaidChangedDetail>(RAID_CHANGED_EVENT, { detail: { projectId, count } }))
+function announce(projectId: string, count: number, suggested: number) {
+    window.dispatchEvent(new CustomEvent<RaidChangedDetail>(RAID_CHANGED_EVENT, { detail: { projectId, count, suggested } }))
 }
 
 /**
@@ -983,7 +1289,7 @@ export function RaidTab({ projectId, engagementBase, readOnly = false }: {
         if (!live.current) return
         setLog(data)
         setLoadError(null)
-        announce(projectId, raidOpenCount(data.items))
+        announce(projectId, raidOpenCount(data.items), data.suggestions.length)
     }, [projectId])
 
     /**
@@ -1033,7 +1339,7 @@ export function RaidTab({ projectId, engagementBase, readOnly = false }: {
                 const said = body.data.status === 'nothing_new'
                     ? 'Nothing new since the last check.'
                     : body.data.suggested === 0 ? 'Nothing to suggest from the new messages.' : null
-                return { message: [said, body.warning].filter(Boolean).join(' ') || null, error: null }
+                return { message: [said, body.warning].filter(Boolean).join(' ') || null, error: null, suggested: body.data.suggested }
             } catch (e) {
                 return { message: null, error: brioFailureReason(e, BRIO_RAID_FAILED) }
             }
@@ -1059,11 +1365,12 @@ export function RaidTab({ projectId, engagementBase, readOnly = false }: {
 }
 
 /**
- * The number beside the RAID tab: entries open or recorded. Null until it loads, and
- * for anyone the log isn't for. Follows changes made in the tab on this page without asking again.
+ * Beside the RAID tab: the number of entries open or recorded, and how many of Brio's suggestions wait,
+ * which puts a dot on the tab (2026-11-19). Null until it loads, and for anyone the log isn't for.
+ * Follows changes made in the tab on this page without asking again.
  */
-export function useRaidCount(projectId: string | null): number | null {
-    const [count, setCount] = useState<number | null>(null)
+export function useRaidCounts(projectId: string | null): { count: number; suggested: number } | null {
+    const [counts, setCounts] = useState<{ count: number; suggested: number } | null>(null)
     useEffect(() => {
         // No engagement: a viewer who doesn't get the RAID tab, whose route would refuse the count anyway.
         if (!projectId) return
@@ -1072,15 +1379,15 @@ export function useRaidCount(projectId: string | null): number | null {
             try {
                 const res = await fetch(`/api/projects/${projectId}/raid?view=count`)
                 if (!res.ok) return
-                const body = await res.json() as { data: { count: number } }
-                if (alive) setCount(body.data.count)
+                const body = await res.json() as { data: { count: number; suggested?: number } }
+                if (alive) setCounts({ count: body.data.count, suggested: body.data.suggested ?? 0 })
             } catch {
                 // No number is better than a wrong one; the tab says why when it's opened.
             }
         })()
         const onChange = (e: Event) => {
             const detail = (e as CustomEvent<RaidChangedDetail>).detail
-            if (detail?.projectId === projectId) setCount(detail.count)
+            if (detail?.projectId === projectId) setCounts((c) => ({ count: detail.count, suggested: detail.suggested ?? c?.suggested ?? 0 }))
         }
         window.addEventListener(RAID_CHANGED_EVENT, onChange)
         return () => {
@@ -1088,5 +1395,5 @@ export function useRaidCount(projectId: string | null): number | null {
             window.removeEventListener(RAID_CHANGED_EVENT, onChange)
         }
     }, [projectId])
-    return count
+    return counts
 }

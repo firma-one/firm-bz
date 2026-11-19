@@ -22,29 +22,36 @@ afterEach(() => {
 
 // Rendering the table's selects and menus is slow on a busy machine.
 describe('DemoRaidTab', { timeout: 20_000 }, () => {
-    it('shows the mock: two suggestions from threads, one waiting on a memo, and eight entries', () => {
+    it('shows the mock: eight entries, and three suggestions in their own view, one waiting on a memo', () => {
         render(<DemoRaidTab />)
-        expect(screen.getByText('suggests 2')).toBeTruthy()
-        expect(within(screen.getByRole('list', { name: 'Suggestions waiting on memos' })).getByRole('link', { name: 'Review in Memos' }).getAttribute('href'))
-            .toBe('?tab=comments&view=memos&memo=tour-memo-weekly')
         expect(screen.getAllByTestId(/^raid-row-/)).toHaveLength(8)
         // Two Actions, one of them past its due date; the K-1s are one now, not an Assumption.
         const bar = screen.getByRole('toolbar', { name: 'Filter the RAID log' })
         expect(within(bar).getByRole('button', { name: 'Actions 2' })).toBeTruthy()
         expect(within(screen.getByTestId('raid-row-raid-letter')).getByText(/· overdue$/)).toBeTruthy()
         expect(within(screen.getByTestId('raid-row-raid-k1')).getByRole('button', { name: 'Title: Dana to send the partnership K-1s. Edit' })).toBeTruthy()
+
+        fireEvent.click(screen.getByTestId('raid-suggested-view'))
+        expect(screen.getByTestId('raid-suggested-view').textContent).toBe('Suggested3')
+        expect(within(screen.getByTestId('raid-suggestion-tour-raid-weekly-1')).getByRole('link', { name: 'Review in Memos' }).getAttribute('href'))
+            .toBe('?tab=comments&view=memos&memo=tour-memo-weekly')
         // A thread's promise isn't an Action: Brio suggests the risk in it.
         expect(within(screen.getByTestId('raid-suggestion-raid-suggest-1099')).getByText('Risk')).toBeTruthy()
     })
 
     it('accepting a suggestion puts it in the log; one that adds to an entry merges into it instead', async () => {
         render(<DemoRaidTab />)
+        fireEvent.click(screen.getByTestId('raid-suggested-view'))
         await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Accept The brokerage 1099-B may not arrive before the end of the month' })) })
-        expect(screen.getByTestId('raid-row-raid-suggest-1099')).toBeTruthy()
-        expect(screen.getByText('suggests 1')).toBeTruthy()
-        expect(screen.getAllByTestId(/^raid-row-/)).toHaveLength(9)
+        expect(screen.queryByTestId('raid-suggestion-raid-suggest-1099')).toBeNull()
+        expect(screen.getByTestId('raid-suggested-view').textContent).toBe('Suggested2')
 
         await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Accept Pricing in section 4.2 may be out of date' })) })
+        // Only the memo's is left, handled on the memo: back to the whole open log, the accepted ones tinted.
+        expect(screen.getByTestId('raid-suggested-view').getAttribute('aria-pressed')).toBe('false')
+        expect(screen.getByTestId('raid-suggested-view').textContent).toBe('Suggested1')
+        expect(screen.getByTestId('raid-row-raid-suggest-1099').getAttribute('data-flash')).toBe('true')
+        expect(screen.getByTestId('raid-row-raid-overdue').getAttribute('data-flash')).toBe('true')
         expect(screen.queryByTestId('raid-row-raid-suggest-pricing')).toBeNull()
         expect(within(screen.getByTestId('raid-row-raid-overdue')).getByText('+1')).toBeTruthy()
         expect(screen.getAllByTestId(/^raid-row-/)).toHaveLength(9)
@@ -58,11 +65,28 @@ describe('DemoRaidTab', { timeout: 20_000 }, () => {
         expect(link('raid-row-raid-overdue', 'Deliverables')).toBe('?tab=board')
     })
 
+    it("changes the type of a person's own entry; one the engagement's data keeps has none to change", async () => {
+        Element.prototype.scrollIntoView ??= () => {}
+        render(<DemoRaidTab />)
+        const bar = screen.getByRole('toolbar', { name: 'Filter the RAID log' })
+        expect(within(screen.getByTestId('raid-row-raid-pace')).queryByRole('combobox', { name: /^Type of / })).toBeNull()
+
+        const picker = within(screen.getByTestId('raid-row-raid-letter')).getByRole('combobox', { name: /^Type of / })
+        await act(async () => { fireEvent.keyDown(picker, { key: 'Enter' }) })
+        await act(async () => { fireEvent.keyDown(screen.getByRole('option', { name: 'Risk' }), { key: 'Enter' }) })
+        expect(within(bar).getByRole('button', { name: 'Risks 3' })).toBeTruthy()
+        expect(within(bar).getByRole('button', { name: 'Actions 1' })).toBeTruthy()
+        // A Risk has a priority: Medium, to change.
+        expect(within(screen.getByTestId('raid-row-raid-letter')).getByRole('combobox', { name: /^Priority of / }).textContent).toContain('Medium')
+    })
+
     it('dismissing a suggestion drops it', async () => {
         render(<DemoRaidTab />)
+        fireEvent.click(screen.getByTestId('raid-suggested-view'))
         await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Dismiss Pricing in section 4.2 may be out of date' })) })
         expect(screen.queryByTestId('raid-suggestion-raid-suggest-pricing')).toBeNull()
-        expect(screen.getByText('suggests 1')).toBeTruthy()
+        expect(screen.getByTestId('raid-suggested-view').textContent).toBe('Suggested2')
+        fireEvent.click(screen.getByRole('button', { name: /^Open \d+$/ }))
         expect(screen.getAllByTestId(/^raid-row-/)).toHaveLength(8)
     })
 

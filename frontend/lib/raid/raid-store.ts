@@ -281,6 +281,11 @@ export async function raidOpenCountFor(engagementId: string): Promise<number> {
     return prisma.engagementRaidItem.count({ where: { engagementId, status: { in: ['OPEN', 'RECORDED'] } } })
 }
 
+/** Brio's suggestions waiting on the log: the dot on the RAID tab. */
+export async function raidSuggestedCountFor(engagementId: string): Promise<number> {
+    return prisma.engagementRaidItem.count({ where: { engagementId, status: 'SUGGESTED' } })
+}
+
 /** When Brio last read this engagement's conversation (engagement.settings.raid.lastCheckedAt). */
 export function lastCheckedAtOf(settings: unknown): string | null {
     const raw = ((settings ?? {}) as { raid?: { lastCheckedAt?: unknown } }).raid?.lastCheckedAt
@@ -532,12 +537,29 @@ export async function editRaidItem(
     engagementId: string,
     actor: RaidActor,
     itemId: unknown,
-    patch: { title?: unknown; notes?: unknown; ownerUserId?: unknown; priority?: unknown; dueDate?: unknown },
+    patch: { title?: unknown; notes?: unknown; ownerUserId?: unknown; priority?: unknown; dueDate?: unknown; type?: unknown },
 ): Promise<void> {
     const item = await findItem(engagementId, itemId)
     if (item.status === 'SUGGESTED' || item.status === 'DISMISSED') throw userFacing('Accept the suggestion first, then edit it.', 'conflict')
 
     const data: Prisma.EngagementRaidItemUpdateInput = { updatedBy: actor.userId }
+    // A new type, for an entry a person or Brio wrote: it takes the new type's fields, as accepting does.
+    const type = patch.type === undefined ? item.type as RaidType : checkedType(patch.type)
+    const retyped = type !== item.type
+    if (retyped) {
+        if (isAutoSource(item.sourceKind as RaidSourceKind)) {
+            throw userFacing("This entry's type follows the engagement's own data, so it can't be changed.", 'invalid')
+        }
+        data.type = type
+        if (item.status !== 'CLOSED') data.status = liveStatusFor(type)
+        else if (item.closedReason) data.closedReason = item.closedReason.replace(/^(Done|Closed)\b/, type === 'ACTION' ? 'Done' : 'Closed')
+        data.priority = hasPriority(type) ? (item.priority as RaidPriority | null) ?? 'MEDIUM' : null
+        data.prioritySetBy = hasPriority(type) ? actor.userId : null
+        data.dueDate = type === 'ACTION' ? item.dueDate ?? dateOf(nextWeekStart()) : null
+        if (type === 'ACTION' && !item.ownerUserId && patch.ownerUserId === undefined) {
+            data.ownerUserId = await defaultOwner(engagementId, actor)
+        }
+    }
     if (patch.title !== undefined) {
         if (isAutoSource(item.sourceKind as RaidSourceKind)) {
             throw userFacing("This entry's title follows the engagement's own data, so it can't be renamed.", 'invalid')
@@ -546,12 +568,12 @@ export async function editRaidItem(
     }
     if (patch.notes !== undefined) data.notes = cleanNotes(patch.notes)
     if (patch.ownerUserId !== undefined) data.ownerUserId = await checkedOwner(engagementId, patch.ownerUserId)
-    const priority = checkedPriority(item.type as RaidType, patch.priority)
+    const priority = checkedPriority(type, patch.priority)
     if (priority) {
         data.priority = priority
         data.prioritySetBy = actor.userId
     }
-    const dueDate = checkedDueDate(item.type as RaidType, patch.dueDate)
+    const dueDate = checkedDueDate(type, patch.dueDate)
     if (dueDate !== undefined) data.dueDate = dateOf(dueDate)
     const updated = await prisma.engagementRaidItem.update({ where: { id: item.id }, data, select: REMINDER_SELECT })
     await syncActionReminder(reminderState(item), reminderState(updated))

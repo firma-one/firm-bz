@@ -250,8 +250,8 @@
       "seconds": 8.18
     },
     "raid-1": {
-      "hash": "6b339b5a",
-      "seconds": 13.78
+      "hash": "1db342bb",
+      "seconds": 15.75
     },
     "raid-2": {
       "hash": "43400e12",
@@ -270,8 +270,8 @@
       "seconds": 18.93
     },
     "raid-6": {
-      "hash": "f2c803a2",
-      "seconds": 14.0
+      "hash": "3208103c",
+      "seconds": 17.5
     },
     "search-1": {
       "hash": "96cc21b0",
