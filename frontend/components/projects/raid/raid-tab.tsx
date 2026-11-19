@@ -430,8 +430,8 @@ export function checkStatusTip(state: Exclude<RaidConversationState, 'none'>, la
     const name = ASSISTANT.name
     if (state === 'current') return `${name} has read every thread message.${when ? ` Last checked ${when}.` : ''}`
     return when
-        ? `Threads changed since ${name} last checked, ${when}. ${name} reads them once a day, or now with the sparkle, at most 1 credit.`
-        : `${name} hasn't read this engagement's threads yet. It reads them once a day, or now with the sparkle, at most 1 credit.`
+        ? `Threads changed since ${name} last checked, ${when}. ${name} reads them once a day, or now with the sparkle.`
+        : `${name} hasn't read this engagement's threads yet. It reads them once a day, or now with the sparkle.`
 }
 
 /**
@@ -932,8 +932,8 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
             </section>
 
             <p className="text-small text-fg-muted">
-                Status, health and deliverable items keep themselves current, with no credits. <Brio noIcon /> reads threads with new messages once a
-                day, or when you check with the sparkle: 1 credit per read. A memo is read once, when it&apos;s added, and its suggestions
+                Status, health and deliverable items keep themselves current. <Brio noIcon /> reads threads with new messages once a
+                day, or when you check with the sparkle. A memo is read once, when it&apos;s added, and its suggestions
                 wait on the memo, to accept or dismiss there. An open Action shows on its owner&apos;s Home and Inbox until it&apos;s done.{' '}
                 <Brio noIcon /> records what people decided; it never decides.
             </p>
