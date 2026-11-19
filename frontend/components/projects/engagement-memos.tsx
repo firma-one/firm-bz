@@ -19,7 +19,7 @@ import {
     type NotesEngagementRef,
     type NotesProposalsFound,
 } from '@/components/projects/notes-proposals-panel'
-import { MemoBrioPanel, type MemoBrioTab, type MemoSuggestionChanges } from '@/components/projects/memo-brio-panel'
+import { MEMO_COLUMN_HEAD, MemoBrioPanel, type MemoBrioTab, type MemoSuggestionChanges } from '@/components/projects/memo-brio-panel'
 import { BRIO_PROPOSALS_FAILED } from '@/lib/ai/brio-failure'
 import { AddMemoSheet, type AddMemoInput, type AddMemoOutcome, type EditMemoContext, type MemoEditInput } from '@/components/projects/add-memo-sheet'
 import { DiscussionsBarPortal } from '@/components/projects/discussions-switch'
@@ -649,7 +649,7 @@ function MemoList({ memos, query, selectedId, onSelect, storage, foldable, colla
             {foldable && (
                 // As tall as the memo's header beside it (py-3 round a 28 px button), so the three columns
                 // share one header line. The button keeps 18 px from the right: centered on the rail.
-                <div className="relative hidden flex-none items-center justify-end overflow-hidden border-b border-line py-3 pr-[18px] @[1040px]:flex">
+                <div className={cn('relative hidden flex-none items-center justify-end overflow-hidden border-b border-line pr-[18px] @[1040px]:flex', MEMO_COLUMN_HEAD)}>
                     <span aria-hidden className={cn('pointer-events-none absolute left-3 whitespace-nowrap text-small text-fg-muted', fades)}>
                         {memos.length} memo{memos.length === 1 ? '' : 's'}
                     </span>
@@ -971,7 +971,7 @@ function MemoPane({
                 aria-label="Memo"
                 className="flex min-w-0 flex-[999_1_480px] flex-col border-t border-line sm:border-t-0 @[1040px]:min-h-0 @[1040px]:border-r"
             >
-                <div className="flex flex-none flex-wrap items-center gap-2 border-b border-line px-6 py-3">
+                <div className={cn('flex flex-none flex-wrap items-center gap-2 border-b border-line px-6 py-3 @[1040px]:flex-nowrap @[1040px]:py-0', MEMO_COLUMN_HEAD)}>
                     <InternalOnlyTag />
                     <span className="min-w-0 truncate text-small text-fg-muted" title={memo.fileName}>{memo.fileName}</span>
                     <span className="flex-1" />

@@ -415,6 +415,12 @@ export interface MemoBrioPanelProps {
 }
 
 /** The sparkle's tooltip: what a read does and costs. */
+/**
+ * The height of the bar on top of each Memos column (the list, the memo, this panel) when they sit side
+ * by side, so the three bottom borders make one line (Deepak, 2026-11-19). 52 px and the border.
+ */
+export const MEMO_COLUMN_HEAD = '@[1040px]:h-[53px]'
+
 export const MEMO_READ_TIP = 'Read this memo with Brio · 2 credits · minutes and RAID'
 
 export function MemoBrioPanel({
@@ -546,7 +552,7 @@ export function MemoBrioPanel({
 
     return (
         <section aria-label={`${ASSISTANT.name} on this memo`} className="flex min-w-0 basis-full flex-col border-t border-line @[1040px]:min-h-0 @[1040px]:border-t-0">
-            <div className="flex flex-none items-end gap-5 border-b border-line px-5" role="tablist" aria-label="From this memo" data-demo-tour="memo-brio-tabs">
+            <div className={cn('flex flex-none items-end gap-5 border-b border-line px-5', MEMO_COLUMN_HEAD)} role="tablist" aria-label="From this memo" data-demo-tour="memo-brio-tabs">
                 {tabButton('summary', 'Summary')}
                 {tabButton('raid', <>RAID {items.length > 0 && <span className="font-normal tabular-nums text-fg-subtle">{items.length}</span>}</>)}
                 {!readOnly && sparkle}
