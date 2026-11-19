@@ -18,8 +18,8 @@
       "seconds": 15.18
     },
     "billing-1": {
-      "hash": "c98b036e",
-      "seconds": 11.9
+      "hash": "3a9bf113",
+      "seconds": 9.65
     },
     "board-1": {
       "hash": "8e0e0e22",
@@ -46,8 +46,8 @@
       "seconds": 10.22
     },
     "brio-3": {
-      "hash": "c87ee8e0",
-      "seconds": 18.02
+      "hash": "ad4ddc9d",
+      "seconds": 15.4
     },
     "calendar-1": {
       "hash": "3ebc1164",
@@ -190,8 +190,8 @@
       "seconds": 27.1
     },
     "firm-settings-3": {
-      "hash": "ef01a3ea",
-      "seconds": 15.53
+      "hash": "5b2c89db",
+      "seconds": 14.25
     },
     "firm-switcher-1": {
       "hash": "70f00293",
@@ -222,8 +222,8 @@
       "seconds": 11.35
     },
     "memos-2": {
-      "hash": "b652a283",
-      "seconds": 12.45
+      "hash": "98a6bc54",
+      "seconds": 11.3
     },
     "memos-3": {
       "hash": "8fa7b9e6",
@@ -250,20 +250,28 @@
       "seconds": 8.18
     },
     "raid-1": {
-      "hash": "c6459b8d",
-      "seconds": 13.1
+      "hash": "6b339b5a",
+      "seconds": 13.78
     },
     "raid-2": {
-      "hash": "dadf305e",
-      "seconds": 11.28
+      "hash": "43400e12",
+      "seconds": 18.93
     },
     "raid-3": {
       "hash": "8a432dff",
       "seconds": 12.25
     },
     "raid-4": {
-      "hash": "78fca63f",
-      "seconds": 14.95
+      "hash": "c0c87fbe",
+      "seconds": 18.55
+    },
+    "raid-5": {
+      "hash": "1a54bc6b",
+      "seconds": 18.93
+    },
+    "raid-6": {
+      "hash": "f2c803a2",
+      "seconds": 14.0
     },
     "search-1": {
       "hash": "96cc21b0",

@@ -247,7 +247,7 @@ export const NODE_STEPS: Record<TourNodeId, TourStep[]> = {
         {
             target: '[data-demo-tour="firm-settings-brio"]',
             title: <><Brio /> settings</>,
-            content: <p>Whether <Brio /> reads each new memo, for 2 credits. Whether names, emails and links are swapped for placeholders before <Brio /> reads. And whether Reviewers can ask <Brio /> on an engagement&apos;s Overview.</p>,
+            content: <p>Whether <Brio /> reads each new memo. Whether names, emails and links are swapped for placeholders before <Brio /> reads. And whether Reviewers can ask <Brio /> on an engagement&apos;s Overview.</p>,
             route: at(firm, { tab: 'settings', section: 'appsettings' }),
             placement: 'top',
         },
@@ -553,7 +553,7 @@ export const NODE_STEPS: Record<TourNodeId, TourStep[]> = {
         {
             target: '[data-demo-tour="memos-add"]',
             title: 'Add a memo',
-            content: <p>Paste your notes or a transcript after a call. <Brio /> reads a new memo once, for 2 credits: it writes the meeting&apos;s minutes and suggests what to log in RAID<RaidInfo className="ml-0.5" />.</p>,
+            content: <p>Paste your notes or a transcript after a call. <Brio /> reads a new memo once: it writes the meeting&apos;s minutes and suggests what to log in RAID<RaidInfo className="ml-0.5" />.</p>,
             route: engAt({ tab: 'comments', view: 'memos' }),
             placement: 'bottom',
             skipScroll: true,
@@ -587,18 +587,17 @@ export const NODE_STEPS: Record<TourNodeId, TourStep[]> = {
         {
             target: '[data-demo-tour="engagement-raid-tab"]',
             title: 'RAID log',
-            content: <p>The engagement&apos;s Risks, Actions, Issues and Decisions, for your team only. Status, health and deliverable entries keep themselves current, at no cost in credits.</p>,
+            content: <p>The engagement&apos;s Risks, Actions, Issues and Decisions, for your team only, each marked by its first letter. Filter by kind, and switch between what&apos;s open and what&apos;s closed.</p>,
             route: engAt({ tab: 'raid' }),
             placement: 'bottom',
             skipScroll: true,
         },
         {
-            target: '[data-demo-tour="raid-filters"]',
-            title: 'Four kinds',
-            // "A is an Action", not "A an Action": Kokoro reads a lone "A" as the article.
-            content: <p>R is a Risk, A is an Action, I is an Issue and D is a Decision. Filter by kind, and switch between what&apos;s open and what&apos;s closed.</p>,
+            target: '[data-demo-tour="raid-table"]',
+            title: 'Risks',
+            content: <p>A Risk is what could go wrong, like a project falling behind pace. Give it a priority, an owner and a mitigation, such as re-planning with the client on the next call. Close it once it&apos;s handled; a pace or planning Risk closes by itself when the work is back on track.</p>,
             route: engAt({ tab: 'raid' }),
-            placement: 'bottom',
+            placement: 'top',
             skipScroll: true,
         },
         {
@@ -610,9 +609,25 @@ export const NODE_STEPS: Record<TourNodeId, TourStep[]> = {
             skipScroll: true,
         },
         {
+            target: '[data-demo-tour="raid-table"]',
+            title: 'Issues',
+            content: <p>An Issue is what has already gone wrong, like a report five days overdue or a client reply still waiting on your team. Give it a priority, an owner and a next step. Overdue work, blocked files and waiting threads show up here by themselves, and close when they&apos;re fixed.</p>,
+            route: engAt({ tab: 'raid' }),
+            placement: 'top',
+            skipScroll: true,
+        },
+        {
+            target: '[data-demo-tour="raid-table"]',
+            title: 'Decisions',
+            content: <p>A Decision records what people agreed, like the scope leaving out state returns, so no one digs through emails later. Approving a deliverable records one by itself, and <Brio /> picks them up from memos and threads. <Brio /> records decisions; it never makes them.</p>,
+            route: engAt({ tab: 'raid' }),
+            placement: 'top',
+            skipScroll: true,
+        },
+        {
             target: '[data-demo-tour="raid-brio-check"]',
             title: <><Brio />&apos;s suggestions</>,
-            content: <p><Brio /> reads threads with new messages once a day, or now with the sparkle, for 1 credit, and suggests what to log. What it finds in a memo waits on the memo. The plus adds your own.</p>,
+            content: <p><Brio /> reads threads with new messages once a day, or now with the sparkle, and suggests what to log. What it finds in a memo waits on the memo. The plus adds your own.</p>,
             route: engAt({ tab: 'raid' }),
             placement: 'bottom',
             skipScroll: true,
@@ -668,7 +683,7 @@ export const NODE_STEPS: Record<TourNodeId, TourStep[]> = {
         {
             target: '[data-demo-tour="ask-brio"]',
             title: <><Brio /> and your data</>,
-            content: <p>By default, the names, emails and links <Brio /> knows are swapped for placeholders before it reads, and come back in what it writes. Nothing it suggests changes anything until someone accepts it. Each answer or draft is 1 credit.</p>,
+            content: <p>By default, the names, emails and links <Brio /> knows are swapped for placeholders before it reads, and come back in what it writes. Nothing it suggests changes anything until someone accepts it.</p>,
             route: engAt({ tab: 'analytics' }),
             placement: 'top',
             skipScroll: true,
@@ -701,7 +716,7 @@ export const NODE_STEPS: Record<TourNodeId, TourStep[]> = {
         {
             target: '[data-demo-tour="profile-menu-billing"]',
             title: 'Billing',
-            content: <p>Billing is in the profile menu too, for firm admins: your plan, your payments and your <Brio /> credits, one for each answer or draft. It&apos;s inert in this demo.</p>,
+            content: <p>Billing is in the profile menu too, for firm admins: your plan, your payments and your <Brio /> usage. It&apos;s inert in this demo.</p>,
             route: at(`${firm}/support`, { menu: 'profile' }),
             placement: 'right',
             settle: MENU_SETTLE_MS,

@@ -183,7 +183,7 @@ describe('RaidTabView', { timeout: 20_000 }, () => {
         const at = new Date(2026, 10, 12, 8, 2).toISOString()
         const later = new Date(2026, 10, 12, 15, 0)
         expect(checkStatusTip('current', at, later)).toBe('Brio has read every thread message. Last checked today 08:02.')
-        expect(checkStatusTip('changed', at, later)).toBe('Threads changed since Brio last checked, today 08:02. Brio reads them once a day, or now with the sparkle, at most 1 credit.')
+        expect(checkStatusTip('changed', at, later)).toBe('Threads changed since Brio last checked, today 08:02. Brio reads them once a day, or now with the sparkle.')
         expect(checkStatusTip('changed', null, later)).toMatch(/^Brio hasn't read this engagement's threads yet\./)
     })
 

@@ -87,13 +87,15 @@ function useAutoplay({ index, on, held, waiting = false, duration, follow, read,
     return progress
 }
 
-type VoiceStatus = 'off' | 'loading' | 'playing' | 'ended' | 'blocked'
+type VoiceStatus = 'off' | 'loading' | 'playing' | 'ended' | 'refused' | 'failed'
 
 /**
  * A step card read aloud: plays the step's clip when the card opens, holds it while the tour is
- * paused or the page is hidden, and stops it when the card goes. `blocked` when the browser won't
- * play it (no click on the page yet, say) or the clip won't load (a dropped connection): the card
- * then runs as if narration were off. `position`
+ * paused or the page is hidden, and stops it when the card goes. `refused` when the browser won't
+ * play it before the visitor has clicked on the page (a "How this works" link opens the tour in a
+ * new tab, so its first card has had no click): the card waits and offers Play, whose click
+ * (`listen`) is the gesture the browser waits for. `failed` when the clip
+ * won't load (a dropped connection): the card runs as if narration were off. `position`
  * is how far the clip has played (ms) while it's playing, for Autoplay's clock to follow; `words`,
  * when each word in the clip is spoken, for the card to reveal its words as they're read.
  */
@@ -120,8 +122,17 @@ function useNarration({ index, src, timings, paused }: { index: number; src: str
     // short by a pause (the card moving on mid-start) rejects too, and isn't a refusal.
     const play = (audio: HTMLAudioElement) =>
         audio.play().catch((error: DOMException) => {
-            if (error.name === 'NotAllowedError' && audioRef.current === audio) setStatus('blocked')
+            if (error.name === 'NotAllowedError' && audioRef.current === audio) setStatus('refused')
         })
+
+    // Called from the visitor's click, so the browser lets the clip play: a refused card is read from the start.
+    const listen = () => {
+        const audio = audioRef.current
+        if (!audio) return
+        audio.currentTime = 0
+        setStatus('loading')
+        void play(audio)
+    }
 
     useEffect(() => {
         if (!src) {
@@ -135,7 +146,7 @@ function useNarration({ index, src, timings, paused }: { index: number; src: str
         const onEnded = () => setStatus('ended')
         // A clip that won't load, or breaks off partway, isn't coming: the card goes on without it,
         // rather than waiting faint for a voice.
-        const onError = () => setStatus('blocked')
+        const onError = () => setStatus('failed')
         audio.addEventListener('playing', onPlaying)
         audio.addEventListener('ended', onEnded)
         audio.addEventListener('error', onError)
@@ -175,7 +186,7 @@ function useNarration({ index, src, timings, paused }: { index: number; src: str
         return audio && status === 'playing' && !audio.ended ? audio.currentTime * 1000 : null
     }, [status])
 
-    return { status, position, words }
+    return { status, position, words, listen }
 }
 
 /** The highlight that keeps a card's words faint (still legible) until they're spoken. */
@@ -201,7 +212,7 @@ const UNSPOKEN_COLOR = 'color-mix(in srgb, var(--ui-fg-subtle) 45%, transparent)
  * Joyride's button props carry a `title`, which would show the browser's native tooltip; it is
  * dropped in favor of the visible labels.
  */
-function TourTooltip({ backProps, closeProps, primaryProps, skipProps, step, index, isLastStep, tooltipProps, controls }: TooltipRenderProps) {
+export function TourTooltip({ backProps, closeProps, primaryProps, skipProps, step, index, isLastStep, tooltipProps, controls }: TooltipRenderProps) {
     const { mode, paused, setPaused, narration, setNarration } = useDemoTour()
     const { title: _back, ...back } = backProps
     const { title: _close, ...close } = closeProps
@@ -237,12 +248,20 @@ function TourTooltip({ backProps, closeProps, primaryProps, skipProps, step, ind
         heard: () => (voice.status === 'ended' ? Infinity : (voice.position() ?? 0) / 1000),
         restartKey: index,
     })
-    const held = paused || (hovered && !reading)
+    // Refused by the browser, the card waits for Play rather than running on silently: its clock stays
+    // at the start, so the voice, the words and the bar all begin together on that click. Narration
+    // stays on (the speaker turns it off); Play is the click the browser waits for.
+    const refused = voice.status === 'refused'
+    const start = () => {
+        if (autoplay && paused) setPaused(false)
+        voice.listen()
+    }
+    const held = paused || refused || (hovered && !reading)
     const progress = useAutoplay({
         index,
         on: autoplay,
         held,
-        waiting: voice.status === 'loading',
+        waiting: voice.status === 'loading' || refused,
         duration: reading && clip ? clip.seconds * 1000 + NARRATION_BEAT_MS : card.duration,
         follow: voice.position,
         read: () => cardRef.current?.innerText ?? '',
@@ -309,7 +328,7 @@ function TourTooltip({ backProps, closeProps, primaryProps, skipProps, step, ind
                     {card.wholeTour ? 'Skip tour' : 'Skip'}
                 </button>
                 <div className="ml-auto flex items-center gap-1.5">
-                    {autoplay && (
+                    {autoplay && !refused && (
                         <Hint label={paused ? 'Play' : 'Pause'} side="bottom">
                             <button
                                 type="button"
@@ -321,8 +340,19 @@ function TourTooltip({ backProps, closeProps, primaryProps, skipProps, step, ind
                             </button>
                         </Hint>
                     )}
-                    {index > 0 && <Button {...back} type="button" variant="ghost" size="sm">Back</Button>}
-                    <Button {...next} type="button" size="sm">{isLastStep ? 'Finish' : 'Next'}</Button>
+                    {refused ? (
+                        // Waiting for its first click: Play is the one thing to press.
+                        <Button type="button" size="sm" onClick={start}>
+                            <Play className="h-3.5 w-3.5" aria-hidden />
+                            Play
+                        </Button>
+                    ) : (
+                        <>
+                            {index > 0 && <Button {...back} type="button" variant="ghost" size="sm">Back</Button>}
+                            {/* A single feature's tour in Autopilot moves on by itself; its end offers the next feature. */}
+                            {(card.wholeTour || !autoplay) && <Button {...next} type="button" size="sm">{isLastStep ? 'Finish' : 'Next'}</Button>}
+                        </>
+                    )}
                 </div>
             </div>
         </div>
