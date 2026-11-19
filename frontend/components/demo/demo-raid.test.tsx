@@ -71,7 +71,7 @@ describe('DemoRaidTab', { timeout: 20_000 }, () => {
         await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Dismiss Pricing in section 4.2 may be out of date' })) })
         expect(screen.queryByTestId('raid-suggestion-raid-suggest-pricing')).toBeNull()
         expect(screen.getByTestId('raid-suggested-view').textContent).toBe('Suggested2')
-        fireEvent.click(screen.getByRole('button', { name: 'Open' }))
+        fireEvent.click(screen.getByRole('button', { name: /^Open \d+$/ }))
         expect(screen.getAllByTestId(/^raid-row-/)).toHaveLength(8)
     })
 

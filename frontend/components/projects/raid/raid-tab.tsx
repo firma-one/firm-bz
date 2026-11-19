@@ -884,6 +884,8 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
     const suggestedView = view === 'suggested'
     const counts = suggestedView ? raidCountsByType(log.suggestions.map((s) => ({ ...s, status: 'OPEN' as const })), 'open') : raidCountsByType(log.items, stateFilter)
     const rows = filterRaidItems(log.items, typeFilter, stateFilter)
+    // Open and Closed count what they'd show under the type picked.
+    const stateCounts = { open: raidCountsByType(log.items, 'open')[typeFilter], closed: raidCountsByType(log.items, 'closed')[typeFilter] }
     // A thread's first, to accept or dismiss here; a memo's last, as they're handled on the memo.
     const suggestions = log.suggestions
         .filter((s) => typeFilter === 'ALL' || displayTypeOf(s.type) === typeFilter)
@@ -999,7 +1001,8 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
                             !suggestedView && stateFilter === st ? 'bg-surface-selected text-fg' : 'text-fg-muted hover:bg-surface-hover',
                         )}
                     >
-                        {st === 'open' ? 'Open' : actionsOnly ? 'Done' : 'Closed'}
+                        {st === 'open' ? 'Open' : actionsOnly ? 'Done' : 'Closed'}{' '}
+                        <span className="text-fg-subtle">{stateCounts[st]}</span>
                     </button>
                 ))}
                 {!readOnly && (

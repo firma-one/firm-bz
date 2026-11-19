@@ -52,7 +52,7 @@ describe('RaidTabView', { timeout: 20_000 }, () => {
         expect(within(attach).getByText(/^adds to the open Issue “QSR-9 overdue”/)).toBeTruthy()
 
         // Open goes back to the log.
-        fireEvent.click(screen.getByRole('button', { name: 'Open' }))
+        fireEvent.click(screen.getByRole('button', { name: /^Open \d+$/ }))
         expect(button.getAttribute('aria-pressed')).toBe('false')
         expect(screen.getAllByTestId(/^raid-row-/).length).toBeGreaterThan(0)
     })
@@ -98,7 +98,7 @@ describe('RaidTabView', { timeout: 20_000 }, () => {
 
         expect(screen.getByTestId('raid-suggested-view').getAttribute('aria-pressed')).toBe('false')
         expect(within(bar).getByRole('button', { name: /^All/ }).getAttribute('aria-pressed')).toBe('true')
-        expect(within(bar).getByRole('button', { name: 'Open' }).getAttribute('aria-pressed')).toBe('true')
+        expect(within(bar).getByRole('button', { name: /^Open \d+$/ }).getAttribute('aria-pressed')).toBe('true')
         expect(screen.getByTestId('raid-row-raid-suggest-1099').getAttribute('data-flash')).toBe('true')
         // The button stays, without a count.
         expect(screen.getByTestId('raid-suggested-view').textContent).toBe('Suggested')
@@ -122,6 +122,7 @@ describe('RaidTabView', { timeout: 20_000 }, () => {
         render(<RaidTabView log={demoRaidLog(NOW)} engagementBase="" readOnly={false} now={NOW} {...handlers()} />)
         const bar = screen.getByRole('toolbar', { name: 'Filter the RAID log' })
         expect(within(bar).getByRole('button', { name: 'All 8' }).getAttribute('aria-pressed')).toBe('true')
+        expect(within(bar).getByRole('button', { name: 'Open 8' }).getAttribute('aria-pressed')).toBe('true')
         expect(within(bar).getByRole('button', { name: 'Risks 2' })).toBeTruthy()
         expect(within(bar).getByRole('button', { name: 'Actions 2' })).toBeTruthy()
         expect(within(bar).getByRole('button', { name: 'Decisions 2' })).toBeTruthy()
@@ -129,8 +130,11 @@ describe('RaidTabView', { timeout: 20_000 }, () => {
 
         fireEvent.click(within(bar).getByRole('button', { name: 'Issues 2' }))
         expect(screen.getAllByTestId(/^raid-row-/).map((r) => r.getAttribute('data-testid')).sort()).toEqual(['raid-row-raid-overdue', 'raid-row-raid-waiting'])
+        // Open and Closed count under the type picked.
+        expect(within(bar).getByRole('button', { name: 'Open 2' })).toBeTruthy()
+        expect(within(bar).getByRole('button', { name: 'Closed 0' })).toBeTruthy()
 
-        fireEvent.click(within(bar).getByRole('button', { name: 'Closed' }))
+        fireEvent.click(within(bar).getByRole('button', { name: /^Closed \d+$/ }))
         expect(screen.getByText('Nothing closed here yet.')).toBeTruthy()
     })
 
@@ -145,9 +149,9 @@ describe('RaidTabView', { timeout: 20_000 }, () => {
         expect(headers()).toEqual(expect.arrayContaining(['Action', 'Due', 'Next step']))
         expect(headers()).not.toContain('Priority')
         expect(headers()).not.toContain('Item')
-        expect(within(bar).queryByRole('button', { name: 'Closed' })).toBeNull()
+        expect(within(bar).queryByRole('button', { name: /^Closed \d+$/ })).toBeNull()
 
-        fireEvent.click(within(bar).getByRole('button', { name: 'Done' }))
+        fireEvent.click(within(bar).getByRole('button', { name: /^Done \d+$/ }))
         expect(screen.getByText('Nothing done here yet.')).toBeTruthy()
     })
 
@@ -172,12 +176,12 @@ describe('RaidTabView', { timeout: 20_000 }, () => {
         }
         render(<RaidTabView log={done} engagementBase="" readOnly={false} now={NOW} {...handlers()} />)
         const bar = screen.getByRole('toolbar', { name: 'Filter the RAID log' })
-        fireEvent.click(within(bar).getByRole('button', { name: 'Closed' }))
+        fireEvent.click(within(bar).getByRole('button', { name: /^Closed \d+$/ }))
         const row = screen.getByTestId('raid-row-raid-k1')
         expect(within(row).getByText('Done').closest('span[class*="bg-tag-green-bg"]')).toBeTruthy()
         expect(within(row).getByTitle('Done by Alex · Nov 12')).toBeTruthy()
 
-        fireEvent.click(within(bar).getByRole('button', { name: 'Open' }))
+        fireEvent.click(within(bar).getByRole('button', { name: /^Open \d+$/ }))
         const trigger = within(screen.getByTestId('raid-row-raid-letter')).getByRole('button', { name: 'More for Send Dana the revised engagement letter' })
         fireEvent.keyDown(trigger, { key: 'Enter' })
         expect(await screen.findByRole('menuitem', { name: 'Mark done' })).toBeTruthy()
