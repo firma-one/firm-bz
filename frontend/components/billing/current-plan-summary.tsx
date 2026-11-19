@@ -46,12 +46,10 @@ function UsageBar({
     const isAtCap = !isUnlimited && used !== null && used >= cap!
     const isNearCap = !isUnlimited && !isAtCap && used !== null && pct >= 80
 
-    // Status colors come from the tag palette: orange as the cap nears, danger once it is reached.
-    const barColor = isAtCap
-        ? 'bg-danger'
-        : isNearCap
-        ? 'bg-tag-orange-fg'
-        : 'bg-action'
+    // The same bar as AI credits (Deepak, 2026-11-19): 8px, the gray track, a muted chart hue rather
+    // than the action green, rounded ends, a tooltip. Status colors only as the cap nears (orange) or
+    // is reached (danger): color for state.
+    const stateClass = isAtCap ? 'bg-danger' : isNearCap ? 'bg-tag-orange-fg' : null
 
     return (
         <div className="flex min-w-0 flex-col gap-1">
@@ -59,17 +57,33 @@ function UsageBar({
             <span className={cn('text-ui font-medium tabular-nums', isAtCap ? 'text-danger' : 'text-fg')}>
                 {isUnlimited ? '∞' : used === null ? '—' : `${used} / ${cap}`}
             </span>
-            <div className="mt-0.5 h-1 w-full overflow-hidden rounded-full bg-surface-muted">
-                {!isUnlimited && (
-                    <div
-                        className={cn('h-full rounded-full transition-[width] duration-300', barColor)}
-                        style={{ width: `${pct}%` }}
-                    />
-                )}
-            </div>
+            <TooltipProvider delayDuration={150}>
+                <div
+                    className="mt-0.5 flex h-2 w-full overflow-hidden rounded-full bg-surface-muted"
+                    role="img"
+                    aria-label={isUnlimited || used === null ? label : `${label}: ${used} of ${cap}`}
+                >
+                    {!isUnlimited && used !== null && used > 0 && (
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <div
+                                    className={cn('h-full rounded-full transition-[width] duration-300', stateClass)}
+                                    style={{ width: `${pct}%`, backgroundColor: stateClass ? undefined : 'var(--ui-chart-slate)' }}
+                                />
+                            </TooltipTrigger>
+                            <TooltipContent side="top">
+                                {used} of {cap} {label.toLowerCase()}
+                            </TooltipContent>
+                        </Tooltip>
+                    )}
+                </div>
+            </TooltipProvider>
         </div>
     )
 }
+
+/** For its test. */
+export { UsageBar as UsageBarForTest }
 
 function RetentionStat({ value, label }: { value: string; label: string }) {
     return (

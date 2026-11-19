@@ -79,3 +79,25 @@ describe('AiCreditsRow', () => {
         expect(screen.queryByText(/\bcalls?\b/)).toBeNull()
     })
 })
+
+describe('the Clients bar', () => {
+    it('is drawn like the AI credits bar: 8px track, a muted chart hue, and says what it counts', async () => {
+        const { UsageBarForTest } = await import('./current-plan-summary')
+        render(<UsageBarForTest label="Clients" cap={3} used={1} />)
+        const bar = screen.getByRole('img', { name: 'Clients: 1 of 3' })
+        expect(bar.className).toContain('h-2')
+        expect(bar.className).toContain('bg-surface-muted')
+        const fill = bar.firstElementChild as HTMLElement
+        expect(fill.style.backgroundColor).toBe('var(--ui-chart-slate)')
+        expect(fill.style.width).toBe(`${(1 / 3) * 100}%`)
+    })
+
+    it('turns to the state colors only near and at the cap', async () => {
+        const { UsageBarForTest } = await import('./current-plan-summary')
+        const { unmount } = render(<UsageBarForTest label="Clients" cap={5} used={4} />)
+        expect((screen.getByRole('img').firstElementChild as HTMLElement).className).toContain('bg-tag-orange-fg')
+        unmount()
+        render(<UsageBarForTest label="Clients" cap={3} used={3} />)
+        expect((screen.getByRole('img').firstElementChild as HTMLElement).className).toContain('bg-danger')
+    })
+})
