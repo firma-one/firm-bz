@@ -997,7 +997,7 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
                         aria-pressed={!suggestedView && stateFilter === st}
                         onClick={() => showLog(st)}
                         className={cn(
-                            'inline-flex h-[26px] items-center rounded-control px-2.5 text-small font-medium',
+                            'inline-flex h-[26px] items-center gap-1.5 rounded-control px-2.5 text-small font-medium',
                             !suggestedView && stateFilter === st ? 'bg-surface-selected text-fg' : 'text-fg-muted hover:bg-surface-hover',
                         )}
                     >
