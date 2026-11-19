@@ -8,14 +8,16 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const h = vi.hoisted(() => ({
     create: vi.fn(),
     guarded: vi.fn(),
-    meter: vi.fn(async () => {}),
+    record: vi.fn(async () => ({ credits: 1, costMicros: 1000 })),
     engagement: { name: 'Brand refresh', isDeleted: false, client: { name: 'Northwind' } } as Record<string, unknown> | null,
 }))
 
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/prisma', () => ({ prisma: { engagement: { findUnique: async () => h.engagement } } }))
 vi.mock('@/lib/ai/client', () => ({ AI_MODEL: 'claude-test', AI_EFFORT: { minutes: 'medium' } }))
-vi.mock('@/lib/ai/guarded-client', () => ({ getGuardedAnthropic: h.guarded, meterAiCall: h.meter }))
+vi.mock('@/lib/ai/guarded-client', () => ({ getGuardedAnthropic: h.guarded }))
+// The ledger write, under the real metering client the gate hands out (lib/ai/metered-client.ts).
+vi.mock('@/lib/ai/usage', () => ({ recordAiUsage: h.record }))
 vi.mock('@/lib/ai/known-entities', () => ({ vaultForEngagement: async () => ({ vault: true }) }))
 vi.mock('@/lib/logger', () => ({ logger: { warn: vi.fn(), error: vi.fn(), info: vi.fn() } }))
 // Sealing is the app's own (lib/encryption); here it only has to be reversible and not the words.
@@ -24,6 +26,8 @@ vi.mock('@/lib/encryption', () => ({
     openText: (v: string) => (v.startsWith('enc:') ? Buffer.from(v.slice(4), 'base64').toString() : v),
 }))
 
+import type Anthropic from '@anthropic-ai/sdk'
+import { meteredClient } from '@/lib/ai/metered-client'
 import { buildMinutesContext, openMinutes, sealMinutes, validateMinutes, writeMemoMinutes, MINUTES_TOOL_NAME } from './memo-minutes'
 
 const MEMO = { id: 'm1', title: 'Call with Maya', date: '2026-03-04', text: 'Maya Chen: we liked the green one.\nTom Ortiz: Green then.' }
@@ -44,8 +48,10 @@ beforeEach(() => {
         usage: { input_tokens: 100, output_tokens: 50 },
         content: [{ type: 'tool_use', name: MINUTES_TOOL_NAME, input: ANSWER }],
     })
-    h.guarded.mockReset().mockResolvedValue({ messages: { create: h.create } })
-    h.meter.mockClear()
+    // As the gate does: the SDK client, metered for the scope it was asked for, on group g1.
+    h.guarded.mockReset().mockImplementation(async (scope: { firmId?: string | null; userId?: string | null; feature: 'memoMinutes' }) =>
+        meteredClient({ messages: { create: h.create } } as unknown as Anthropic, { groupId: 'g1', ...scope }))
+    h.record.mockClear()
 })
 
 describe('validateMinutes', () => {
@@ -91,7 +97,10 @@ describe('writeMemoMinutes', () => {
         const out = await writeMemoMinutes({ engagementId: 'p1', firmId: 'f1', memo: MEMO, userId: 'u1' })
         expect(out).toEqual({ ok: true, minutes: validateMinutes(ANSWER) })
         expect(h.guarded).toHaveBeenCalledWith({ firmId: 'f1', userId: 'u1', feature: 'memoMinutes' }, { vault: { vault: true } })
-        expect(h.meter).toHaveBeenCalledWith({ firmId: 'f1', userId: 'u1', feature: 'memoMinutes' }, { inputTokens: 100, outputTokens: 50 })
+        expect(h.record).toHaveBeenCalledTimes(1)
+        expect(h.record).toHaveBeenCalledWith(expect.objectContaining({
+            groupId: 'g1', firmId: 'f1', userId: 'u1', feature: 'memoMinutes', inputTokens: 100, outputTokens: 50, status: 'ok',
+        }))
     })
 
     it('charges the firm, with no person, when the memo was added', async () => {

@@ -8,7 +8,10 @@ const st = vi.hoisted(() => ({
     doc: { fileName: 'Intel Report', docId: 'QSR-9', dueDate: null, settings: { share: { createdAt: 'x' }, activity: { status: 'in_review', updatedAt: '2026-11-06T00:00:00Z' } } } as Record<string, unknown> | null,
     recipient: { userId: 'dana' } as Record<string, unknown> | null,
 }))
-const { streamDraft } = vi.hoisted(() => ({ streamDraft: vi.fn(async () => new Response('stream')) }))
+const { streamDraft, guard, gated } = vi.hoisted(() => {
+    const gated = { messages: {} }
+    return { streamDraft: vi.fn(async () => new Response('stream')), guard: vi.fn(async () => gated), gated }
+})
 
 // Masking has its own tests (lib/ai/pseudonymize, masked-client, known-entities): no vault here.
 vi.mock('@/lib/ai/known-entities', () => ({ vaultForEngagement: async () => null, vaultForFirms: async () => null }))
@@ -33,7 +36,7 @@ vi.mock('@/lib/prisma', () => ({
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn() } }))
 vi.mock('@/lib/ai/client', () => ({ isAiConfigured: () => true, AI_EFFORT: { draft: 'low' } }))
 vi.mock('@/lib/ai/guarded-client', () => ({
-    getGuardedAnthropic: async () => ({ messages: {} }),
+    getGuardedAnthropic: guard,
     aiFailureResponse: (_e: unknown, words: string) => Response.json({ error: words }, { status: 500 }),
 }))
 vi.mock('@/lib/ai/stream-draft', () => ({ streamDraft }))
@@ -50,13 +53,16 @@ beforeEach(() => {
     st.doc = { fileName: 'Intel Report', docId: 'QSR-9', dueDate: null, settings: { share: { createdAt: 'x' }, activity: { status: 'in_review', updatedAt: '2026-11-06T00:00:00Z' } } }
     st.recipient = { userId: 'dana' }
     streamDraft.mockClear()
+    guard.mockClear()
 })
 
 describe('POST .../documents/[documentId]/ai-nudge-draft', () => {
     it('drafts for a Lead, opening with the person tagged by their member name', async () => {
         expect(await (await post()).text()).toBe('stream')
-        const call = (streamDraft.mock.calls[0] as unknown as [{ user: string; prefix?: string; scope: { feature: string } }])[0]
-        expect(call.scope.feature).toBe('nudgeDraft')
+        // Charged as nudgeDraft, to the person asking: the gate's client meters it (lib/ai/metered-client.ts).
+        expect(guard).toHaveBeenCalledWith(expect.objectContaining({ firmId: 'f1', userId: 'u1', feature: 'nudgeDraft' }), { vault: null })
+        const call = (streamDraft.mock.calls[0] as unknown as [{ client: unknown; user: string; prefix?: string }])[0]
+        expect(call.client).toBe(gated)
         expect(call.user).toContain('"Dana"')
         expect(call.user).toContain('QSR-9')
         // A mention, as the comment box writes one, so the thread draws it as theirs.

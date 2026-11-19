@@ -1159,8 +1159,8 @@ enum PlatformAuditScope {
 /// is never overwritten, supports atomic inserts under concurrency, and makes the per-group
 /// aggregation that credit metering needs a simple indexed query.
 ///
-/// Token counts are the source of truth, not a computed cost — model pricing changes, and a
-/// stored dollar amount would freeze yesterday's rates into history. Cost is derived at read time.
+/// Token counts are kept alongside the cost (`costMicros`), priced at call time: what the call cost
+/// then is what the group was charged for, and a later model price change must not reprice history.
 model PlatformAiUsage {
   id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   createdAt    DateTime @default(now()) @db.Timestamptz(6)
@@ -1175,15 +1175,29 @@ model PlatformAiUsage {
 
   inputTokens  Int
   outputTokens Int
-  /// Credit weight applied for this action, recorded at call time so a later reweighting
-  /// does not retroactively change what a group was charged.
+  /// Credits charged for this call, recorded at call time so a later repricing does not
+  /// retroactively change what a group was charged. Since 2026-11-19: the call's model cost ÷ the
+  /// credit unit, rounded up, at least 1 when any tokens were spent (lib/ai/pricing.ts). Older rows: 1.
   credits      Decimal  @db.Decimal(8, 2)
+  /// What the call cost us, in millionths of a US dollar (tokens × the model's price at call time).
+  costMicros   Int      @default(0)
+  /// How the call ended: ok | refused | cut_off | error | timeout | cancelled | rejected.
+  /// Every call that reached the model writes a row, whatever its ending (no free calls).
+  status       String   @default("ok")
+  /// The model's stop reason when it gave one (end_turn, max_tokens, refusal, tool_use).
+  stopReason   String?
+  /// True when the token counts are our estimate (a stream stopped or broken before its last event).
+  estimated    Boolean  @default(false)
+  /// When this row was sent to Polar as a usage event (null: not yet). Keyed by `id`, so a resend
+  /// can't count twice.
+  polarSentAt  DateTime? @db.Timestamptz(6)
 
   group        Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
 
   @@index([groupId, createdAt])
   @@index([firmId, createdAt])
   @@index([feature, createdAt])
+  @@index([polarSentAt, createdAt])
   @@map("platform_ai_usage")
   @@schema("platform")
 }

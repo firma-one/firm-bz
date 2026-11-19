@@ -2,7 +2,8 @@ import 'server-only'
 import type Anthropic from '@anthropic-ai/sdk'
 import { prisma } from '@/lib/prisma'
 import { AI_EFFORT, AI_MODEL } from '@/lib/ai/client'
-import { getGuardedAnthropic, meterAiCall } from '@/lib/ai/guarded-client'
+import { getGuardedAnthropic } from '@/lib/ai/guarded-client'
+import { AI_MAX_TOKENS } from '@/lib/ai/features'
 import { vaultForEngagement } from '@/lib/ai/known-entities'
 import { openText, sealText } from '@/lib/encryption'
 import { logger } from '@/lib/logger'
@@ -26,7 +27,7 @@ import { parseMinutes, type MemoMinutes } from './memo-shared'
 
 export const MINUTES_TOOL_NAME = 'record_minutes'
 /** Room for thinking plus one tool call: thinking counts toward the cap. */
-export const MINUTES_MAX_TOKENS = 6000
+export const MINUTES_MAX_TOKENS = AI_MAX_TOKENS.memoMinutes
 /** Runs beside the RAID read, inside the sparkle route's minute. */
 const MINUTES_TIMEOUT_MS = 55_000
 /** A memo longer than this is read to here (the review refuses a longer one outright). */
@@ -188,12 +189,7 @@ export async function writeMemoMinutes(params: {
         }],
     }, { timeout: MINUTES_TIMEOUT_MS, maxRetries: 0 })
 
-    await meterAiCall(scope, {
-        inputTokens: (message.usage?.input_tokens ?? 0)
-            + (message.usage?.cache_creation_input_tokens ?? 0)
-            + (message.usage?.cache_read_input_tokens ?? 0),
-        outputTokens: message.usage?.output_tokens ?? 0,
-    })
+    // Metered by the client (lib/ai/metered-client.ts), a timeout or failure included.
 
     if (message.stop_reason === 'refusal') {
         logger.warn('[memo-minutes] the model declined')

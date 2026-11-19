@@ -9,7 +9,8 @@ const h = vi.hoisted(() => ({
     order: [] as string[],
     creditCap: vi.fn(),
     personLimit: vi.fn(),
-    client: { messages: {} },
+    client: { messages: { create: vi.fn() } },
+    firmFindUnique: vi.fn(),
 }))
 
 vi.mock('./client', () => ({ getAnthropic: () => h.client }))
@@ -21,6 +22,7 @@ vi.mock('./credit-cap', () => ({
 }))
 vi.mock('./person-limit', () => ({ assertWithinPersonLimits: h.personLimit }))
 vi.mock('./usage', () => ({ recordAiUsage: vi.fn() }))
+vi.mock('@/lib/prisma', () => ({ prisma: { firm: { findUnique: h.firmFindUnique } } }))
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
 
 import { AiCreditLimitError, aiFailureResponse, getGuardedAnthropic } from './guarded-client'
@@ -29,12 +31,17 @@ beforeEach(() => {
     h.order = []
     h.creditCap.mockReset().mockImplementation(async () => { h.order.push('credits') })
     h.personLimit.mockReset().mockImplementation(async () => { h.order.push('person') })
+    h.firmFindUnique.mockReset().mockResolvedValue({ groupId: 'g1' })
 })
 
 describe('getGuardedAnthropic', () => {
     it("checks the group's credits, then the person's own limits, for every feature, free ones too", async () => {
-        expect(await getGuardedAnthropic({ firmId: 'f1', userId: 'u1', feature: 'dayBrief' }, { vault: null })).toBe(h.client)
+        const client = await getGuardedAnthropic({ firmId: 'f1', userId: 'u1', feature: 'dayBrief' }, { vault: null })
+        // The metered wrapper around the SDK client, not the bare one.
+        expect(client).toBeTruthy()
+        expect(client!.messages.create).not.toBe(h.client.messages.create)
         expect(h.order).toEqual(['credits', 'person'])
+        expect(h.creditCap).toHaveBeenCalledWith({ groupId: 'g1', feature: 'dayBrief' })
         expect(h.personLimit).toHaveBeenCalledWith({ userId: 'u1', feature: 'dayBrief' })
     })
 

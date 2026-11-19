@@ -1,11 +1,9 @@
 import { createHash } from 'crypto'
 import type { FirmInsightsResponse } from '@/app/api/firms/[firmId]/insights/route'
-import { logger } from '@/lib/logger'
 import { engagementPace, PACE_META, type PaceKey } from '@/lib/insights/firm-engagement-pace'
 import { AI_EFFORT, AI_MODEL, completeText } from './client'
-import { getGuardedAnthropic, meterAiCall } from './guarded-client'
-import { assertWithinAiCreditCap } from './credit-cap'
-import { assertWithinPersonLimits } from './person-limit'
+import { getGuardedAnthropic } from './guarded-client'
+import { AI_MAX_TOKENS } from './features'
 import { vaultForFirms } from '@/lib/ai/known-entities'
 
 export interface FirmBrief {
@@ -230,48 +228,33 @@ export function buildSnapshot(data: FirmInsightsResponse): string {
     return lines.join('\n')
 }
 
-/** The brief is ~150 words; the rest is room for thinking, which counts toward the cap. */
-const BRIEF_MAX_TOKENS = 2000
-
 /** What the model is asked: today's date and the firm's snapshot. */
 function briefRequest(data: FirmInsightsResponse): string {
     return `Today is ${new Date().toISOString().slice(0, 10)}.\n\nFirm snapshot:\n${buildSnapshot(data)}`
 }
 
 /**
- * Generates a brief, refusing when the firm is over its AI credit allowance.
- *
- * The cap is asserted here as well as in the calling route. That is not redundancy for its own
- * sake: the route gates *before* fetching insights so a cached read costs nothing, while this
- * assertion makes the model unreachable without a check — the guarantee every other AI surface
- * gets from `getGuardedAnthropic`. A second caller added later cannot accidentally skip it.
- *
- * Throws `AiCreditLimitError`; the route already translates that into a skipped brief.
+ * Generates a brief through the gate (`getGuardedAnthropic`): refused over the group's credits, its
+ * spend ceiling or the person's own limits (throws `AiCreditLimitError`, which the route turns into a
+ * skipped brief), and metered however the call ends.
  */
 export async function generateFirmBrief(
     data: FirmInsightsResponse,
-    meta?: { firmId?: string; userId?: string },
+    meta: { firmId: string; userId?: string },
 ): Promise<string | null> {
-    if (meta?.firmId) {
-        await assertWithinAiCreditCap({ firmId: meta.firmId, feature: 'brief' })
-    }
-    // The person's own limits too, as getGuardedAnthropic would (lib/ai/person-limit.ts).
-    await assertWithinPersonLimits({ userId: meta?.userId, feature: 'brief' })
-    // What the model may read (§14 item 5); without a firm there's no one to know by name.
-    const vault = meta?.firmId ? await vaultForFirms([meta.firmId]) : null
+    // What the model may read (§14 item 5).
+    const client = await getGuardedAnthropic(
+        { firmId: meta.firmId, userId: meta.userId ?? null, feature: 'brief' },
+        { vault: await vaultForFirms([meta.firmId]) },
+    )
+    if (!client) return null
     return completeText({
-        vault,
+        client,
         system: SYSTEM,
         userMessage: briefRequest(data),
-        maxTokens: BRIEF_MAX_TOKENS,
+        maxTokens: AI_MAX_TOKENS.brief,
         effort: AI_EFFORT.brief,
         label: 'firm-brief',
-        onUsage: meta?.firmId
-            ? (u) => meterAiCall(
-                { firmId: meta.firmId, userId: meta.userId ?? null, feature: 'brief' },
-                u,
-            )
-            : undefined,
     })
 }
 
@@ -280,8 +263,8 @@ export async function generateFirmBrief(
  * with Brio" can show the brief being written rather than a long wait. Returns the whole text, or
  * null when the model returned nothing or `signal` stopped it.
  *
- * Gated by `getGuardedAnthropic` (throws `AiCreditLimitError` over the allowance). Metered only
- * when the stream completes: a stopped rewrite is not a billable call, and is not saved either.
+ * Gated by `getGuardedAnthropic` (throws `AiCreditLimitError` over the allowance), and metered by it
+ * however the stream ends: a stopped rewrite is charged for what it spent, and isn't saved.
  */
 export async function streamFirmBrief(
     data: FirmInsightsResponse,
@@ -295,7 +278,7 @@ export async function streamFirmBrief(
 
     const stream = await client.messages.create({
         model: AI_MODEL,
-        max_tokens: BRIEF_MAX_TOKENS,
+        max_tokens: AI_MAX_TOKENS.brief,
         output_config: { effort: AI_EFFORT.brief },
         system: SYSTEM,
         messages: [{ role: 'user', content: briefRequest(data) }],
@@ -303,16 +286,10 @@ export async function streamFirmBrief(
     }, { signal })
 
     let full = ''
-    let inputTokens = 0
-    let outputTokens = 0
     let stopReason: string | null = null
     try {
-        // Streaming reports tokens across two events: input with message_start, output with
-        // message_delta at the end.
         for await (const event of stream) {
-            if (event.type === 'message_start') inputTokens = event.message.usage?.input_tokens ?? 0
-            else if (event.type === 'message_delta') {
-                outputTokens = event.usage?.output_tokens ?? 0
+            if (event.type === 'message_delta') {
                 stopReason = event.delta?.stop_reason ?? stopReason
             } else if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
                 full += event.delta.text
@@ -326,13 +303,8 @@ export async function streamFirmBrief(
     if (signal?.aborted) return null
 
     const content = full.trim()
-    // A declined brief is not saved, even when some text came before the decline.
-    if (!content || stopReason === 'refusal') return null
-    try {
-        await meterAiCall(scope, { inputTokens, outputTokens })
-    } catch (error) {
-        // Metering is bookkeeping; losing a row must not cost the user their brief.
-        logger.error('AI usage metering failed (firm-brief stream):', error as Error)
-    }
+    // A declined or cut-off brief is not saved, even when some text came before. The call is metered
+    // all the same, by the client (lib/ai/metered-client.ts).
+    if (!content || stopReason === 'refusal' || stopReason === 'max_tokens') return null
     return content
 }

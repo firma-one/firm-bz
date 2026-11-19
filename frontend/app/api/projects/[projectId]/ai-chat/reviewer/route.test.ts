@@ -10,7 +10,7 @@ const st = vi.hoisted(() => ({
     enabled: true,
     used: 0,
 }))
-const { create, meter } = vi.hoisted(() => ({ create: vi.fn(), meter: vi.fn(async () => {}) }))
+const { create, record } = vi.hoisted(() => ({ create: vi.fn(), record: vi.fn(async () => ({ credits: 1, costMicros: 1000 })) }))
 
 // Masking has its own tests (lib/ai/pseudonymize, masked-client, known-entities): no vault here.
 vi.mock('@/lib/ai/known-entities', () => ({ vaultForEngagement: async () => null, vaultForFirms: async () => null }))
@@ -27,11 +27,16 @@ vi.mock('@/lib/engagement-access', () => ({
 vi.mock('@/lib/prisma', () => ({ prisma: {} }))
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn() } }))
 vi.mock('@/lib/ai/client', () => ({ isAiConfigured: () => true, AI_MODEL: 'm', AI_EFFORT: { chat: 'low' } }))
-vi.mock('@/lib/ai/guarded-client', () => ({
-    getGuardedAnthropic: async () => ({ messages: { create } }),
-    meterAiCall: meter,
-    aiFailureResponse: (_e: unknown, words: string) => Response.json({ error: words }, { status: 500 }),
-}))
+// As the gate does: the SDK client, metered (lib/ai/metered-client.ts) for the scope it was asked for.
+vi.mock('@/lib/ai/guarded-client', async () => {
+    const { meteredClient } = await import('@/lib/ai/metered-client')
+    return {
+        getGuardedAnthropic: async (scope: { firmId?: string | null; userId?: string | null; feature: 'reviewerChat' }) =>
+            meteredClient({ messages: { create } } as never, { groupId: 'g1', ...scope }),
+        aiFailureResponse: (_e: unknown, words: string) => Response.json({ error: words }, { status: 500 }),
+    }
+})
+vi.mock('@/lib/ai/usage', () => ({ recordAiUsage: record }))
 vi.mock('@/lib/ai/reviewer-brio', () => ({
     REVIEWER_DAILY_ANSWERS: 10,
     reviewerBrioEnabled: async () => st.enabled,
@@ -55,7 +60,7 @@ beforeEach(() => {
     st.enabled = true
     st.used = 0
     create.mockReset()
-    meter.mockClear()
+    record.mockClear()
     create.mockResolvedValue({
         async *[Symbol.asyncIterator]() {
             yield { type: 'message_start', message: { usage: { input_tokens: 10 } } }
@@ -70,7 +75,10 @@ describe('POST /api/projects/[projectId]/ai-chat/reviewer', () => {
         const res = await post()
         expect(res.status).toBe(200)
         expect(await res.text()).toBe('QSR-9 is with you.')
-        expect(meter).toHaveBeenCalledTimes(1)
+        expect(record).toHaveBeenCalledTimes(1)
+        expect(record).toHaveBeenCalledWith(expect.objectContaining({
+            groupId: 'g1', firmId: 'f1', userId: 'dana', feature: 'reviewerChat', inputTokens: 10, outputTokens: 5, status: 'ok',
+        }))
         expect(create.mock.calls[0][0].system[0].text).toContain('facts')
     })
 

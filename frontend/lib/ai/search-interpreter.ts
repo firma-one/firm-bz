@@ -1,6 +1,7 @@
 import 'server-only'
 import { AI_EFFORT, AI_MODEL } from './client'
 import { getGuardedAnthropic, type AiMasking, type AiScope } from './guarded-client'
+import { AI_MAX_TOKENS } from './features'
 import { logger } from '@/lib/logger'
 import { resolvePeriod } from '@/lib/search/period'
 
@@ -185,7 +186,7 @@ export async function interpretSearchQuery(
             model: AI_MODEL,
             // A forced tool call skips thinking on Haiku 5.5, so this is the call alone; raised from
             // 400 because the newer tokenizer counts the same text as about 30% more tokens.
-            max_tokens: 1024,
+            max_tokens: AI_MAX_TOKENS.searchInterpret,
             output_config: { effort: AI_EFFORT.interpret },
             system: SYSTEM,
             tools: [TOOL],

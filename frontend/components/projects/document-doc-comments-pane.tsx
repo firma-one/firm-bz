@@ -2,7 +2,7 @@
 
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { ArrowLeft, ArrowUpDown, AtSign, BellRing, CalendarClock, Check, Eye, Hash, Link2, Loader2, Lock, LockOpen, MessagesSquare, Send, Smile, Sparkles, Square, Trash2, UserCheck, Users, X } from 'lucide-react'
+import { ArrowLeft, ArrowUpDown, AtSign, BellRing, CalendarClock, Check, Eye, Hash, Link2, Loader2, Lock, LockOpen, MessagesSquare, Send, Smile, Sparkles, Trash2, UserCheck, Users, X } from 'lucide-react'
 import { cn, formatDateTimeWithTZ, formatRelativeTime } from '@/lib/utils'
 import { useRightPane } from '@/lib/right-pane-context'
 import { useAuth } from '@/lib/auth-context'
@@ -1307,15 +1307,10 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
               </span>
             )}
             <button type="button" onClick={discardDraft} className={ghostButton}>Discard draft</button>
-            {draft.status === 'streaming' ? (
-              <button type="button" onClick={draft.stop} className={ghostButton}>
-                <Square className="h-3 w-3" aria-hidden /> Stop
-              </button>
-            ) : (
-              <button type="button" onClick={startDraft} disabled={submitting} className={ghostButton}>
-                {draft.status === 'error' && !draft.text ? 'Try again' : 'Rewrite'}
-              </button>
-            )}
+            {/* No Stop (2026-11-19): a draft takes seconds. Rewrite waits until it's written. */}
+            <button type="button" onClick={startDraft} disabled={submitting || draft.status === 'streaming'} className={ghostButton}>
+              {draft.status === 'error' && !draft.text ? 'Try again' : 'Rewrite'}
+            </button>
             <button
               type="submit"
               disabled={submitting || !newContent.trim() || draftBlocksSend}

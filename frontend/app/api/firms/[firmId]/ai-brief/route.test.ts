@@ -29,7 +29,8 @@ vi.mock('@/lib/ai/credit-cap', () => ({ assertWithinAiCreditCap: creditCap, AiCr
 vi.mock('@/lib/ai/usage', () => ({ recordAiUsage: vi.fn() }))
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn() } }))
 vi.mock('@/lib/prisma', () => ({
-    prisma: { firm: { findUnique: async () => ({ settings: { theme: 'kept' } }), update: firmUpdate } },
+    // groupId: the billing group the gate charges the call to (lib/ai/guarded-client.ts).
+    prisma: { firm: { findUnique: async () => ({ settings: { theme: 'kept' }, groupId: 'g1' }), update: firmUpdate } },
 }))
 vi.mock('@/lib/ai/firm-brief', () => ({
     generateFirmBrief: vi.fn(),
@@ -71,6 +72,34 @@ describe('POST /api/firms/[firmId]/ai-brief?stream=1', () => {
         expect(out.map((l) => l.type)).toEqual(['meta', 'delta', 'delta', 'done'])
         expect(out[3].brief.content).toBe('## Where things stand\nAll quiet.')
         // Saved alongside the firm's other settings, which it keeps.
+        expect(firmUpdate).toHaveBeenCalledWith({
+            where: { id: 'f1' },
+            data: { settings: { theme: 'kept', aiBrief: expect.objectContaining({ content: '## Where things stand\nAll quiet.', fingerprint: 'fp-now' }) } },
+        })
+    })
+
+    it('the reader leaving does not stop the model: the brief is finished and saved for their next visit', async () => {
+        let release!: () => void
+        const gate = new Promise<void>((resolve) => { release = resolve })
+        stream.mockImplementation(async (_d: unknown, _m: unknown, onDelta: (t: string) => void) => {
+            onDelta('## Where things stand\n')
+            // The reader leaves here, mid-brief.
+            await gate
+            onDelta('All quiet.')
+            return '## Where things stand\nAll quiet.'
+        })
+        const res = await post()
+        const reader = res.body!.getReader()
+        const decoder = new TextDecoder()
+        let seen = ''
+        while (!seen.includes('"delta"')) seen += decoder.decode((await reader.read()).value)
+        await reader.cancel()
+        release()
+
+        await vi.waitFor(() => expect(firmUpdate).toHaveBeenCalled())
+        // Never handed a signal that stops it, or one that was aborted.
+        const signal = stream.mock.calls[0][3] as AbortSignal | undefined
+        expect(signal?.aborted ?? false).toBe(false)
         expect(firmUpdate).toHaveBeenCalledWith({
             where: { id: 'f1' },
             data: { settings: { theme: 'kept', aiBrief: expect.objectContaining({ content: '## Where things stand\nAll quiet.', fingerprint: 'fp-now' }) } },

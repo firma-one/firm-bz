@@ -1,8 +1,8 @@
 /**
- * Every metered AI feature, and what each costs in credits.
+ * Every metered AI feature and its token cap. What a call costs in credits follows its tokens
+ * (lib/ai/pricing.ts).
  *
- * Safe to import from client components: no SDK, no database. `usage.ts` (server-only) re-exports
- * these so existing imports keep working; the billing page reads the list from here.
+ * Safe to import from client components: no SDK, no database. The billing page reads the list from here.
  */
 
 export const AI_FEATURES = [
@@ -27,48 +27,32 @@ export const AI_FEATURES = [
 export type AiFeature = (typeof AI_FEATURES)[number]
 
 /**
- * Credits charged per action.
+ * The most each feature's model call may write, thinking included (thinking counts toward it on Haiku
+ * 5.5). One table, so the cap-fit test (lib/ai/caps.test.ts) checks every feature: a cap too small for
+ * the thinking gets an answer cut off every time (the summary at 3000, 2026-11-19), and a cap too large
+ * lets one call cost more than a credit earns.
  *
- * Every AI call costs one credit (Deepak, 2026-11-15): nothing is free and nothing is a fraction, so
- * counting stays simple. A feature that makes two calls costs two. This replaced a free Your brief and
- * memo RAID pass and a half-credit search interpretation.
- *
- * Recorded per row at call time, so re-weighting later does not retroactively change history.
+ * Credits are not set per feature: a call costs what its tokens cost us, in credits (lib/ai/pricing.ts).
  */
-export const CREDIT_WEIGHTS: Record<AiFeature, number> = {
-    brief: 1,
-    summary: 1,
-    chat: 1,
-    searchInterpret: 1,
-    // The first feature whose cost is NOT one row per user action: an agent run records one row
-    // per model turn, so a single review may write several. Weighted at 1 so the unit stays "a
-    // credit is an answer" rather than introducing a second pricing concept — the run's total is
-    // bounded by MAX_AGENT_TURNS and shown to the user before it starts.
-    filesAgent: 1,
-    firmChat: 1,
-    statusUpdate: 1,
-    replyDraft: 1,
-    nudgeDraft: 1,
-    notesProposals: 1,
-    // Charged to the firm whose engagement it is, and capped per person per day in the route.
-    reviewerChat: 1,
-    // Brio writes it unasked, once per person per day. Free from 2026-11-12 to 2026-11-15, then 1 like
-    // every call (Deepak). It counts against the group's allowance like any action, and stops when the
-    // allowance is spent; the per-person limit below still holds it to twice a day.
-    dayBrief: 1,
-    // Rewrite is a person's choice, so it costs what any other Brio action costs (Deepak,
-    // 2026-11-13). Only when their items changed: an unchanged day answers without a model call.
-    dayBriefRewrite: 1,
-    // The RAID log's Brio check (.claude/plans/brio-features-round-2.md, §9): one batched call per
-    // engagement over its new comment messages (memos are read when added, §13). At most one run per
-    // engagement per active day (the daily check runs only where there is something new since the
-    // last one), plus each Check now a person presses. The log's status, health and Board entries are free.
-    raidCheck: 1,
-    // A memo's RAID suggestions, read when the memo is added (§13): its Risks, Actions, Issues and
-    // Decisions, every commitment an Action (.claude/plans/raid-actions-memo-minutes.md).
-    memoRaid: 1,
-    // A memo's minutes, written in the same read as its RAID suggestions: a memo read is 2 credits.
-    memoMinutes: 1,
+export const AI_MAX_TOKENS: Record<AiFeature, number> = {
+    brief: 2000,
+    summary: 8000,
+    chat: 2500,
+    searchInterpret: 1024,
+    // Per turn; a review runs at most MAX_AGENT_TURNS turns (lib/ai/files-agent/budget.ts).
+    filesAgent: 8000,
+    firmChat: 3000,
+    statusUpdate: 2500,
+    replyDraft: 2000,
+    nudgeDraft: 2000,
+    notesProposals: 8000,
+    reviewerChat: 2000,
+    dayBrief: 2000,
+    dayBriefRewrite: 2000,
+    raidCheck: 6000,
+    // A memo read: an hour's call notes and every RAID item in them.
+    memoRaid: 12_000,
+    memoMinutes: 6000,
 }
 
 /**

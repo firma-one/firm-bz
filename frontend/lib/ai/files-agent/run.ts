@@ -1,6 +1,7 @@
 import 'server-only'
 import { AI_EFFORT, AI_MODEL } from '@/lib/ai/client'
-import { getGuardedAnthropic, meterAiCall, type AiScope } from '@/lib/ai/guarded-client'
+import { getGuardedAnthropic, type AiScope } from '@/lib/ai/guarded-client'
+import { AI_MAX_TOKENS } from '@/lib/ai/features'
 import { logger } from '@/lib/logger'
 import { detectMissingFolders, type AnalysisSummary, type FileNode, type Finding } from './analyze'
 import { buildScaffold } from './scaffold'
@@ -263,7 +264,7 @@ export async function runFilesReview(params: {
                 model: AI_MODEL,
                 // Room for thinking plus a batch of proposals: thinking counts toward the cap, and a
                 // cap sized for the proposals alone would push most reviews into a continuation.
-                max_tokens: 8000,
+                max_tokens: AI_MAX_TOKENS.filesAgent,
                 output_config: { effort: AI_EFFORT.filesAgent },
                 system: SYSTEM,
                 tools: TOOLS as any,
@@ -278,12 +279,7 @@ export async function runFilesReview(params: {
         }
 
         budget.recordTurn()
-        await meterAiCall(params.scope, {
-            inputTokens: (message.usage?.input_tokens ?? 0)
-                + (message.usage?.cache_creation_input_tokens ?? 0)
-                + (message.usage?.cache_read_input_tokens ?? 0),
-            outputTokens: message.usage?.output_tokens ?? 0,
-        })
+        // Metered by the client (lib/ai/metered-client.ts), a timeout or failure included.
 
         // A declined request has no proposals in it; say so rather than reading it as "nothing to change".
         if (message.stop_reason === 'refusal') {

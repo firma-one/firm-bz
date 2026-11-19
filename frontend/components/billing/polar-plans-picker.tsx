@@ -52,6 +52,12 @@ export type BillingPlanUsage = {
         allowance: number | null
         /** False when a cap exists but `ENFORCE_BILLING_GATES` is off, so nothing is refused. */
         enforced: boolean
+        /**
+         * Calls this period that didn't give an answer (declined, cut off, failed, timed out or
+         * stopped) and the credits they took; already counted in `used` and `byFeature`. Optional:
+         * an answer from before 2026-11-19 doesn't carry it.
+         */
+        unfinished?: { calls: number; credits: number }
     } | null
 }
 

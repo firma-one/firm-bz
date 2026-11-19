@@ -5,7 +5,8 @@ import { resolveProjectContext } from '@/lib/resolve-project-context'
 import { canViewProject, canViewProjectInternalTabs } from '@/lib/permission-helpers'
 import { logger } from '@/lib/logger'
 import { isAiConfigured, AI_EFFORT, AI_MODEL } from '@/lib/ai/client'
-import { getGuardedAnthropic, meterAiCall, aiFailureResponse } from '@/lib/ai/guarded-client'
+import { getGuardedAnthropic, aiFailureResponse } from '@/lib/ai/guarded-client'
+import { AI_MAX_TOKENS } from '@/lib/ai/features'
 import { BRIO_ANSWER_FAILED, BRIO_DATA_UNREADABLE } from '@/lib/ai/brio-failure'
 import {
     CHAT_SYSTEM_PROMPT,
@@ -37,8 +38,6 @@ function isClientDisconnect(error: unknown): boolean {
     return /invalid state|already closed|aborted|cancel/i.test(message)
 }
 
-/** Room for thinking as well as the answer: thinking counts toward `max_tokens`. */
-const CHAT_MAX_TOKENS = 2500
 
 /** Doc IDs look like "QSR-49": a short uppercase prefix, a hyphen, a number. */
 const DOC_ID_PATTERN = /\b[A-Z][A-Z0-9]{1,7}-\d{1,6}\b/g
@@ -179,7 +178,7 @@ export async function POST(
         const stream = await client.messages.create({
             model: AI_MODEL,
             // An answer runs to ~150 words; the rest is room for thinking, which counts toward the cap.
-            max_tokens: CHAT_MAX_TOKENS,
+            max_tokens: AI_MAX_TOKENS.chat,
             output_config: { effort: AI_EFFORT.chat },
             // The system prompt and snapshot are identical on every turn of a conversation and run
             // to a few thousand tokens, so they are marked cacheable: a cache write costs 1.25x,
@@ -209,37 +208,20 @@ export async function POST(
         const encoder = new TextEncoder()
         const body_ = new ReadableStream<Uint8Array>({
             async start(controller) {
-                // Declared outside the try so the catch can meter whatever was generated before a
-                // client disconnect cut the stream short.
-                let inputTokens = 0
-                let outputTokens = 0
                 // The answer as it streamed, so the doc IDs it cited can be resolved once it ends.
                 let answerText = ''
                 let stopReason: string | null = null
                 try {
-                    // Streaming reports tokens across two events: the input count arrives with
-                    // message_start, the output count with message_delta at the end.
-                    //
-                    // Cached tokens are reported SEPARATELY from `input_tokens`, so they are added
-                    // back here. Without this, enabling prompt caching would have made recorded
-                    // usage collapse — a cached turn reports only the handful of uncached tokens,
-                    // and the ledger would show a fraction of the real context size.
+                    // Metered by the client however the stream ends (lib/ai/metered-client.ts),
+                    // cached tokens included.
                     for await (const event of stream) {
-                        if (event.type === 'message_start') {
-                            const u = event.message.usage
-                            inputTokens = (u?.input_tokens ?? 0)
-                                + (u?.cache_creation_input_tokens ?? 0)
-                                + (u?.cache_read_input_tokens ?? 0)
-                        } else if (event.type === 'message_delta') {
-                            outputTokens = event.usage?.output_tokens ?? 0
+                        if (event.type === 'message_delta') {
                             stopReason = event.delta?.stop_reason ?? stopReason
                         } else if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
                             answerText += event.delta.text
                             controller.enqueue(encoder.encode(event.delta.text))
                         }
                     }
-                    await meterAiCall(meterScope, { inputTokens, outputTokens })
-
                     // A declined answer ends like a broken stream, not a clean close: a clean close
                     // would present whatever came before the decline as a complete answer.
                     if (stopReason === 'refusal') {
@@ -259,19 +241,10 @@ export async function POST(
                         logger.error('AI chat: could not resolve sources', error as Error)
                     }
                 } catch (error) {
-                    // A client disconnect — the user pressed Stop, or closed the tab — surfaces
-                    // here when enqueue throws on a cancelled response. Those tokens were really
-                    // generated and really billed upstream, so they are metered rather than
-                    // written off: skipping them would let repeated ask-then-stop consume
-                    // inference indefinitely without ever touching the allowance, and nothing
-                    // would notice because the burst cap counts this same ledger.
-                    //
-                    // Input is charged in full regardless, since the request was already
-                    // processed; output is whatever had been generated when the stream ended.
-                    if (isClientDisconnect(error)) {
-                        await meterAiCall(meterScope, { inputTokens, outputTokens })
-                        return
-                    }
+                    // A client disconnect (Stop, or a closed tab) surfaces here when enqueue throws
+                    // on a cancelled response. Leaving the loop stops the model, and the client
+                    // charges what was spent (lib/ai/metered-client.ts), so ask-then-stop is never free.
+                    if (isClientDisconnect(error)) return
                     logger.error('AI chat stream error:', error as Error)
                     // Fail the stream rather than closing it cleanly. This response is raw text
                     // with no envelope to carry an error flag, so a clean close is byte-identical

@@ -6,15 +6,21 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
  * is mocked: nothing here reaches Anthropic, a Drive or OneDrive.
  */
 
-const { create, meter } = vi.hoisted(() => ({ create: vi.fn(), meter: vi.fn(async () => {}) }))
+const { create, record } = vi.hoisted(() => ({ create: vi.fn(), record: vi.fn(async () => ({ credits: 1, costMicros: 1000 })) }))
 
 vi.mock('@/lib/ai/client', () => ({ AI_MODEL: 'test-model', AI_EFFORT: { filesAgent: 'medium' } }))
-vi.mock('@/lib/ai/guarded-client', () => ({
-    getGuardedAnthropic: async () => ({ messages: { create } }),
-    meterAiCall: meter,
-}))
+// As the gate does: the SDK client, metered (lib/ai/metered-client.ts) for the scope it was asked for.
+vi.mock('@/lib/ai/guarded-client', async () => {
+    const { meteredClient } = await import('@/lib/ai/metered-client')
+    return {
+        getGuardedAnthropic: async (scope: { firmId?: string | null; userId?: string | null; feature: 'filesAgent' }) =>
+            meteredClient({ messages: { create } } as never, { groupId: 'g1', ...scope }),
+    }
+})
+vi.mock('@/lib/ai/usage', () => ({ recordAiUsage: record }))
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn() } }))
 
+import Anthropic from '@anthropic-ai/sdk'
 import { runFilesReview } from './run'
 import type { FileNode } from './analyze'
 
@@ -29,26 +35,30 @@ const scope = { firmId: 'f1', userId: 'u1', feature: 'filesAgent' as const }
 
 beforeEach(() => {
     create.mockReset()
-    meter.mockClear()
+    record.mockClear()
 })
 
 describe('runFilesReview', () => {
     it('a failed model turn is reported, and the findings still come back', async () => {
-        create.mockRejectedValue(new Error('529 overloaded_error'))
+        create.mockRejectedValue(Anthropic.APIError.generate(529, { type: 'error', error: { type: 'overloaded_error', message: 'Overloaded' } }, 'Overloaded', new Headers()))
         const result = await runFilesReview({ nodes: NODES, rootId: 'R', scope, vault: null })
         expect(result).not.toBeNull()
         expect(result!.modelFailed).toBe(true)
         expect(result!.findings.length).toBeGreaterThan(0)
         expect(result!.proposals).toHaveLength(0)
-        // A turn that never ran is not metered.
-        expect(meter).not.toHaveBeenCalled()
+        // A turn the API turned away is still a row, so the failure shows, with nothing charged.
+        expect(record).toHaveBeenCalledTimes(1)
+        expect(record).toHaveBeenCalledWith(expect.objectContaining({
+            groupId: 'g1', feature: 'filesAgent', status: 'rejected', inputTokens: 0, outputTokens: 0, estimated: false,
+        }))
     })
 
     it('a turn that answers is not marked failed', async () => {
         create.mockResolvedValue({ content: [], stop_reason: 'end_turn', usage: { input_tokens: 10, output_tokens: 5 } })
         const result = await runFilesReview({ nodes: NODES, rootId: 'R', scope, vault: null })
         expect(result!.modelFailed).toBe(false)
-        expect(meter).toHaveBeenCalledTimes(1)
+        expect(record).toHaveBeenCalledTimes(1)
+        expect(record).toHaveBeenCalledWith(expect.objectContaining({ groupId: 'g1', feature: 'filesAgent', inputTokens: 10, outputTokens: 5, status: 'ok' }))
     })
 
     it('a declined turn is reported as failed', async () => {

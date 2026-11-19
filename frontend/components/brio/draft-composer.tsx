@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
-import { Loader2, Square, X } from 'lucide-react'
+import { Loader2, X } from 'lucide-react'
 import { Sheet, SheetContent, SheetTitle, SheetDescription } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { ASSISTANT_POLICY } from '@/lib/ai/assistant'
@@ -257,20 +257,10 @@ export function DraftComposer({
                     <span className="text-caption font-normal text-fg-muted">{footerNote}</span>
                     <span className="flex-1" />
                     {sendError && <span className="w-full text-small text-danger" role="alert">{sendError}</span>}
-                    {streaming ? (
-                        <Button variant="ghost" size="sm" onClick={draft.stop}>
-                            <Square className="h-3 w-3 fill-current" aria-hidden /> Stop
-                        </Button>
-                    ) : (
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={write}
-                            disabled={sending}
-                        >
-                            Rewrite
-                        </Button>
-                    )}
+                    {/* No Stop (2026-11-19): a draft takes seconds. Closing the sheet still stops it. */}
+                    <Button variant="ghost" size="sm" onClick={write} disabled={sending || streaming}>
+                        Rewrite
+                    </Button>
                     <Button size="sm" onClick={send} disabled={!canSend}>
                         {sending && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
                         {sendLabel}

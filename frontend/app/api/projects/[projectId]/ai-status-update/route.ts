@@ -13,6 +13,7 @@ import {
     loadStatusUpdateInputs,
 } from '@/lib/ai/status-update'
 import { vaultForEngagement } from '@/lib/ai/known-entities'
+import { AI_MAX_TOKENS } from '@/lib/ai/features'
 
 /**
  * POST /api/projects/[projectId]/ai-status-update
@@ -57,11 +58,10 @@ export async function POST(
 
         return await streamDraft({
             client,
-            scope,
             system: STATUS_UPDATE_SYSTEM_PROMPT,
             user: buildStatusUpdatePrompt(inputs),
             effort: AI_EFFORT.draft,
-            maxTokens: 2500,
+            maxTokens: AI_MAX_TOKENS.statusUpdate,
             failure: BRIO_DRAFT_FAILED,
             label: 'status-update',
         })

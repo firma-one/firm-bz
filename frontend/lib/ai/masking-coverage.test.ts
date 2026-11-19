@@ -4,9 +4,13 @@ import path from 'node:path'
 
 /**
  * Every Brio call masks what it sends (§14 item 5). The compiler already makes each call pass a masking
- * choice (`getGuardedAnthropic(scope, { vault })`, `completeText({ vault })`); this makes sure none of
- * them chooses nothing. A call's vault must come from lib/ai/known-entities.ts (or be handed down from a
- * caller that got one there), never a literal `null`. The one null a vault can be is the firm's own switch.
+ * choice (`getGuardedAnthropic(scope, { vault })`); this makes sure none of them chooses nothing. A
+ * call's vault must come from lib/ai/known-entities.ts (or be handed down from a caller that got one
+ * there), never a literal `null`. The one null a vault can be is the firm's own switch.
+ *
+ * `completeText` takes no vault of its own: it is handed the client `getGuardedAnthropic` gave out,
+ * which already masks (and meters). So the guard here is that every completeText call is handed a
+ * client from the gate, and that nothing but the gate reaches the raw SDK client.
  */
 
 const ROOT = path.resolve(__dirname, '..', '..')
@@ -42,17 +46,29 @@ function callsOf(source: string, fn: string): string[] {
 }
 
 const files = [...sourceFiles(path.join(ROOT, 'lib')), ...sourceFiles(path.join(ROOT, 'app'))]
-const calls = files.flatMap((file) => {
-    const source = readFileSync(file, 'utf-8')
-    return [...callsOf(source, 'getGuardedAnthropic'), ...callsOf(source, 'completeText')]
-        .map((call) => ({ file: path.relative(ROOT, file), call }))
-})
+const sources = files.map((file) => ({ file: path.relative(ROOT, file), source: readFileSync(file, 'utf-8') }))
+const calls = sources.flatMap(({ file, source }) => callsOf(source, 'getGuardedAnthropic').map((call) => ({ file, call })))
+const completeTextCalls = sources.flatMap(({ file, source }) =>
+    callsOf(source, 'completeText').map((call) => ({ file, call, gated: callsOf(source, 'getGuardedAnthropic').length > 0 })))
 
 describe('every Brio call masks what it sends', () => {
     it('finds the calls it checks: every surface that reaches the model', () => {
         // Engagement chat, firm chat, Reviewer chat, summary, status update, nudge, reply, notes, RAID,
         // Files agent, search, Home's brief, the Firm brief (streamed and not), the engagement summary.
         expect(calls.length).toBeGreaterThanOrEqual(15)
+        // The firm brief's non-streamed write, at least.
+        expect(completeTextCalls.length).toBeGreaterThanOrEqual(1)
+    })
+
+    it("each completeText call is handed the gate's client, and no vault of its own", () => {
+        const ungated = completeTextCalls.filter(({ call, gated }) => !gated || !/\bclient\b/.test(call) || /vault/.test(call))
+        expect(ungated.map(({ file }) => file)).toEqual([])
+    })
+
+    it('nothing but the gate (lib/ai/guarded-client.ts) reaches the raw SDK client', () => {
+        const raw = sources.filter(({ file, source }) =>
+            file !== path.join('lib', 'ai', 'client.ts') && file !== path.join('lib', 'ai', 'guarded-client.ts') && /\bgetAnthropic\s*\(/.test(source))
+        expect(raw.map(({ file }) => file)).toEqual([])
     })
 
     it('each passes a vault, and none a literal null', () => {

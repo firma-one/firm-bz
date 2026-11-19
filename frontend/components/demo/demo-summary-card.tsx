@@ -183,8 +183,6 @@ export function DemoSummaryCard({ input, today }: { input: DemoSummaryInput; tod
         published,
         draftBehind: false,
         onRewrite: rewrite,
-        // As in the app: stopping throws the unfinished draft away and closes the pane.
-        onStop: () => { discard(); clearPaneRef.current() },
         // As the app: "Also email it" at the top, the email's fields under it.
         email: { on: emailOnPublish, onToggle: setEmailOnPublish, state: publishEmail, pdf: false },
     }

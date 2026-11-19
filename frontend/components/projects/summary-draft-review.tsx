@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { AlertTriangle, Check, ChevronRight, Copy, RefreshCw, Send, Square } from 'lucide-react'
+import { AlertTriangle, Check, ChevronRight, Copy, RefreshCw, Send } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Brio } from '@/components/ui/brio'
 import { BrioSections } from '@/components/ui/brio-sections'
@@ -74,10 +74,12 @@ export interface SummaryDraftReviewProps {
     published: { content: string; publishedAt: string | null } | null
     /** The engagement has changed since Brio wrote this draft. */
     draftBehind: boolean
-    /** Asks Brio for a new draft from the current data. */
+    /**
+     * Asks Brio for a new draft from the current data. There is no Stop (2026-11-19): a draft takes
+     * seconds, its tokens are paid for either way, and the server finishes and saves it even if the
+     * reader leaves (.claude/plans/ai-metering-by-tokens.md, Cancellation).
+     */
     onRewrite: () => void
-    /** Stops Brio mid-draft: the unfinished draft is thrown away and the published summary stays. */
-    onStop?: () => void
 }
 
 /** Replaces the text before a summary's first heading. */
@@ -158,7 +160,7 @@ function SectionField({ heading, body, onChange, lead = true }: { heading: strin
  */
 export function SummaryDraftReview({
     streaming, streamText, generatedAt, value, onChange, mode, onModeChange, unfilledSections, busyAction,
-    onPublish, onDismiss, onCopy, copied, note, published, draftBehind, onRewrite, onStop, kind = 'draft', email,
+    onPublish, onDismiss, onCopy, copied, note, published, draftBehind, onRewrite, kind = 'draft', email,
 }: SummaryDraftReviewProps) {
     const [showPublished, setShowPublished] = useState(false)
     // Typed out as Brio writes it (components/brio/brio-typing.tsx); the draft is still being
@@ -188,15 +190,6 @@ export function SummaryDraftReview({
                     {editing ? 'Editing the published update' : writing ? <><Brio className="animate-pulse" /> is writing…</> : <>Suggested by <Brio /></>}
                 </span>
                 {!writing && generatedAt && <span className="text-caption text-fg-subtle">{formatRelativeTime(generatedAt)}</span>}
-                {streaming && onStop && (
-                    <button
-                        type="button"
-                        onClick={onStop}
-                        className="ml-auto inline-flex h-7 items-center gap-1.5 rounded-control border border-line bg-surface px-2 text-small text-fg-muted transition-colors hover:border-line-strong hover:bg-surface-hover hover:text-fg"
-                    >
-                        <Square className="h-3 w-3 fill-current" /> Stop
-                    </button>
-                )}
                 {!writing && (
                     <div className="ml-auto flex items-center gap-0.5 rounded-control bg-surface-muted p-0.5" role="tablist" aria-label="Draft view">
                         {([['preview', 'Preview'], ['edit', 'Markdown']] as const).map(([m, label]) => (

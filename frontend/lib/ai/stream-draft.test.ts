@@ -1,19 +1,15 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 
 /**
  * The draft stream every "Brio draft" surface uses: complete drafts arrive as `done`, anything a
- * person should not send (declined, cut off, broken) arrives as `error` in the surface's words, and
- * every call that spent tokens is metered exactly once. The model is mocked.
+ * person should not send (declined, cut off, broken) arrives as `error`, saying why. Metering is the
+ * client's (lib/ai/metered-client.test.ts), not this helper's. The model is mocked.
  */
 
-const { meter } = vi.hoisted(() => ({ meter: vi.fn(async () => {}) }))
 vi.mock('./client', () => ({ AI_MODEL: 'test-model' }))
-vi.mock('./guarded-client', () => ({ meterAiCall: meter }))
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn() } }))
 
 import { streamDraft, withoutGreeting } from './stream-draft'
-
-const scope = { firmId: 'f1', userId: 'u1', feature: 'replyDraft' as const }
 
 function clientYielding(events: unknown[], fail?: Error) {
     const create = vi.fn(async (_params: Record<string, unknown>) => ({
@@ -31,14 +27,12 @@ async function lines(res: Response) {
 }
 
 const run = (client: never) => streamDraft({
-    client, scope, system: 's', user: 'u', effort: 'low', maxTokens: 1000,
+    client, system: 's', user: 'u', effort: 'low', maxTokens: 1000,
     failure: 'Brio couldn’t write a draft. Try again.', label: 'test',
 })
 
-beforeEach(() => meter.mockClear())
-
 describe('streamDraft', () => {
-    it('streams the draft, then the whole text, and meters once', async () => {
+    it('streams the draft, then the whole text', async () => {
         const { client, create } = clientYielding([
             { type: 'message_start', message: { usage: { input_tokens: 100 } } },
             { type: 'content_block_delta', delta: { type: 'text_delta', text: 'Hi ' } },
@@ -48,8 +42,6 @@ describe('streamDraft', () => {
         const out = await lines(await run(client))
         expect(out.map((l) => l.type)).toEqual(['meta', 'delta', 'delta', 'done'])
         expect(out[3].text).toBe('Hi Dana.')
-        expect(meter).toHaveBeenCalledTimes(1)
-        expect(meter).toHaveBeenCalledWith(scope, { inputTokens: 100, outputTokens: 20 })
         // No sampling parameters: Haiku 5.5 refuses them.
         expect(create.mock.calls[0][0]).not.toHaveProperty('temperature')
     })
@@ -60,7 +52,7 @@ describe('streamDraft', () => {
             { type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { output_tokens: 5 } },
         ])
         const out = await lines(await streamDraft({
-            client, scope, system: 's', user: 'u', effort: 'low', maxTokens: 1000,
+            client, system: 's', user: 'u', effort: 'low', maxTokens: 1000,
             failure: 'f', label: 'test', prefix: 'Hi @Dana Whitfield,\n\n',
         }))
         expect(out.map((l) => l.type)).toEqual(['meta', 'delta', 'delta', 'done'])
@@ -77,7 +69,7 @@ describe('streamDraft', () => {
             { type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { output_tokens: 9 } },
         ])
         const out = await lines(await streamDraft({
-            client, scope, system: 's', user: 'u', effort: 'low', maxTokens: 1000,
+            client, system: 's', user: 'u', effort: 'low', maxTokens: 1000,
             failure: 'f', label: 'test', prefix: 'Hi @Deepak Shettigar,\n\n',
         }))
         expect(out.filter((l) => l.type === 'delta').map((l) => l.text).join('')).toBe('Hi @Deepak Shettigar,\n\nChecking in on QSR-9.')
@@ -89,10 +81,10 @@ describe('streamDraft', () => {
             { type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { output_tokens: 0 } },
         ])
         const out = await lines(await streamDraft({
-            client, scope, system: 's', user: 'u', effort: 'low', maxTokens: 1000,
+            client, system: 's', user: 'u', effort: 'low', maxTokens: 1000,
             failure: 'f', label: 'test', prefix: 'Hi @Dana Whitfield,\n\n',
         }))
-        expect(out[out.length - 1]).toEqual({ type: 'error', message: 'f' })
+        expect(out[out.length - 1]).toEqual({ type: 'error', message: 'Brio came back with nothing for a draft. Nothing was saved. Try again.' })
     })
 
     it('a declined draft is an error, never a draft to send', async () => {
@@ -101,7 +93,7 @@ describe('streamDraft', () => {
             { type: 'message_delta', delta: { stop_reason: 'refusal' }, usage: { output_tokens: 2 } },
         ])
         const out = await lines(await run(client))
-        expect(out.at(-1)).toEqual({ type: 'error', message: 'Brio couldn’t write a draft. Try again.' })
+        expect(out.at(-1)).toEqual({ type: 'error', message: 'Brio declined to write a draft. Nothing was saved.' })
     })
 
     it('a draft cut off at the cap is an error', async () => {
@@ -110,17 +102,17 @@ describe('streamDraft', () => {
             { type: 'message_delta', delta: { stop_reason: 'max_tokens' }, usage: { output_tokens: 2 } },
         ])
         const out = await lines(await run(client))
-        expect(out.at(-1)?.type).toBe('error')
+        expect(out.at(-1)).toEqual({ type: 'error', message: 'Brio ran out of room before finishing a draft. Nothing was saved. Try again.' })
     })
 
-    it('a stream that breaks part-way says so in the surface’s words, and still meters', async () => {
+    it('a stream that breaks part-way says so in the surface’s words', async () => {
         const { client } = clientYielding([
             { type: 'message_start', message: { usage: { input_tokens: 50 } } },
             { type: 'content_block_delta', delta: { type: 'text_delta', text: 'Half a ' } },
         ], new Error('stream reset'))
         const out = await lines(await run(client))
         expect(out.map((l) => l.type)).toEqual(['meta', 'delta', 'error'])
-        expect(meter).toHaveBeenCalledTimes(1)
+        expect(out[2].message).toBe('Brio couldn’t write a draft. Try again.')
     })
 })
 

@@ -3,7 +3,9 @@ import type Anthropic from '@anthropic-ai/sdk'
 import { getAnthropic } from './client'
 import { assertWithinAiCreditCap, AiCreditLimitError } from './credit-cap'
 import { assertWithinPersonLimits } from './person-limit'
-import { recordAiUsage, type AiFeature } from './usage'
+import { type AiFeature } from './usage'
+import { meteredClient } from './metered-client'
+import { prisma } from '@/lib/prisma'
 import { logger } from '@/lib/logger'
 import { maskingClient } from './masked-client'
 import type { Vault } from './pseudonymize'
@@ -46,28 +48,44 @@ export interface AiScope {
 export async function getGuardedAnthropic(scope: AiScope, masking: AiMasking): Promise<Anthropic | null> {
     const client = getAnthropic()
     if (!client) return null
-    await assertWithinAiCreditCap({ firmId: scope.firmId, groupId: scope.groupId, feature: scope.feature })
+    const groupId = await billingGroupOf(scope)
+    // No group, no meter: a call that can't be charged isn't made (no free calls, 2026-11-19).
+    if (!groupId) {
+        logger.warn(`AI call refused (${scope.feature}): no billing group resolved`)
+        throw new AiCreditLimitError(
+            "Brio isn't available here yet: this workspace has no plan to bill it to.",
+            'unbillable',
+            0,
+            0,
+        )
+    }
+    await assertWithinAiCreditCap({ groupId, feature: scope.feature })
     // After the group's credits: a refusal there shouldn't count as a call the person started.
     await assertWithinPersonLimits({ userId: scope.userId, feature: scope.feature })
-    return masking.vault ? maskingClient(client, masking.vault) : client
+    // Metered innermost, so the counts are the model's own; masked around it.
+    const metered = meteredClient(client, { groupId, firmId: scope.firmId ?? null, userId: scope.userId ?? null, feature: scope.feature })
+    return masking.vault ? maskingClient(metered, masking.vault) : metered
 }
 
 /**
- * Records a completed call. Separate from the gate because streaming routes only learn their
- * token counts when the stream ends, and a stream that dies mid-flight is not a billable call.
+ * The gate's checks without a client, for a route that wants the limit's words before loading data
+ * (a cached answer costs nothing, so the check sits where a call is about to be made). Throws as
+ * `getGuardedAnthropic` would: no billing group, over the credits or the spend ceiling.
  */
-export async function meterAiCall(
-    scope: AiScope,
-    usage: { inputTokens: number; outputTokens: number },
-): Promise<void> {
-    await recordAiUsage({
-        firmId: scope.firmId,
-        groupId: scope.groupId,
-        userId: scope.userId,
-        feature: scope.feature,
-        inputTokens: usage.inputTokens,
-        outputTokens: usage.outputTokens,
-    })
+export async function assertCanCallAi(scope: AiScope): Promise<void> {
+    const groupId = await billingGroupOf(scope)
+    if (!groupId) {
+        throw new AiCreditLimitError("Brio isn't available here yet: this workspace has no plan to bill it to.", 'unbillable', 0, 0)
+    }
+    await assertWithinAiCreditCap({ groupId, feature: scope.feature })
+}
+
+/** The billing group a call is charged to: the scope's own, or its firm's. */
+export async function billingGroupOf(scope: Pick<AiScope, 'groupId' | 'firmId'>): Promise<string | null> {
+    if (scope.groupId) return scope.groupId
+    if (!scope.firmId) return null
+    const firm = await prisma.firm.findUnique({ where: { id: scope.firmId }, select: { groupId: true } })
+    return firm?.groupId ?? null
 }
 
 /** Reads token counts off a non-streaming message. */

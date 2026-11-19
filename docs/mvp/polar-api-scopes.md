@@ -98,3 +98,12 @@ If you’re **not** using Polar benefits and only store `plan` / `subscriptionSt
 | Scope | Why |
 | --- | --- |
 | `webhooks:read` / `webhooks:write` | Only if you register or rotate webhook endpoints through the API. **Not** required just to receive events if endpoints are set in the dashboard. |
+
+---
+
+## Usage-based AI credits
+
+| Scope | Why |
+| --- | --- |
+| `events:write` | Send AI usage ledger rows as `ai_usage` events (`lib/billing/polar-ai-usage-sync.ts`, on when `POLAR_AI_EVENTS=true`). |
+| `meters:read` | Monthly reconciliation of ledger credits against the AI credits meter (`POLAR_AI_CREDITS_METER_ID`). |

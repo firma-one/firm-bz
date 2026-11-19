@@ -1,8 +1,8 @@
 import 'server-only'
 import type Anthropic from '@anthropic-ai/sdk'
 import { AI_MODEL } from './client'
-import { meterAiCall, type AiScope } from './guarded-client'
 import { logger } from '@/lib/logger'
+import { brioWritingFailure } from './brio-failure'
 
 /**
  * Streams one short piece of writing (a status update, a reply, a nudge) as newline-delimited JSON:
@@ -16,12 +16,11 @@ import { logger } from '@/lib/logger'
  * checked by `getGuardedAnthropic`, an overloaded model) throws to the caller's catch, which answers
  * it with `aiFailureResponse`. Failures part-way arrive as an `error` event in `failure`'s words.
  *
- * Metering follows the chat route: a complete draft is metered, and so is one the reader stopped
- * part-way, since those tokens were spent; repeated start-then-stop must not be free.
+ * Metered by the client (lib/ai/metered-client.ts) however the stream ends: complete, broken, or
+ * stopped by the reader leaving. A draft isn't saved anywhere, so leaving stops the model.
  */
 export async function streamDraft(params: {
     client: Anthropic
-    scope: AiScope
     system: string
     user: string
     effort: 'low' | 'medium' | 'high'
@@ -48,20 +47,7 @@ export async function streamDraft(params: {
 
     const encoder = new TextEncoder()
     const line = (o: unknown) => encoder.encode(JSON.stringify(o) + '\n')
-    let inputTokens = 0
-    let outputTokens = 0
-    let metered = false
     let cancelled = false
-    const meter = async () => {
-        if (metered) return
-        metered = true
-        try {
-            await meterAiCall(params.scope, { inputTokens, outputTokens })
-        } catch (error) {
-            // Metering is bookkeeping; losing a row must not cost the user their draft.
-            logger.error(`AI usage metering failed (${params.label}):`, error as Error)
-        }
-    }
 
     const body = new ReadableStream<Uint8Array>({
         async start(controller) {
@@ -86,13 +72,7 @@ export async function streamDraft(params: {
                 controller.enqueue(line({ type: 'meta' }))
                 if (params.prefix) controller.enqueue(line({ type: 'delta', text: params.prefix }))
                 for await (const event of modelStream) {
-                    if (event.type === 'message_start') {
-                        const u = event.message.usage
-                        inputTokens = (u?.input_tokens ?? 0)
-                            + (u?.cache_creation_input_tokens ?? 0)
-                            + (u?.cache_read_input_tokens ?? 0)
-                    } else if (event.type === 'message_delta') {
-                        outputTokens = event.usage?.output_tokens ?? 0
+                    if (event.type === 'message_delta') {
                         stopReason = event.delta?.stop_reason ?? stopReason
                     } else if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
                         if (held !== null) {
@@ -105,12 +85,11 @@ export async function streamDraft(params: {
                 }
                 release()
                 if (cancelled) return
-                await meter()
 
                 const written = full.trim()
                 // Declined, cut off at the cap, or empty: not a draft anyone should send.
                 if (!written || stopReason === 'refusal' || stopReason === 'max_tokens') {
-                    controller.enqueue(line({ type: 'error', message: params.failure }))
+                    controller.enqueue(line({ type: 'error', message: brioWritingFailure({ stopReason, empty: !written }, 'a draft', params.failure) }))
                     return
                 }
                 // What was streamed, prefix and all: the reader's text and this one agree.
@@ -118,7 +97,6 @@ export async function streamDraft(params: {
             } catch (error) {
                 if (cancelled) return
                 logger.error(`AI draft stream error (${params.label}):`, error as Error)
-                await meter()
                 controller.enqueue(line({ type: 'error', message: params.failure }))
             } finally {
                 try { controller.close() } catch { /* already closed by the reader leaving */ }
@@ -127,7 +105,6 @@ export async function streamDraft(params: {
         async cancel() {
             cancelled = true
             modelStream.controller.abort()
-            await meter()
         },
     })
 

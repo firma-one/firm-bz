@@ -5,17 +5,22 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
  * mocked; nothing here reaches Anthropic.
  */
 
-const { create, meter, findMany } = vi.hoisted(() => ({
+const { create, record, findMany } = vi.hoisted(() => ({
     create: vi.fn(),
-    meter: vi.fn(async () => {}),
+    record: vi.fn(async () => ({ credits: 1, costMicros: 1000 })),
     findMany: vi.fn(),
 }))
 
 vi.mock('@/lib/ai/client', () => ({ AI_MODEL: 'test-model', AI_EFFORT: { proposals: 'medium' } }))
-vi.mock('@/lib/ai/guarded-client', () => ({
-    getGuardedAnthropic: async () => ({ messages: { create } }),
-    meterAiCall: meter,
-}))
+// As the gate does: the SDK client, metered (lib/ai/metered-client.ts) for the scope it was asked for.
+vi.mock('@/lib/ai/guarded-client', async () => {
+    const { meteredClient } = await import('@/lib/ai/metered-client')
+    return {
+        getGuardedAnthropic: async (scope: { firmId?: string | null; userId?: string | null; feature: 'notesProposals' }) =>
+            meteredClient({ messages: { create } } as never, { groupId: 'g1', ...scope }),
+    }
+})
+vi.mock('@/lib/ai/usage', () => ({ recordAiUsage: record }))
 vi.mock('@/lib/prisma', () => ({ prisma: { engagementDocument: { findMany } } }))
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn() } }))
 
@@ -277,7 +282,7 @@ describe('findNotesActions', () => {
 
     beforeEach(() => {
         create.mockReset()
-        meter.mockClear()
+        record.mockClear()
     })
 
     it('asks once, with the strict tool and without sampling parameters', async () => {
@@ -294,7 +299,10 @@ describe('findNotesActions', () => {
     it('a refusal is a failure, and the tokens are still metered', async () => {
         create.mockResolvedValue({ stop_reason: 'refusal', usage, content: [] })
         expect(await findNotesActions({ ...ctx, scope, vault: null })).toEqual({ ok: false, reason: 'declined' })
-        expect(meter).toHaveBeenCalledWith(scope, { inputTokens: 900, outputTokens: 300 })
+        expect(record).toHaveBeenCalledTimes(1)
+        expect(record).toHaveBeenCalledWith(expect.objectContaining({
+            groupId: 'g1', firmId: 'f1', userId: 'u1', feature: 'notesProposals', inputTokens: 900, outputTokens: 300, status: 'refused',
+        }))
     })
 
     it('an answer without the tool call is no answer', async () => {

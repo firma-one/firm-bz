@@ -104,8 +104,8 @@ describe('DayBrief', () => {
     })
 
     it("names whose credits a rewrite uses", () => {
-        expect(rewriteHint('FirmaOne')).toBe('Uses 1 FirmaOne credit, only when your items have changed')
-        expect(rewriteHint(null)).toBe('1 credit, only when your items have changed')
+        expect(rewriteHint('FirmaOne')).toBe("Uses FirmaOne's credits, only when your items have changed")
+        expect(rewriteHint(null)).toBe('Only when your items have changed')
     })
 
     it('Rewrite with nothing changed keeps the brief and says so', async () => {

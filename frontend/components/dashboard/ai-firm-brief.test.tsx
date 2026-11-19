@@ -8,19 +8,17 @@ import { FirmBriefCard, useFirmBrief } from './ai-firm-brief'
 const OLD = { content: '## Where things stand\nOld news.', generatedAt: new Date().toISOString() }
 
 describe('FirmBriefCard while rewriting', () => {
-    it('says Brio is reading before the first word, with Stop in place of Rewrite', () => {
-        const stop = vi.fn()
-        render(<FirmBriefCard brief={OLD} refreshing streamText="" onRewrite={vi.fn()} onStop={stop} />)
+    it('says Brio is reading before the first word, with nothing to press (no Stop)', () => {
+        render(<FirmBriefCard brief={OLD} refreshing streamText="" onRewrite={vi.fn()} />)
         expect(screen.getByText(/is reading your firm’s data/)).toBeTruthy()
         // In the header, and once to screen readers.
         expect(screen.getAllByText(/is writing a new brief/)).toHaveLength(2)
         expect(screen.queryByRole('button', { name: /Rewrite with/ })).toBeNull()
-        fireEvent.click(screen.getByRole('button', { name: /Stop/ }))
-        expect(stop).toHaveBeenCalled()
+        expect(screen.queryByRole('button', { name: /Stop/ })).toBeNull()
     })
 
     it('types the sections out as they stream in, in place of the old brief', async () => {
-        const { container } = render(<FirmBriefCard brief={OLD} refreshing streamText={'## Needs attention\nTwo engagements'} onRewrite={vi.fn()} onStop={vi.fn()} />)
+        const { container } = render(<FirmBriefCard brief={OLD} refreshing streamText={'## Needs attention\nTwo engagements'} onRewrite={vi.fn()} />)
         expect(screen.queryByText('Old news.')).toBeNull()
         expect(await screen.findByRole('heading', { name: 'Needs attention' })).toBeTruthy()
         expect(await screen.findByText(/Two/)).toBeTruthy()
@@ -33,7 +31,7 @@ describe('FirmBriefCard while rewriting', () => {
 function Harness() {
     const b = useFirmBrief('f1')
     if (!b.available) return <p>No brief card</p>
-    return <FirmBriefCard brief={b.brief} loading={b.loading} refreshing={b.refreshing} streamText={b.streamText} refreshError={b.refreshError} loadError={b.loadError} onReload={b.reload} onRewrite={b.refresh} onStop={b.stop} />
+    return <FirmBriefCard brief={b.brief} loading={b.loading} refreshing={b.refreshing} streamText={b.streamText} refreshError={b.refreshError} loadError={b.loadError} onReload={b.reload} onRewrite={b.refresh} />
 }
 
 /** A streamed rewrite: its NDJSON lines, sent one by one. */

@@ -175,9 +175,8 @@ export function MeetBrioSection() {
           <span className="mk-brio-credits-name">
             <BrioOnDark />
           </span>{' '}
-          credits a month on the free plan, 500 on Standard. One credit is one answer, summary, draft or morning brief,
-          and reading a call memo for its minutes and <RaidTerm tone="dark">RAID entries</RaidTerm> is two. Your clients
-          can ask Brio only once you turn that on.
+          credits a month on the free plan, 500 on Standard. Credits follow the work: a quick answer takes one, a long
+          read takes a few. Your clients can ask Brio only once you turn that on.
         </p>
       </div>
     </Band>

@@ -52,6 +52,8 @@ vi.mock('@/lib/ai/credit-cap', () => ({ assertWithinAiCreditCap: h.creditCap, Ai
 vi.mock('@/lib/ai/usage', () => ({ recordAiUsage: h.recordAiUsage }))
 vi.mock('@/lib/prisma', () => ({
     prisma: {
+        // The billing group the gate charges the call to (lib/ai/guarded-client.ts).
+        firm: { findUnique: async () => ({ groupId: 'g1' }) },
         engagementDocument: { findMany: h.findMany },
         engagement: {
             findUnique: async () => ({
@@ -159,7 +161,10 @@ describe('POST /api/projects/[projectId]/ai-notes-proposals: what', () => {
         const res = await post()
         expect(res.status).toBe(502)
         expect((await res.json()).error).toBe("Brio couldn't read actions from these notes. Nothing was changed.")
-        expect(h.recordAiUsage).toHaveBeenCalledWith(expect.objectContaining({ feature: 'notesProposals', firmId: 'f1', userId: 'u1' }))
+        expect(h.recordAiUsage).toHaveBeenCalledTimes(1)
+        expect(h.recordAiUsage).toHaveBeenCalledWith(expect.objectContaining({
+            groupId: 'g1', feature: 'notesProposals', firmId: 'f1', userId: 'u1', inputTokens: 800, status: 'refused',
+        }))
     })
 
     it('a model failure answers in Brio\'s words, never the provider\'s', async () => {

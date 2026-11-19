@@ -2,7 +2,8 @@ import 'server-only'
 import type Anthropic from '@anthropic-ai/sdk'
 import { prisma } from '@/lib/prisma'
 import { AI_EFFORT, AI_MODEL } from '@/lib/ai/client'
-import { getGuardedAnthropic, meterAiCall, type AiScope } from '@/lib/ai/guarded-client'
+import { getGuardedAnthropic, type AiScope } from '@/lib/ai/guarded-client'
+import { AI_MAX_TOKENS } from '@/lib/ai/features'
 import { isDeliverableFolder } from '@/lib/notification-links'
 import { groundedRun } from '@/lib/ai/grounded-quote'
 import { logger } from '@/lib/logger'
@@ -120,7 +121,7 @@ const MAX_YEARS_AHEAD = 2
  * Room for thinking plus one tool call: thinking counts toward the cap. An hour's call transcript
  * used up to 3,300 of an earlier 4,000, too close to a call cut off with nothing to show.
  */
-export const NOTES_MAX_TOKENS = 8000
+export const NOTES_MAX_TOKENS = AI_MAX_TOKENS.notesProposals
 /**
  * One non-streamed call. Shorter than the panel's own wait (AI_TIMEOUT_MS.brief, 45s) and never
  * retried, so the route always answers before the browser gives up, and a call nobody is waiting
@@ -590,12 +591,7 @@ export async function findNotesActions(params: {
         messages: [{ role: 'user', content: buildNotesContext(params) }],
     }, { timeout: MODEL_TIMEOUT_MS, maxRetries: 0 })
 
-    await meterAiCall(params.scope, {
-        inputTokens: (message.usage?.input_tokens ?? 0)
-            + (message.usage?.cache_creation_input_tokens ?? 0)
-            + (message.usage?.cache_read_input_tokens ?? 0),
-        outputTokens: message.usage?.output_tokens ?? 0,
-    })
+    // Metered by the client (lib/ai/metered-client.ts), a timeout or failure included.
 
     if (message.stop_reason === 'refusal') {
         logger.warn('[notes-proposals] the model declined the notes')

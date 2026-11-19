@@ -37,6 +37,8 @@ vi.mock('@/lib/ai/engagement-activity', () => ({ buildEngagementActivity: async 
 vi.mock('@/lib/ai/files-context', () => ({ loadEngagementFiles: async () => [], buildFilesContext: () => '' }))
 vi.mock('@/lib/prisma', () => ({
     prisma: {
+        // The billing group the gate charges the call to (lib/ai/guarded-client.ts).
+        firm: { findUnique: async () => ({ groupId: 'g1' }) },
         engagement: { findUnique: async () => ({ name: 'Audit', description: null, tags: [], contractType: null, client: { name: 'Acme' } }) },
         engagementDocument: { findMany: async () => [] },
     },

@@ -5,7 +5,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Square, SquarePen } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
 import { ASSISTANT, ASSISTANT_POLICY } from '@/lib/ai/assistant'
-import { CREDIT_WEIGHTS } from '@/lib/ai/features'
 import { Brio } from '@/components/ui/brio'
 import { Button } from '@/components/ui/button'
 import { ChatMarkdown } from '@/components/ui/chat-markdown'
@@ -41,9 +40,8 @@ export interface FirmChatTurn {
     cutOff?: boolean
 }
 
-const credits = CREDIT_WEIGHTS.firmChat
 /** The caption under the composer, per the mock. */
-export const FIRM_CHAT_CAPTION = `Firm admins only. ${ASSISTANT_POLICY.short} ${credits} credit${credits === 1 ? '' : 's'} per answer.`
+export const FIRM_CHAT_CAPTION = `Firm admins only. ${ASSISTANT_POLICY.short}`
 
 /** The mock's suggestion pill: a question that asks itself when clicked. */
 const PILL = 'inline-flex h-7 max-w-full items-center rounded-full border border-line-strong bg-surface px-2.5 text-small text-fg transition-colors hover:bg-surface-hover disabled:opacity-50'

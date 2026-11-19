@@ -47,6 +47,8 @@ vi.mock('@/lib/ai/credit-cap', () => ({ assertWithinAiCreditCap: creditCap, AiCr
 vi.mock('@/lib/ai/usage', () => ({ recordAiUsage }))
 vi.mock('@/lib/prisma', () => ({
     prisma: {
+        // The billing group the gate charges the call to (lib/ai/guarded-client.ts).
+        firm: { findUnique: async () => ({ groupId: 'g1' }) },
         engagement: {
             findMany: async () => [
                 { id: 'e-late', name: 'Q4 Growth Strategy', slug: 'q4-growth', status: 'ACTIVE', client: { name: 'Northwind', slug: 'northwind' } },
@@ -202,8 +204,11 @@ describe('POST /api/firms/[firmId]/ai-chat · the answer', () => {
         expect(params.messages.some((m: { role: string }) => m.role === 'system')).toBe(false)
         expect(params.messages.at(-1)).toEqual({ role: 'user', content: 'Which engagements are slipping?' })
 
+        // Metered once, by the client: cached input apart from uncached, the ledger adds them up.
+        expect(recordAiUsage).toHaveBeenCalledTimes(1)
         expect(recordAiUsage).toHaveBeenCalledWith(expect.objectContaining({
-            firmId: 'f1', userId: 'u1', feature: 'firmChat', inputTokens: 100, outputTokens: 5,
+            groupId: 'g1', firmId: 'f1', userId: 'u1', feature: 'firmChat',
+            inputTokens: 10, cacheReadTokens: 90, cacheWriteTokens: 0, outputTokens: 5, status: 'ok', estimated: false,
         }))
     })
 
@@ -212,6 +217,7 @@ describe('POST /api/firms/[firmId]/ai-chat · the answer', () => {
         const res = await ask()
         await expect(res.text()).rejects.toThrow()
         expect(recordAiUsage).toHaveBeenCalledTimes(1)
+        expect(recordAiUsage).toHaveBeenCalledWith(expect.objectContaining({ groupId: 'g1', feature: 'firmChat', status: 'refused', stopReason: 'refusal', outputTokens: 5 }))
     })
 
     it('a stream that breaks part-way fails, rather than closing like a complete answer', async () => {
@@ -219,6 +225,9 @@ describe('POST /api/firms/[firmId]/ai-chat · the answer', () => {
         const res = await ask()
         await expect(res.text()).rejects.toThrow()
         expect(logError).toHaveBeenCalledWith('AI firm chat stream error:', expect.any(Error))
+        // Charged for what it spent before it broke, an estimate.
+        expect(recordAiUsage).toHaveBeenCalledTimes(1)
+        expect(recordAiUsage).toHaveBeenCalledWith(expect.objectContaining({ groupId: 'g1', feature: 'firmChat', status: 'error', inputTokens: 10, estimated: true }))
     })
 
     it('the model fails before the stream: Brio’s words, not "Internal server error"', async () => {

@@ -411,7 +411,8 @@ export async function canManageClient(
 }
 
 /** Slug of the System Management org (org_admin = internal platform admin). */
-export const SYSTEM_MANAGEMENT_ORG_SLUG = 'pockett-internal'
+import { SYSTEM_MANAGEMENT_ORG_SLUG } from './system-management'
+export { SYSTEM_MANAGEMENT_ORG_SLUG }
 
 /**
  * Check if user is org_admin of the System Management org.

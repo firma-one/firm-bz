@@ -6,7 +6,8 @@ import { findFirmInPermissions } from '@/lib/permission-helpers'
 import { logger } from '@/lib/logger'
 import { isAiConfigured, AI_EFFORT, AI_MODEL } from '@/lib/ai/client'
 import { ASSISTANT } from '@/lib/ai/assistant'
-import { getGuardedAnthropic, meterAiCall, aiFailureResponse } from '@/lib/ai/guarded-client'
+import { getGuardedAnthropic, aiFailureResponse } from '@/lib/ai/guarded-client'
+import { AI_MAX_TOKENS } from '@/lib/ai/features'
 import { BRIO_ANSWER_FAILED, BRIO_DATA_UNREADABLE } from '@/lib/ai/brio-failure'
 import { isObviouslyOutOfScope, MAX_QUESTION_LENGTH, sanitizeHistory } from '@/lib/ai/engagement-chat'
 import {
@@ -71,11 +72,6 @@ function isClientDisconnect(error: unknown): boolean {
     return /invalid state|already closed|aborted|cancel/i.test(message)
 }
 
-/**
- * Room for thinking as well as the answer: thinking counts toward `max_tokens`. A little above the
- * engagement chat's 2500, since a firm answer is more often a table across several engagements.
- */
-const FIRM_CHAT_MAX_TOKENS = 3000
 
 /**
  * POST /api/firms/[firmId]/ai-chat
@@ -133,7 +129,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
         const stream = await client.messages.create({
             model: AI_MODEL,
-            max_tokens: FIRM_CHAT_MAX_TOKENS,
+            max_tokens: AI_MAX_TOKENS.firmChat,
             output_config: { effort: AI_EFFORT.chat },
             // The prompt and the firm data are the same on every turn of a conversation, so they are
             // cached: a write costs 1.25x, each later read 0.1x. A hit needs a byte-identical prefix,
@@ -153,29 +149,18 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         const encoder = new TextEncoder()
         const responseBody = new ReadableStream<Uint8Array>({
             async start(controller) {
-                let inputTokens = 0
-                let outputTokens = 0
                 let answerText = ''
                 let stopReason: string | null = null
                 try {
                     for await (const event of stream) {
-                        if (event.type === 'message_start') {
-                            // Cached tokens are reported apart from `input_tokens`; added back so
-                            // the ledger records the real size of the request.
-                            const u = event.message.usage
-                            inputTokens = (u?.input_tokens ?? 0)
-                                + (u?.cache_creation_input_tokens ?? 0)
-                                + (u?.cache_read_input_tokens ?? 0)
-                        } else if (event.type === 'message_delta') {
-                            outputTokens = event.usage?.output_tokens ?? 0
+                        if (event.type === 'message_delta') {
                             stopReason = event.delta?.stop_reason ?? stopReason
                         } else if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
                             answerText += event.delta.text
                             controller.enqueue(encoder.encode(event.delta.text))
                         }
                     }
-                    await meterAiCall(meterScope, { inputTokens, outputTokens })
-
+                    // Metered by the client however it ends (lib/ai/metered-client.ts).
                     // A declined answer, or one that ran out of room, ends like a broken stream: a
                     // clean close would present what came before as a complete answer. The panel
                     // marks it cut off, in Brio's words.
@@ -196,16 +181,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
                         logger.error('AI firm chat: could not resolve links', error as Error)
                     }
                 } catch (error) {
-                    // Stop, or a closed tab: those tokens were spent, so they are metered (as in
-                    // the engagement chat), or ask-then-stop would never touch the allowance.
-                    if (isClientDisconnect(error)) {
-                        try {
-                            await meterAiCall(meterScope, { inputTokens, outputTokens })
-                        } catch (meterError) {
-                            logger.error('AI usage metering failed (firm chat):', meterError as Error)
-                        }
-                        return
-                    }
+                    // Stop, or a closed tab: the client has metered what was spent.
+                    if (isClientDisconnect(error)) return
                     logger.error('AI firm chat stream error:', error as Error)
                     // Failed, not closed: raw text has no envelope to carry an error, so a clean
                     // close would read as a complete answer. The panel marks it cut off.

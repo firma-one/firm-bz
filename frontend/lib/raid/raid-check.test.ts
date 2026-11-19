@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import type Anthropic from '@anthropic-ai/sdk'
 import { memoMatchText, quoteFromAnchor } from '@/lib/memos/memo-shared'
+import { meteredClient } from '@/lib/ai/metered-client'
 
 /**
  * The RAID log's Brio check: what Brio is shown, what of its answer survives, what is saved (never a
@@ -20,7 +22,7 @@ const h = vi.hoisted(() => {
         raidRows: [] as Array<Record<string, unknown>>,
         raidDeleteMany: vi.fn(async () => ({ count: 0 })),
         create: vi.fn(),
-        meter: vi.fn(async () => {}),
+        record: vi.fn(async () => ({ credits: 1, costMicros: 1000 })),
         guard: vi.fn(),
         createMany: vi.fn(async () => ({ count: 0 })),
         executeRaw: vi.fn(async () => 1),
@@ -65,7 +67,9 @@ vi.mock('@/lib/prisma', () => ({
     },
 }))
 vi.mock('@/lib/ai/client', () => ({ AI_MODEL: 'test-model', AI_EFFORT: { raid: 'medium' }, isAiConfigured: () => h.configured }))
-vi.mock('@/lib/ai/guarded-client', () => ({ getGuardedAnthropic: h.guard, meterAiCall: h.meter, AiCreditLimitError: h.LimitError }))
+vi.mock('@/lib/ai/guarded-client', () => ({ getGuardedAnthropic: h.guard, AiCreditLimitError: h.LimitError }))
+// The ledger write, under the real metering client the gate hands out (lib/ai/metered-client.ts).
+vi.mock('@/lib/ai/usage', () => ({ recordAiUsage: h.record }))
 vi.mock('@/lib/memos/memo-store', () => ({ listMemos: async () => h.memos, readMemoText: h.readMemo }))
 vi.mock('@/lib/files/file-creator', () => ({
     loadPeople: async () => new Map([
@@ -125,8 +129,10 @@ beforeEach(() => {
     ]
     h.raidRows = []
     h.create.mockReset()
-    h.meter.mockClear()
-    h.guard.mockReset().mockImplementation(async () => ({ messages: { create: h.create } }))
+    h.record.mockClear()
+    // As the gate does: the SDK client, metered for the scope it was asked for, on group g1.
+    h.guard.mockReset().mockImplementation(async (scope: { firmId?: string | null; userId?: string | null; feature: 'raidCheck' }) =>
+        meteredClient({ messages: { create: h.create } } as unknown as Anthropic, { groupId: 'g1', ...scope }))
     h.createMany.mockClear()
     h.executeRaw.mockClear()
     h.queryRaw.mockReset().mockResolvedValue([])
@@ -354,7 +360,10 @@ describe('runRaidCheck', () => {
         const request = h.create.mock.calls[0][0] as { tools: unknown[]; max_tokens: number }
         expect(request.tools).toEqual([RAID_THREAD_TOOL])
         expect(request.max_tokens).toBe(RAID_MAX_TOKENS)
-        expect(h.meter).toHaveBeenCalledWith(expect.objectContaining({ feature: 'raidCheck', firmId: 'f1', userId: 'u-alex' }), { inputTokens: 3000, outputTokens: 400 })
+        expect(h.record).toHaveBeenCalledTimes(1)
+        expect(h.record).toHaveBeenCalledWith(expect.objectContaining({
+            groupId: 'g1', feature: 'raidCheck', firmId: 'f1', userId: 'u-alex', inputTokens: 3000, outputTokens: 400, status: 'ok',
+        }))
         // The check notes when it ran and the fingerprint of what it covered, so the log can say "Up to date".
         expect(h.executeRaw).toHaveBeenCalledWith(expect.stringContaining("'fingerprint'"), NOW.toISOString(), expect.stringMatching(/^[0-9a-f]{32}$/), 'p1')
     })
@@ -416,7 +425,8 @@ describe('runRaidCheck', () => {
     it('a refusal is a failure: nothing saved, and the last check stays put so the next one reads the same messages', async () => {
         h.create.mockResolvedValue({ stop_reason: 'refusal', usage: { input_tokens: 10, output_tokens: 0 }, content: [] })
         expect(await runRaidCheck({ engagementId: 'p1', firmId: 'f1', userId: 'u-alex', now: NOW })).toEqual({ ok: false, reason: 'declined' })
-        expect(h.meter).toHaveBeenCalled()
+        expect(h.record).toHaveBeenCalledTimes(1)
+        expect(h.record).toHaveBeenCalledWith(expect.objectContaining({ feature: 'raidCheck', status: 'refused', inputTokens: 10 }))
         expect(h.createMany).not.toHaveBeenCalled()
         expect(h.executeRaw).not.toHaveBeenCalled()
     })

@@ -2712,10 +2712,6 @@ export function EngagementInsightsDashboard({
     const unfilledSections = useMemo(() => findUnfilledSections(aiDraftEdit), [aiDraftEdit])
     const [aiStreaming, setAiStreaming] = useState(false)
     const [aiStreamText, setAiStreamText] = useState('')
-    /** Stops a draft being written, when its pane is closed mid-write. */
-    const generationAbortRef = useRef<AbortController | null>(null)
-    /** Leftover drafts are swept on the first load only (see the fetch below). */
-    const draftsSweptRef = useRef(false)
 
     const engagementBase = groupSlug && orgSlug && clientSlug && engagementSlug
         ? engagementPath(groupSlug, orgSlug, clientSlug, engagementSlug)
@@ -2915,15 +2911,9 @@ export function EngagementInsightsDashboard({
                 return r.json()
             })
             .then((d) => {
-                // Drafts are one-off: written, reviewed, then published or discarded in one sitting.
-                // One found on the first load was left by a review that never finished (a closed
-                // tab), so it is discarded quietly rather than offered back. Later refreshes keep
-                // the draft — it may be the one open in the review pane right now.
-                if (!draftsSweptRef.current && isFirmAdmin && d?.insightsSummaryDraft) {
-                    void dismissEngagementAiSummary(projectId).catch(() => {})
-                    d = { ...d, insightsSummaryDraft: null, insightsSummaryDraftStale: false }
-                }
-                draftsSweptRef.current = true
+                // A pending draft is offered back behind Review, including one Brio finished after
+                // the reader left: the server writes it to the end and saves it, since its tokens
+                // are paid for either way (2026-11-19). They used to be swept on the first load.
                 setLoadError(null)
                 setData(d); setSummaryDraft(d?.insightsSummary ?? ''); setAiDraftEdit(d?.insightsSummaryDraft?.content ?? '')
             })
@@ -3089,17 +3079,16 @@ export function EngagementInsightsDashboard({
     }, [])
 
     /**
-     * Throws the draft away: stops it if Brio is still writing, drops it here, and marks it
-     * dismissed on the server (the published summary is untouched). A failed call leaves a
-     * leftover draft, which the next load sweeps.
+     * Throws a written draft away: drops it here and marks it dismissed on the server (the
+     * published summary is untouched). A failed call leaves the draft, which the next load offers
+     * back behind Review. Not offered while Brio writes: there is no Stop (2026-11-19).
      */
     const discardDraft = useCallback(async () => {
-        generationAbortRef.current?.abort()
         setData((prev) => prev ? { ...prev, insightsSummaryDraft: null, insightsSummaryDraftStale: false } : prev)
         setAiDraftEdit('')
         setAiGenerateNote(null)
-        // Its answer isn't read on purpose: a draft left behind is swept on the next load.
-        try { void (await dismissEngagementAiSummary(projectId)) } catch { /* swept on the next load */ }
+        // Its answer isn't read on purpose: a draft left behind shows again on the next load.
+        try { void (await dismissEngagementAiSummary(projectId)) } catch { /* offered back on the next load */ }
     }, [projectId])
 
     // Discard throws the draft away. If the lead has typed in it, ask first.
@@ -3109,7 +3098,7 @@ export function EngagementInsightsDashboard({
     const closeGuardRef = useRef<() => boolean>(() => true)
     useEffect(() => {
         // Closing the pane only closes it (Deepak, 2026-11-18): while Brio writes, the sparkle turns into
-        // a working sparkle that opens the pane again (Stop is in the pane); a finished draft waits
+        // a working sparkle that opens the pane again; a finished draft waits
         // behind Review, with anything typed into it. Only Discard throws a draft away. It used to
         // discard on close, which lost a draft whose last words were still being typed out on screen.
         // Editing by hand is the exception: closing it is Cancel, asking first when something changed.
@@ -3139,8 +3128,6 @@ export function EngagementInsightsDashboard({
         setAiStreamText('')
         setAiStreaming(true)
         openSummaryReview()
-        const abort = new AbortController()
-        generationAbortRef.current = abort
 
         // What has arrived. The review pane types it out as Brio writes everywhere
         // (components/brio/brio-typing.tsx), and holds the editable draft back until the last
@@ -3152,7 +3139,6 @@ export function EngagementInsightsDashboard({
                 `/api/projects/${projectId}/ai-summary`,
                 { method: 'POST' },
                 AI_TIMEOUT_MS.stream,
-                abort.signal,
             )
             if (!res.ok) {
                 setAiGenerateNote(await summaryFailureNote(res))
@@ -3223,8 +3209,7 @@ export function EngagementInsightsDashboard({
                 setAiGenerateNote(`${ASSISTANT.name} was interrupted before finishing. Nothing was saved — try again.`)
             }
         } catch (e) {
-            // Stopped because its pane was closed: discarding it was the point, so no error.
-            if (!abort.signal.aborted) setAiGenerateNote(e instanceof TypeError ? BRIO_UNREACHABLE_RETRY : BRIO_SUMMARY_FAILED)
+            setAiGenerateNote(e instanceof TypeError ? BRIO_UNREACHABLE_RETRY : BRIO_SUMMARY_FAILED)
         } finally {
             setAiStreaming(false)
             setAiStreamText('')
@@ -3312,9 +3297,6 @@ export function EngagementInsightsDashboard({
         published: data?.insightsSummary ? { content: data.insightsSummary, publishedAt: data.insightsSummaryPublishedAt ?? null } : null,
         draftBehind: !!data?.insightsSummaryDraftStale,
         onRewrite: handleGenerateSummary,
-        // Stopping throws the unfinished draft away, as Discard does; with nothing left to
-        // review the pane closes itself, and the published summary stays as it was.
-        onStop: () => { void discardDraft() },
         email: { on: emailOnPublish, onToggle: setEmailOnPublish, state: publishEmail, pdf: true },
     }
     // The pencil's edit, in the same pane: every section a box, Cancel instead of Discard.
@@ -3594,7 +3576,7 @@ export function EngagementInsightsDashboard({
                                     // A finished draft: the notice and Review take the controls' place. The
                                     // review opens in the right pane; the published summary stays below.
                                     // While Brio writes, the controls stay and the sparkle turns into a
-                                    // working one that opens the pane (Stop is in the pane).
+                                    // working one that opens the pane.
                                     !aiStreaming && data.insightsSummaryDraft && rightPane.hasRightPane ? (
                                         <>
                                             <span className="inline-flex items-center gap-1.5 text-small text-fg-muted">
@@ -3647,7 +3629,7 @@ export function EngagementInsightsDashboard({
                                             )}
                                             {aiStreaming ? (
                                                 // Brio is still writing, pane open or closed: the working sparkle
-                                                // opens the pane to watch, and Stop is there.
+                                                // opens the pane to watch.
                                                 <Hint label={<><Brio /> is writing a new summary{paneOpen ? '' : ' · Open it'}</>}>
                                                     <button
                                                         type="button"

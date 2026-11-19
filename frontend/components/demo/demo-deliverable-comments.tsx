@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { formatDistanceToNowStrict } from 'date-fns'
-import { ArrowLeft, AtSign, Eye, Hash, Lock, LockOpen, MessagesSquare, Send, Smile, Sparkles, Square } from 'lucide-react'
+import { ArrowLeft, AtSign, Eye, Hash, Lock, LockOpen, MessagesSquare, Send, Smile, Sparkles } from 'lucide-react'
 import { PersonAvatar } from '@/components/ui/property-cells'
 import { DocumentIcon } from '@/components/ui/document-icon'
 import { Hint } from '@/components/ui/tooltip'
@@ -94,7 +94,7 @@ function sampleReplyDraft(to: string): string {
     return `Thanks, ${first}. Good to hear the figures match. We'll move this to review once [confirm the final check is done], and share it with you by [date].`
 }
 
-const DRAFT_BUTTON = 'inline-flex h-7 shrink-0 items-center gap-1 rounded-control px-2 text-small text-fg-muted hover:bg-surface-hover hover:text-fg'
+const DRAFT_BUTTON = 'inline-flex h-7 shrink-0 items-center gap-1 rounded-control px-2 text-small text-fg-muted hover:bg-surface-hover hover:text-fg disabled:opacity-40'
 
 // The text box and the chip layer behind it share this box exactly, so each chip sits under its text.
 const COMPOSER_TEXT = 'max-h-48 w-full overflow-y-auto whitespace-pre-wrap break-words px-3 pb-1 pt-2.5 text-ui leading-relaxed [scrollbar-gutter:stable]'
@@ -553,18 +553,14 @@ export function DemoDeliverableComments({ documents, thread, onPost, focusDocId,
                         )}
                     </div>
 
-                    {/* The draft's own row, as in the app: what's left to fill, Discard draft, Rewrite (Stop while it writes), Reply. */}
+                    {/* The draft's own row, as in the app: what's left to fill, Discard draft, Rewrite (waits while it writes; no Stop), Reply. */}
                     {drafting && (
                         <div className="flex items-center gap-1 border-t border-line py-1.5 pl-3 pr-1.5">
                             <span aria-live="polite" className="min-w-0 flex-1 truncate text-small text-fg-muted">
                                 {streaming ? 'Writing…' : placeholders > 0 ? `${placeholders} ${placeholders === 1 ? 'placeholder' : 'placeholders'} to fill` : ''}
                             </span>
                             <button type="button" onClick={discardDraft} className={DRAFT_BUTTON}>Discard draft</button>
-                            {streaming ? (
-                                <button type="button" onClick={stopStream} className={DRAFT_BUTTON}><Square className="h-3 w-3" aria-hidden /> Stop</button>
-                            ) : (
-                                <button type="button" onClick={startDraft} className={DRAFT_BUTTON}>Rewrite</button>
-                            )}
+                            <button type="button" onClick={startDraft} disabled={streaming} className={DRAFT_BUTTON}>Rewrite</button>
                             <button
                                 type="submit"
                                 disabled={!text.trim() || draftBlocksSend}

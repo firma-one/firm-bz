@@ -2,7 +2,8 @@ import 'server-only'
 import type Anthropic from '@anthropic-ai/sdk'
 import { prisma } from '@/lib/prisma'
 import { AI_EFFORT, AI_MODEL, isAiConfigured } from '@/lib/ai/client'
-import { AiCreditLimitError, getGuardedAnthropic, meterAiCall, type AiScope } from '@/lib/ai/guarded-client'
+import { AiCreditLimitError, getGuardedAnthropic, type AiScope } from '@/lib/ai/guarded-client'
+import { AI_MAX_TOKENS } from '@/lib/ai/features'
 import { loadPeople } from '@/lib/files/file-creator'
 import { formatDisplayName } from '@/lib/comments/mentions'
 import { ROLE_NAME, isPersonaUiSlug } from '@/lib/persona-ui-groups'
@@ -77,12 +78,12 @@ const MAX_QUOTE = 500
 /** A "quote" shorter than this matches too much of any message to ground anything. */
 const MIN_QUOTE_LETTERS = 4
 /** Room for thinking plus one tool call: thinking counts toward the cap. */
-export const RAID_MAX_TOKENS = 6000
+export const RAID_MAX_TOKENS = AI_MAX_TOKENS.raidCheck
 /**
  * A memo's read writes more (an hour's call holds a dozen commitments as well as its RAID entries): the
  * action items' own read used up to 5,000 of 8,000 on a long transcript (2026-11-15).
  */
-export const RAID_MEMO_MAX_TOKENS = 12_000
+export const RAID_MEMO_MAX_TOKENS = AI_MAX_TOKENS.memoRaid
 /** One non-streamed call, never retried; shorter than the route's 60 seconds. */
 const MODEL_TIMEOUT_MS = 45_000
 /**
@@ -798,12 +799,7 @@ async function suggestFrom(params: {
         }],
     }, { timeout: memoRead ? MEMO_MODEL_TIMEOUT_MS : MODEL_TIMEOUT_MS, maxRetries: 0 })
 
-    await meterAiCall(params.scope, {
-        inputTokens: (message.usage?.input_tokens ?? 0)
-            + (message.usage?.cache_creation_input_tokens ?? 0)
-            + (message.usage?.cache_read_input_tokens ?? 0),
-        outputTokens: message.usage?.output_tokens ?? 0,
-    })
+    // Metered by the client (lib/ai/metered-client.ts), a timeout or failure included.
 
     if (message.stop_reason === 'refusal') {
         logger.warn('[raid] the model declined the check')

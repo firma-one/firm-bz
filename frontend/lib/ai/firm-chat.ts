@@ -1,7 +1,6 @@
 import type { FirmInsightsResponse, UnansweredThreadItem } from '@/app/api/firms/[firmId]/insights/route'
 import { engagementPace, sortByPace, PACE_META, type FirmEngagementRow } from '@/lib/insights/firm-engagement-pace'
 import { ASSISTANT } from './assistant'
-import { CREDIT_WEIGHTS } from './features'
 import {
     FOLLOWUP_MARKER,
     MAX_FOLLOWUPS,
@@ -21,9 +20,12 @@ import {
  * marker, so the history sanitizer (`sanitizeHistory`) strips this chat's bookkeeping line too.
  */
 
-const firmChatCredits = CREDIT_WEIGHTS.firmChat
-/** What the firm panel can do, in its header hint and empty state (the app's and the tour's). */
-export const FIRM_CHAT_CAPABILITY = `Firm admins only · ${firmChatCredits} credit${firmChatCredits === 1 ? '' : 's'} per answer`
+/**
+ * What the firm panel can do, in its header hint and empty state (the app's and the tour's). No credit
+ * count: cost is the last thing a person should weigh before asking (No Credit Anxiety, 2026-11-19), and
+ * an answer's credits follow its tokens.
+ */
+export const FIRM_CHAT_CAPABILITY = 'Firm admins only'
 /** The firm panel's composer prompt. */
 export const FIRM_CHAT_PLACEHOLDER = 'Ask about engagements, clients or deadlines'
 

@@ -151,8 +151,10 @@ export function AiCreditsRow({ usage }: { usage: BillingPlanUsage | null | undef
     // with rather than taking new hues (the palette above has no more to spare): the firm assistant
     // and Your brief's rewrites with firm briefs, drafts, notes and the RAID check with the
     // engagement's other writing, Reviewers' questions with the engagement chat. Every
-    // credit-spending feature is in a row, so the rows still add up to the total. Every AI call is one
-    // credit since 2026-11-15, Your brief's morning brief and a memo's minutes included.
+    // credit-spending feature is in a row, so the rows still add up to the total. Since 2026-11-19 a
+    // call takes what its tokens cost (lib/ai/pricing.ts), so a row's number is credits, not calls:
+    // most calls take 1, a long memo read a few.
+    // Every call counts, failed and stopped ones included; those are named under the legend.
     const sumOf = (keys: readonly (keyof typeof ai.byFeature)[]) => keys.reduce((n, k) => n + (ai.byFeature[k] ?? 0), 0)
     const featureRows: Array<{ key: string; keys: readonly (keyof typeof ai.byFeature)[]; label: string; fill: string }> = [
         { key: 'brief', keys: ['brief', 'firmChat', 'dayBrief', 'dayBriefRewrite'], label: 'Briefs and assistant', fill: chart('slate') },
@@ -255,6 +257,13 @@ export function AiCreditsRow({ usage }: { usage: BillingPlanUsage | null | undef
                     </div>
                 )
             })()}
+            {/* Already counted in the rows above: a call is charged for what it spent, finished or
+                not. Said once, quietly, so the total isn't a mystery. Neutral: it isn't a fault. */}
+            {ai.unfinished && ai.unfinished.calls > 0 && (
+                <p className="mt-3 text-caption tabular-nums text-fg-subtle">
+                    Includes {ai.unfinished.calls} unfinished call{ai.unfinished.calls === 1 ? '' : 's'} · {fmt(ai.unfinished.credits)} credit{ai.unfinished.credits === 1 ? '' : 's'} (stopped, cut off or failed)
+                </p>
+            )}
         </div>
     )
 }

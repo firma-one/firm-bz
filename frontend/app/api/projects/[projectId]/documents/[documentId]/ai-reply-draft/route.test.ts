@@ -7,7 +7,7 @@ import { NextRequest } from 'next/server'
  * conversation only, read on the server. The model is mocked; nothing reaches Anthropic.
  */
 
-const { st, creditCap, LimitError, create } = vi.hoisted(() => {
+const { st, creditCap, LimitError, create, record } = vi.hoisted(() => {
     class LimitError extends Error {
         kind = 'period' as const
         limit = 500
@@ -26,6 +26,7 @@ const { st, creditCap, LimitError, create } = vi.hoisted(() => {
         creditCap: vi.fn(async () => {}),
         LimitError,
         create: vi.fn(),
+        record: vi.fn(async () => ({ credits: 1, costMicros: 1000 })),
     }
 })
 
@@ -54,7 +55,7 @@ vi.mock('@/lib/ai/client', () => ({
     getAnthropic: () => ({ messages: { create } }),
 }))
 vi.mock('@/lib/ai/credit-cap', () => ({ assertWithinAiCreditCap: creditCap, AiCreditLimitError: LimitError }))
-vi.mock('@/lib/ai/usage', () => ({ recordAiUsage: vi.fn() }))
+vi.mock('@/lib/ai/usage', () => ({ recordAiUsage: record }))
 vi.mock('@/lib/files/file-creator', () => ({
     loadPeople: async () => new Map([
         ['priya', { name: 'Priya Shah', email: 'priya@firm.com', avatarUrl: null }],
@@ -64,6 +65,8 @@ vi.mock('@/lib/files/file-creator', () => ({
 vi.mock('@/lib/files/deliverable-of', () => ({ deliverableOf: async () => null }))
 vi.mock('@/lib/prisma', () => ({
     prisma: {
+        // The billing group the gate charges the call to (lib/ai/guarded-client.ts).
+        firm: { findUnique: async () => ({ groupId: 'g1' }) },
         engagementDocument: {
             findFirst: async () => ({
                 id: 'd1', fileName: 'Market report', docId: 'QSR-9', isFolder: true, parentId: null, dueDate: null,
@@ -114,6 +117,7 @@ beforeEach(() => {
     ]
     creditCap.mockReset()
     creditCap.mockResolvedValue(undefined)
+    record.mockClear()
     create.mockReset()
     create.mockResolvedValue(streaming('Thanks, Dana. On 4.2: [confirm whether the pricing is current].'))
 })
@@ -133,7 +137,12 @@ describe('POST /api/projects/[projectId]/documents/[documentId]/ai-reply-draft',
         expect(call.system).toContain('placeholder in square brackets')
         expect(call).not.toHaveProperty('temperature')
         expect(call.max_tokens).toBe(2000)
-        expect(creditCap).toHaveBeenCalledWith(expect.objectContaining({ firmId: 'f1', feature: 'replyDraft' }))
+        // Gated on the firm's billing group, and metered once by the gate's client.
+        expect(creditCap).toHaveBeenCalledWith({ groupId: 'g1', feature: 'replyDraft' })
+        expect(record).toHaveBeenCalledTimes(1)
+        expect(record).toHaveBeenCalledWith(expect.objectContaining({
+            groupId: 'g1', firmId: 'f1', userId: 'me', feature: 'replyDraft', inputTokens: 300, outputTokens: 40, status: 'ok',
+        }))
     })
 
     it('with the firm\'s masking on, Brio reads placeholders, never the names, and the draft comes back with them', async () => {

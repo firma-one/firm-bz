@@ -10,9 +10,9 @@ import { BRIO_DRAFT_FAILED } from '@/lib/ai/brio-failure'
 import { streamDraft } from '@/lib/ai/stream-draft'
 import { REPLY_DRAFT_SYSTEM_PROMPT, buildReplyDraftPrompt, loadReplyDraftContext } from '@/lib/ai/reply-draft'
 import { vaultForEngagement } from '@/lib/ai/known-entities'
+import { AI_MAX_TOKENS } from '@/lib/ai/features'
 
 /** Room for thinking as well as a reply of ~120 words: thinking counts toward it. */
-const REPLY_DRAFT_MAX_TOKENS = 2000
 
 /**
  * POST /api/projects/[projectId]/documents/[documentId]/ai-reply-draft
@@ -68,11 +68,10 @@ export async function POST(
 
         return await streamDraft({
             client,
-            scope,
             system: REPLY_DRAFT_SYSTEM_PROMPT,
             user: buildReplyDraftPrompt(thread),
             effort: AI_EFFORT.draft,
-            maxTokens: REPLY_DRAFT_MAX_TOKENS,
+            maxTokens: AI_MAX_TOKENS.replyDraft,
             failure: BRIO_DRAFT_FAILED,
             label: 'reply-draft',
         })

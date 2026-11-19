@@ -2,55 +2,76 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { logger } from '@/lib/logger'
 import { AI_MODEL } from './client'
-import { CREDIT_WEIGHTS, emptyFeatureCounts, type AiFeature } from './features'
+import { emptyFeatureCounts, type AiFeature } from './features'
+import { costMicrosOf, creditsForCost } from './pricing'
 
-// The feature list and weights live in `features.ts`, which client components can import too.
-export { CREDIT_WEIGHTS, type AiFeature }
+// The feature list lives in `features.ts`, which client components can import too.
+export type { AiFeature }
+
+/** How a model call ended. Every ending that reached the model is a row (no free calls). */
+export type AiCallStatus = 'ok' | 'refused' | 'cut_off' | 'error' | 'timeout' | 'cancelled' | 'rejected'
 
 /**
- * Appends one row to the usage ledger.
+ * Appends one row to the usage ledger: what the call cost us and the credits that comes to
+ * (lib/ai/pricing.ts). Called by the metering client (lib/ai/metered-client.ts) for every call.
  *
  * Never throws: metering must not be able to fail a user-facing AI action. A dropped row costs
- * accounting accuracy; a thrown error would cost the user their result.
+ * accounting accuracy; a thrown error would cost the user their result. Every failure is logged.
  */
 export async function recordAiUsage(params: {
+    groupId: string
     firmId?: string | null
-    groupId?: string | null
     userId?: string | null
     feature: AiFeature
     inputTokens: number
     outputTokens: number
+    cacheReadTokens?: number
+    cacheWriteTokens?: number
     model?: string
-}): Promise<void> {
+    status?: AiCallStatus
+    stopReason?: string | null
+    estimated?: boolean
+}): Promise<{ credits: number; costMicros: number } | null> {
+    const model = params.model ?? AI_MODEL
+    const costMicros = costMicrosOf(model, {
+        inputTokens: params.inputTokens,
+        outputTokens: params.outputTokens,
+        cacheReadTokens: params.cacheReadTokens,
+        cacheWriteTokens: params.cacheWriteTokens,
+    })
+    const credits = creditsForCost(costMicros)
     try {
-        let groupId = params.groupId ?? null
-        if (!groupId && params.firmId) {
-            const firm = await prisma.firm.findUnique({
-                where: { id: params.firmId },
-                select: { groupId: true },
-            })
-            groupId = firm?.groupId ?? null
-        }
-        if (!groupId) {
-            logger.warn(`AI usage not recorded (${params.feature}): no billing group resolved`)
-            return
-        }
-
         await prisma.platformAiUsage.create({
             data: {
-                groupId,
+                groupId: params.groupId,
                 firmId: params.firmId ?? null,
                 userId: params.userId ?? null,
                 feature: params.feature,
-                model: params.model ?? AI_MODEL,
-                inputTokens: params.inputTokens,
+                model,
+                // Cached input is stored with the uncached: the ledger's input count is what was read.
+                inputTokens: params.inputTokens + (params.cacheReadTokens ?? 0) + (params.cacheWriteTokens ?? 0),
                 outputTokens: params.outputTokens,
-                credits: CREDIT_WEIGHTS[params.feature],
+                credits,
+                costMicros,
+                status: params.status ?? 'ok',
+                stopReason: params.stopReason ?? null,
+                estimated: params.estimated ?? false,
             },
         })
+        return { credits, costMicros }
     } catch (error) {
-        logger.error(`Failed to record AI usage (${params.feature}):`, error as Error)
+        logger.error(`Failed to record AI usage (${params.feature}, ${costMicros}µ$):`, error as Error)
+        return null
     }
+}
+
+/** Credits and cost (micro-dollars) used by a billing group since a given instant. */
+export async function usageSince(groupId: string, since: Date): Promise<{ credits: number; costMicros: number }> {
+    const agg = await prisma.platformAiUsage.aggregate({
+        where: { groupId, createdAt: { gte: since } },
+        _sum: { credits: true, costMicros: true },
+    })
+    return { credits: Number(agg._sum.credits ?? 0), costMicros: Number(agg._sum.costMicros ?? 0) }
 }
 
 /** Credits consumed by a billing group since a given instant. Read-only; nothing enforces it yet. */
@@ -126,6 +147,11 @@ export interface AiCreditUsage {
     used: number
     /** Per-feature split, so the page can show WHERE the credits went, not just how many. */
     byFeature: Record<AiFeature, number>
+    /**
+     * Calls this period that didn't give an answer (declined, cut off, failed, timed out or stopped),
+     * and the credits they took: every call is charged, so the page says where those went too.
+     */
+    unfinished: { calls: number; credits: number }
     periodStartIso: string
     /**
      * Period allowance from `entitledAiCredits`, and whether it is actually enforced.
@@ -166,6 +192,13 @@ export async function aiCreditUsageForGroup(
         _sum: { credits: true },
     })
 
+    const unfinishedAgg = await prisma.platformAiUsage.aggregate({
+        where: { groupId, createdAt: { gte: since }, status: { notIn: ['ok', 'rejected'] } },
+        _count: { _all: true },
+        _sum: { credits: true },
+    })
+    const unfinished = { calls: unfinishedAgg._count._all, credits: Number(unfinishedAgg._sum.credits ?? 0) }
+
     const byFeature = emptyFeatureCounts()
     let used = 0
     for (const r of rows) {
@@ -178,6 +211,7 @@ export async function aiCreditUsageForGroup(
     return {
         used,
         byFeature,
+        unfinished,
         periodStartIso: since.toISOString(),
         allowance: entitlement?.allowance ?? null,
         enforced: entitlement?.enforced ?? false,

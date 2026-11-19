@@ -93,7 +93,9 @@ describe('DraftComposer while Brio writes', () => {
             />,
         )
         await waitFor(() => expect(baseElement.querySelector('.fm-think-dots')).not.toBeNull())
-        expect(screen.getByRole('button', { name: /Stop/ })).toBeTruthy()
+        // No Stop (2026-11-19): Rewrite waits until the draft is written.
+        expect(screen.queryByRole('button', { name: /Stop/ })).toBeNull()
+        expect((screen.getByRole('button', { name: 'Rewrite' }) as HTMLButtonElement).disabled).toBe(true)
 
         await act(async () => { s.write({ type: 'delta', text: 'Hi Dana, a quick nudge.' }) })
         await waitFor(() => expect(baseElement.querySelector('.fm-type-caret')).not.toBeNull())

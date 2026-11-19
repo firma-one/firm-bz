@@ -1,7 +1,6 @@
 import { createHash } from 'crypto'
 import type { EngagementInsightsResponse } from '@/lib/insights/engagement-insights'
-import { AI_EFFORT, completeText } from './client'
-import { buildEngagementContext, PLATFORM_DATA_MODEL } from './engagement-chat'
+import { PLATFORM_DATA_MODEL } from './engagement-chat'
 
 /**
  * Approval state of a generated summary draft.
@@ -151,7 +150,6 @@ export function isDraftFromToday(draft: InsightsSummaryDraft | null | undefined)
 
 export { SUMMARY_SECTIONS, LEAD_PLACEHOLDER, findUnfilledSections } from './summary-sections'
 import { LEAD_PLACEHOLDER } from './summary-sections'
-import type { Vault } from '@/lib/ai/pseudonymize'
 
 export const SUMMARY_SYSTEM_PROMPT = `You are writing the standing status summary for one engagement at a professional services firm.
 
@@ -214,25 +212,3 @@ ${LEAD_PLACEHOLDER}
 A section with nothing to report is left out, heading and all: an empty section, or one that only
 says there is nothing, reads as filler in a client's report. Mitigation & Contingency and Next Steps
 are the exception: always write their headings with the line above, for the lead to fill in.`
-
-
-
-/**
- * Seven short sections run to ~500 tokens; the rest is room for thinking, which counts toward the
- * cap. A summary cut off at the cap would lose its last sections, the ones a Lead fills in.
- */
-export const SUMMARY_MAX_TOKENS = 3000
-
-export async function generateEngagementSummary(
-    data: EngagementInsightsResponse,
-    meta: { clientName?: string; engagementName?: string; vault: Vault | null },
-): Promise<string | null> {
-    return completeText({
-        vault: meta.vault,
-        system: SUMMARY_SYSTEM_PROMPT,
-        userMessage: `Engagement snapshot:\n${buildEngagementContext(data, meta)}`,
-        maxTokens: SUMMARY_MAX_TOKENS,
-        effort: AI_EFFORT.summary,
-        label: 'engagement-summary',
-    })
-}

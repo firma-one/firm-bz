@@ -35,11 +35,12 @@ export const NEEDS_YOU_ANCHOR = "needs-you"
 export const DAY_BRIEF_ITEMS_LINE = "The items are below, in Needs you and Agenda."
 
 /**
- * Rewrite's tooltip: what it costs, and whose credits. Home spans every firm, so a rewrite is billed to
- * the firm selected in the sidebar (app/api/me/day-brief/route.ts).
+ * Rewrite's tooltip: whose credits it uses, never what it costs (No Credit Anxiety; credits follow
+ * the work since 2026-11-19). Home spans every firm, so a rewrite is billed to the firm selected in
+ * the sidebar (app/api/me/day-brief/route.ts).
  */
 export function rewriteHint(firmName?: string | null): string {
-    return firmName ? `Uses 1 ${firmName} credit, only when your items have changed` : "1 credit, only when your items have changed"
+    return firmName ? `Uses ${firmName}'s credits, only when your items have changed` : "Only when your items have changed"
 }
 
 /** What Rewrite says when nothing has changed since the brief was written. */
@@ -102,7 +103,7 @@ const ICON_BUTTON =
 
 function RewriteButton({ rewriting, onRewrite, firmName }: RewriteControl) {
     return (
-        // The morning brief is free; a rewrite is a choice, so it costs a credit, and only when the
+        // A rewrite is a choice, so it uses credits, and only when the
         // items changed (an unchanged day answers without asking Brio).
         <Hint
             label={

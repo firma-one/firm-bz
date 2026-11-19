@@ -5,7 +5,8 @@ import { logger } from '@/lib/logger'
 import { resolveProjectContext } from '@/lib/resolve-project-context'
 import { requireEngagementMember, isExternalEngagementRole } from '@/lib/engagement-access'
 import { isAiConfigured, AI_EFFORT, AI_MODEL } from '@/lib/ai/client'
-import { getGuardedAnthropic, meterAiCall, aiFailureResponse } from '@/lib/ai/guarded-client'
+import { getGuardedAnthropic, aiFailureResponse } from '@/lib/ai/guarded-client'
+import { AI_MAX_TOKENS } from '@/lib/ai/features'
 import { BRIO_ANSWER_FAILED } from '@/lib/ai/brio-failure'
 import { sanitizeHistory, MAX_QUESTION_LENGTH } from '@/lib/ai/engagement-chat'
 import {
@@ -74,7 +75,7 @@ export async function POST(
 
         const stream = await client.messages.create({
             model: AI_MODEL,
-            max_tokens: 2000,
+            max_tokens: AI_MAX_TOKENS.reviewerChat,
             output_config: { effort: AI_EFFORT.chat },
             // Byte-stable across a conversation (day-granular dates), so later turns read it from cache.
             system: [{
@@ -89,24 +90,17 @@ export async function POST(
         const encoder = new TextEncoder()
         const out = new ReadableStream<Uint8Array>({
             async start(controller) {
-                let inputTokens = 0
-                let outputTokens = 0
                 let stopReason: string | null = null
                 try {
                     for await (const event of stream) {
-                        if (event.type === 'message_start') {
-                            const u = event.message.usage
-                            inputTokens = (u?.input_tokens ?? 0)
-                                + (u?.cache_creation_input_tokens ?? 0)
-                                + (u?.cache_read_input_tokens ?? 0)
-                        } else if (event.type === 'message_delta') {
-                            outputTokens = event.usage?.output_tokens ?? 0
+                        if (event.type === 'message_delta') {
                             stopReason = event.delta?.stop_reason ?? stopReason
                         } else if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
                             controller.enqueue(encoder.encode(event.delta.text))
                         }
                     }
-                    await meterAiCall(scope, { inputTokens, outputTokens })
+                    // Metered by the client however it ends (lib/ai/metered-client.ts); the daily cap
+                    // counts the same ledger, so ask-then-stop counts too.
                     // A declined answer ends as a broken stream, never as a complete-looking one.
                     if (stopReason === 'refusal') {
                         controller.error(new Error('Answer declined'))
@@ -114,9 +108,6 @@ export async function POST(
                     }
                     controller.close()
                 } catch (error) {
-                    // Tokens spent before a disconnect are metered, as in the engagement chat: the
-                    // daily cap counts this ledger, so ask-then-stop must count too.
-                    await meterAiCall(scope, { inputTokens, outputTokens }).catch(() => {})
                     logger.error('Reviewer chat stream error:', error as Error)
                     try { controller.error(error) } catch { /* the reader already left */ }
                 }

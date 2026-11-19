@@ -6,8 +6,9 @@ import { findFirmInPermissions } from '@/lib/permission-helpers'
 import { logger } from '@/lib/logger'
 import { isAiConfigured } from '@/lib/ai/client'
 import { briefFingerprint, generateFirmBrief, isBriefFresh, streamFirmBrief, type FirmBrief } from '@/lib/ai/firm-brief'
-import { assertWithinAiCreditCap, AiCreditLimitError } from '@/lib/ai/credit-cap'
-import { aiFailureResponse, aiLimitResponse } from '@/lib/ai/guarded-client'
+import { AiCreditLimitError } from '@/lib/ai/credit-cap'
+import { aiFailureResponse, aiLimitResponse, assertCanCallAi } from '@/lib/ai/guarded-client'
+import { afterResponse } from '@/lib/server/after-response'
 import { BRIO_BRIEF_FAILED, BRIO_DATA_UNREADABLE } from '@/lib/ai/brio-failure'
 import type { FirmInsightsResponse } from '../insights/route'
 
@@ -54,13 +55,15 @@ async function loadInsights(request: NextRequest, firmId: string): Promise<FirmI
 
 /**
  * The rewrite, streamed as NDJSON — `meta`, then a `delta` per piece of text, then `done` with the
- * saved brief (or `error`) — so the card shows Brio writing instead of a silent wait. The brief is
- * saved only once it is complete: stopping it (the client aborts) stops the model, saves nothing
- * and is not charged, and the brief on file stays as it was.
+ * saved brief (or `error`) — so the card shows Brio writing instead of a silent wait.
+ *
+ * Leaving doesn't stop it (2026-11-19): the tokens are paid for either way, so a reader who goes away
+ * still gets the brief, saved for their next visit. The model is never stopped from here; the function
+ * is kept alive until the brief is saved (`afterResponse`).
  */
 async function streamRewrite(request: NextRequest, firmId: string, userId?: string): Promise<Response> {
     try {
-        await assertWithinAiCreditCap({ firmId, feature: 'brief' })
+        await assertCanCallAi({ firmId, userId, feature: 'brief' })
     } catch (error) {
         const limited = aiLimitResponse(error)
         if (limited) return limited
@@ -71,41 +74,44 @@ async function streamRewrite(request: NextRequest, firmId: string, userId?: stri
 
     const encoder = new TextEncoder()
     const line = (o: unknown) => encoder.encode(JSON.stringify(o) + '\n')
-    const abort = new AbortController()
     const generatedAt = new Date().toISOString()
+    let readerGone = false
 
     const body = new ReadableStream<Uint8Array>({
-        async start(controller) {
-            try {
-                controller.enqueue(line({ type: 'meta', generatedAt }))
-                const content = await streamFirmBrief(insights, { firmId, userId }, (text) => {
-                    if (!abort.signal.aborted) controller.enqueue(line({ type: 'delta', text }))
-                }, abort.signal)
-                if (abort.signal.aborted) return
-                if (!content) {
-                    controller.enqueue(line({ type: 'error', message: BRIO_BRIEF_FAILED }))
-                    return
-                }
-                // Settings read again here, not at the start: the stream takes seconds, and the
-                // firm's settings may have changed meanwhile.
-                const { settings } = await readCachedBrief(firmId)
-                const brief: FirmBrief = { content, generatedAt, fingerprint: briefFingerprint(insights) }
-                await prisma.firm.update({
-                    where: { id: firmId },
-                    data: { settings: { ...settings, aiBrief: brief } as never },
-                })
-                controller.enqueue(line({ type: 'done', brief }))
-            } catch (error) {
-                if (abort.signal.aborted) return
-                logger.error('AI brief stream error:', error as Error)
-                controller.enqueue(line({ type: 'error', message: BRIO_BRIEF_FAILED }))
-            } finally {
-                try { controller.close() } catch { /* already closed by the client leaving */ }
+        start(controller) {
+            // Writes while someone is reading; afterwards the work goes on unseen.
+            const send = (o: unknown) => {
+                if (readerGone) return
+                try { controller.enqueue(line(o)) } catch { readerGone = true }
             }
+            const work = (async () => {
+                try {
+                    send({ type: 'meta', generatedAt })
+                    const content = await streamFirmBrief(insights, { firmId, userId }, (text) => send({ type: 'delta', text }))
+                    if (!content) {
+                        send({ type: 'error', message: BRIO_BRIEF_FAILED })
+                        return
+                    }
+                    // Settings read again here, not at the start: the stream takes seconds, and the
+                    // firm's settings may have changed meanwhile.
+                    const { settings } = await readCachedBrief(firmId)
+                    const brief: FirmBrief = { content, generatedAt, fingerprint: briefFingerprint(insights) }
+                    await prisma.firm.update({
+                        where: { id: firmId },
+                        data: { settings: { ...settings, aiBrief: brief } as never },
+                    })
+                    send({ type: 'done', brief })
+                } catch (error) {
+                    logger.error('AI brief stream error:', error as Error)
+                    send({ type: 'error', message: BRIO_BRIEF_FAILED })
+                } finally {
+                    if (!readerGone) try { controller.close() } catch { /* already closed */ }
+                }
+            })()
+            afterResponse(() => work)
         },
-        // The client stopped reading (Stop, or it left the page): stop the model too.
         cancel() {
-            abort.abort()
+            readerGone = true
         },
     })
 
@@ -135,7 +141,7 @@ async function regenerate(
     // one must not consume credits. On a breach the limit's own words come back, so a card with
     // no brief to fall back on says why rather than vanishing.
     try {
-        await assertWithinAiCreditCap({ firmId, feature: 'brief' })
+        await assertCanCallAi({ firmId, userId, feature: 'brief' })
     } catch (error) {
         if (error instanceof AiCreditLimitError) {
             logger.info(`AI brief skipped for firm ${firmId}: ${error.kind} limit reached`)

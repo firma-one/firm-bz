@@ -8,6 +8,8 @@ let search = new URLSearchParams()
 vi.mock('next/navigation', () => ({
     usePathname: () => pathname,
     useSearchParams: () => search,
+    // The header's daily reminders toast opens the Inbox with it.
+    useRouter: () => ({ push: () => {} }),
 }))
 vi.mock('next/link', () => ({
     default: ({ href, children, ...rest }: any) => <a href={href} {...rest}>{children}</a>,

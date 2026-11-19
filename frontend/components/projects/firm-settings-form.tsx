@@ -898,7 +898,7 @@ export function FirmSettingsForm({
                         <SettingSwitchRow
                             icon={<Sparkles />}
                             title="Summarize memos and suggest RAID items when they're added"
-                            description={withRaidInfo("Brio reads a new internal memo once: it writes the meeting's minutes, and suggests RAID entries (every commitment an Action) that wait on the memo for someone to accept. Nothing changes on its own. 2 credits per memo, from your firm's credits.")}
+                            description={withRaidInfo("Brio reads a new internal memo once: it writes the meeting's minutes, and suggests RAID entries (every commitment an Action) that wait on the memo for someone to accept. Nothing changes on its own. It uses your firm's credits.")}
                             checked={brioMemoReview}
                             onChange={(v) => { setBrioMemoReview(v); setAppDirty(true) }}
                             disabled={!loaded}

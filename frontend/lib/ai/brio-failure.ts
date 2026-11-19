@@ -52,3 +52,15 @@ export function brioFailureReason(e: unknown, fallback: string): string {
     if (e instanceof TypeError) return BRIO_UNREACHABLE
     return e instanceof Error && e.message ? e.message : fallback
 }
+
+/**
+ * Why a piece of writing failed, from how the model call ended (Failure Reasons rule, 2026-11-19): a
+ * cut-off, a decline and an empty answer each say so, rather than one line for every failure.
+ * `what` names the piece ("the summary", "the brief", "a draft").
+ */
+export function brioWritingFailure(ending: { stopReason?: string | null; empty?: boolean }, what: string, fallback: string): string {
+    if (ending.stopReason === 'max_tokens') return `${ASSISTANT.name} ran out of room before finishing ${what}. Nothing was saved. Try again.`
+    if (ending.stopReason === 'refusal') return `${ASSISTANT.name} declined to write ${what}. Nothing was saved.`
+    if (ending.empty) return `${ASSISTANT.name} came back with nothing for ${what}. Nothing was saved. Try again.`
+    return fallback
+}

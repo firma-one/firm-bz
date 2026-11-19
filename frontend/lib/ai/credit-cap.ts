@@ -1,10 +1,11 @@
 import 'server-only'
-import { prisma } from '@/lib/prisma'
 import { logger } from '@/lib/logger'
 import { parseEntitledAiCredits, applyEntitlementOverrides } from '@/lib/billing/subscription-metadata'
 import { getActiveSubscriptionForGroup } from '@/lib/billing/active-billing-subscription'
-import { CREDIT_WEIGHTS, creditsUsedSince, creditPeriod, creditPeriodStart, type AiFeature } from './usage'
+import { creditsUsedSince, usageSince, creditPeriod, creditPeriodStart, type AiFeature } from './usage'
 import { maybeNotifyCreditPace } from './credit-pace-notify'
+import { spendCeilingMicros } from './spend-ceiling'
+import { noticeSpendCeiling } from './spend-ceiling-notice'
 
 /**
  * AI credit enforcement — two windows with different jobs.
@@ -59,8 +60,12 @@ function enforceAiCreditCaps(): boolean {
 export class AiCreditLimitError extends Error {
     constructor(
         message: string,
-        /** 'person': one person's own limits (lib/ai/person-limit.ts), not the group's credits. */
-        readonly kind: 'period' | 'burst' | 'person',
+        /**
+         * 'person': one person's own limits (lib/ai/person-limit.ts), not the group's credits.
+         * 'spend': the group's model spend reached its monthly dollar ceiling (lib/ai/spend-ceiling.ts).
+         * 'unbillable': no billing group to charge, so the call can't be metered and isn't made.
+         */
+        readonly kind: 'period' | 'burst' | 'person' | 'spend' | 'unbillable',
         readonly limit: number,
         readonly used: number,
     ) {
@@ -76,6 +81,10 @@ export interface AiCreditStatus {
     /** Null when the allowance is too small for a burst window to be meaningful. */
     burstLimit: number | null
     usedThisBurst: number
+    /** Model spend this window, micro-dollars, failed and stopped calls included. */
+    spentThisPeriodMicros: number
+    /** The window's dollar backstop in micro-dollars, or null when there is nothing to set it from. */
+    spendCeilingMicros: number | null
     /** Whether ENFORCE_BILLING_GATES is on — the UI should not imply a hard limit when it is off. */
     enforced: boolean
 }
@@ -120,10 +129,11 @@ export async function aiCreditStatus(groupId: string): Promise<AiCreditStatus> {
     const sub = await getActiveSubscriptionForGroup(groupId)
     const allowance = await allowanceForGroup(groupId)
 
-    const [usedThisPeriod, usedThisBurst] = await Promise.all([
-        creditsUsedSince(groupId, creditPeriodStart(sub?.currentPeriodEnd ?? null)),
+    const [period, usedThisBurst] = await Promise.all([
+        usageSince(groupId, creditPeriodStart(sub?.currentPeriodEnd ?? null)),
         creditsUsedSince(groupId, new Date(Date.now() - BURST_WINDOW_MS)),
     ])
+    const usedThisPeriod = period.credits
 
     const burstLimit = allowance >= MIN_ALLOWANCE_FOR_BURST
         ? Math.ceil(allowance * BURST_PERCENT)
@@ -135,6 +145,8 @@ export async function aiCreditStatus(groupId: string): Promise<AiCreditStatus> {
         remaining: Math.max(0, allowance - usedThisPeriod),
         burstLimit,
         usedThisBurst,
+        spentThisPeriodMicros: period.costMicros,
+        spendCeilingMicros: spendCeilingMicros({ planName: sub?.plan ?? null, hasSubscription: !!sub, allowance }),
         enforced: enforceAiCreditCaps(),
     }
 }
@@ -146,32 +158,15 @@ export async function aiCreditStatus(groupId: string): Promise<AiCreditStatus> {
  * over budget, and the message should say so rather than telling them to upgrade.
  */
 export async function assertWithinAiCreditCap(params: {
-    groupId?: string | null
-    firmId?: string | null
+    groupId: string
     feature: AiFeature
 }): Promise<void> {
     if (!enforceAiCreditCaps()) return
-    // A free action cannot breach a credit limit, and a group already over its allowance keeps it.
-    // Its own route guards it instead (Your brief: once per person per day).
-    if (CREDIT_WEIGHTS[params.feature] === 0) return
+    const groupId = params.groupId
 
-    let groupId = params.groupId ?? null
-    if (!groupId && params.firmId) {
-        const firm = await prisma.firm.findUnique({
-            where: { id: params.firmId },
-            select: { groupId: true },
-        })
-        groupId = firm?.groupId ?? null
-    }
-    // No resolvable billing group means no entitlement to check against. Allowing the call matches
-    // how recordAiUsage handles the same case, and failing closed here would block AI on any data
-    // shape we have not anticipated.
-    if (!groupId) {
-        logger.warn(`AI credit cap not checked (${params.feature}): no billing group resolved`)
-        return
-    }
-
-    const cost = CREDIT_WEIGHTS[params.feature]
+    // The least a call can cost. What it does cost is known only once it ends (lib/ai/pricing.ts);
+    // a call that starts with credits left may take the window a few credits past its allowance.
+    const cost = 1
     const [status, sub] = await Promise.all([
         aiCreditStatus(groupId),
         getActiveSubscriptionForGroup(groupId),
@@ -187,6 +182,18 @@ export async function assertWithinAiCreditCap(params: {
     }
 
     const period = creditPeriod(sub?.currentPeriodEnd ?? null)
+
+    // The dollar backstop, before the allowance: it is the one limit credits can't see coming.
+    if (status.spendCeilingMicros !== null && status.spentThisPeriodMicros >= status.spendCeilingMicros) {
+        await noticeSpendCeiling({ groupId, spentMicros: status.spentThisPeriodMicros, ceilingMicros: status.spendCeilingMicros, periodEnd: period.end })
+        const refill = period.end.toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' })
+        throw new AiCreditLimitError(
+            `Brio is paused for this workspace until ${refill}: this month's AI use reached its limit. We've been told and will be in touch.`,
+            'spend',
+            status.spendCeilingMicros,
+            status.spentThisPeriodMicros,
+        )
+    }
 
     if (status.usedThisPeriod + cost > status.allowance) {
         // Say when they come back: running out pauses only the AI features, and the date is what

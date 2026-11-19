@@ -39,6 +39,8 @@ vi.mock('@/lib/prisma', () => ({
             }),
         },
         engagementDocument: { findMany: vi.fn(async () => [{ id: '11111111-1111-4111-8111-111111111111', docId: 'QSR-9' }]) },
+        // The billing group the gate charges the call to (lib/ai/guarded-client.ts).
+        firm: { findUnique: vi.fn(async () => ({ groupId: 'g1' })) },
     },
 }))
 vi.mock('@/lib/notification-prefs', () => ({
@@ -119,14 +121,18 @@ describe('/api/me/day-brief', () => {
         expect(create).not.toHaveBeenCalled()
     })
 
-    it('writes the first brief of the day, saves it for the day, and records a free dayBrief row', async () => {
+    it('writes the first brief of the day, saves it for the day, and records one charged dayBrief row', async () => {
         const { status, body } = await json(await GET(req()))
         expect(status).toBe(200)
         expect(body.brief).toMatchObject({ date: '2026-11-12', text: expect.stringContaining('QSR-9 · Market') })
         expect(body.brief).not.toHaveProperty('fingerprint')
         expect(create).toHaveBeenCalledTimes(1)
         expect(store.dayBrief).toMatchObject({ date: '2026-11-12', fingerprint: expect.any(String) })
-        expect(recordAiUsage).toHaveBeenCalledWith(expect.objectContaining({ feature: 'dayBrief', firmId: 'f1', userId: 'u1' }))
+        // No free calls: the day's first brief is metered like any other (lib/ai/metered-client.ts).
+        expect(recordAiUsage).toHaveBeenCalledTimes(1)
+        expect(recordAiUsage).toHaveBeenCalledWith(expect.objectContaining({
+            groupId: 'g1', feature: 'dayBrief', firmId: 'f1', userId: 'u1', inputTokens: 800, outputTokens: 120, status: 'ok',
+        }))
         // What the model was given: this person's item, by DOC-ID, as data.
         expect(create.mock.calls[0][0].messages[0].content).toContain('QSR-9 · "Market & Competitive Intelligence Report"')
     })
@@ -163,7 +169,7 @@ describe('/api/me/day-brief', () => {
         const { body } = await json(await POST(req()))
         expect(body.unchanged).toBeUndefined()
         expect(create).toHaveBeenCalledTimes(2)
-        // The morning brief is free; a rewrite is a choice, so it is its own, charged, feature.
+        // Both are charged; a rewrite is a choice, so it is its own feature, with its own daily limit.
         expect(personLimit).toHaveBeenLastCalledWith({ userId: 'u1', feature: 'dayBriefRewrite' })
         expect(recordAiUsage).toHaveBeenLastCalledWith(expect.objectContaining({ feature: 'dayBriefRewrite', userId: 'u1' }))
     })
@@ -176,10 +182,10 @@ describe('/api/me/day-brief', () => {
         expect(recordAiUsage).toHaveBeenLastCalledWith(expect.objectContaining({ feature: 'dayBriefRewrite', firmId: 'f1' }))
     })
 
-    it('Rewrite with no brief today yet writes the day\'s first, free', async () => {
+    it('Rewrite with no brief today yet writes the day\'s first, as dayBrief rather than a rewrite', async () => {
         const { body } = await json(await POST(req()))
         expect(body.brief).toMatchObject({ date: '2026-11-12' })
-        expect(recordAiUsage).toHaveBeenLastCalledWith(expect.objectContaining({ feature: 'dayBrief' }))
+        expect(recordAiUsage).toHaveBeenLastCalledWith(expect.objectContaining({ groupId: 'g1', feature: 'dayBrief' }))
     })
 
     it('Rewrite over the day\'s limit answers 429 in the limit\'s words, and keeps today\'s brief', async () => {
@@ -217,6 +223,9 @@ describe('/api/me/day-brief', () => {
         expect(status).toBe(500)
         expect(body.error).toBe("Brio couldn't write your brief. Try again.")
         expect(store.dayBrief).toBeNull()
+        // The tokens were spent: metered all the same, as refused.
+        expect(recordAiUsage).toHaveBeenCalledTimes(1)
+        expect(recordAiUsage).toHaveBeenCalledWith(expect.objectContaining({ groupId: 'g1', feature: 'dayBrief', status: 'refused' }))
     })
 
     it('a provider error reads as Brio\'s failure words, never its own text', async () => {

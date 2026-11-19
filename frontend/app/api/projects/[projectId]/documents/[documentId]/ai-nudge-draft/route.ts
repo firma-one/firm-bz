@@ -12,6 +12,7 @@ import { NUDGE_SYSTEM_PROMPT, buildNudgePrompt, nudgeGreeting } from '@/lib/ai/n
 import { resolveDisplayName } from '@/lib/auth/display-name'
 import { formatDisplayName } from '@/lib/comments/mentions'
 import { vaultForEngagement } from '@/lib/ai/known-entities'
+import { AI_MAX_TOKENS } from '@/lib/ai/features'
 
 /**
  * POST /api/projects/[projectId]/documents/[documentId]/ai-nudge-draft  { recipientUserId }
@@ -81,7 +82,6 @@ export async function POST(
 
         return await streamDraft({
             client,
-            scope,
             system: NUDGE_SYSTEM_PROMPT,
             user: buildNudgePrompt({
                 recipientFirstName: firstName,
@@ -94,7 +94,7 @@ export async function POST(
                 today: now,
             }),
             effort: AI_EFFORT.draft,
-            maxTokens: 2000,
+            maxTokens: AI_MAX_TOKENS.nudgeDraft,
             failure: BRIO_DRAFT_FAILED,
             label: 'nudge-draft',
             prefix: displayName ? nudgeGreeting(displayName) : undefined,

@@ -220,7 +220,7 @@ export const PRICING_COMPARISON: PricingComparisonCategory[] = [
             {
                 feature: "Credits included",
                 featureIcon: 'ai',
-                tooltip: "One credit is one AI action: an engagement summary, a firm brief, a person's morning brief on Home or a rewrite of it, a chat answer, a drafted status update, reply or nudge, or a daily RAID check (Risks, Actions, Issues and Decisions) of new messages. A memo is read once, when it's added, for two credits: one for the meeting's minutes and one for its RAID suggestions. Nothing is free, and nothing costs part of a credit. Every plan includes every Brio feature; the allowance is what differs. Credits reset each billing period and do not roll over.",
+                tooltip: "Credits follow the work: a quick answer, like a chat reply, a summary, a brief or a drafted update, reply or nudge, takes one, and a long read, like a call memo's minutes and RAID (Risks, Actions, Issues and Decisions) suggestions, takes a few. Every call counts, including one that's stopped or doesn't finish. Every plan includes every Brio feature; the allowance is what differs. Credits reset each billing period and do not roll over.",
                 values: {
                     Sandbox: "25 / month",
                     Standard: "500 / month",

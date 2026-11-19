@@ -217,13 +217,15 @@ describe('a draft in the box', () => {
         await act(async () => { stream.push({ type: 'meta' }); stream.push({ type: 'delta', text: 'Thanks, Dana. ' }) })
         await settle()
         expect(box().value).toBe('Thanks, Dana. ')
-        expect(screen.getByRole('button', { name: /Stop/ })).toBeTruthy()
+        // No Stop (2026-11-19): Rewrite waits until the draft is written.
+        expect(screen.queryByRole('button', { name: /Stop/ })).toBeNull()
+        expect((screen.getByRole('button', { name: 'Rewrite' }) as HTMLButtonElement).disabled).toBe(true)
 
         fireEvent.change(box(), { target: { value: 'Thanks, Dana. Mine now.' } })
         await act(async () => { stream.push({ type: 'delta', text: 'More from Brio.' }) })
         await settle()
         expect(box().value).toBe('Thanks, Dana. Mine now.')
-        expect(screen.queryByRole('button', { name: /Stop/ })).toBeNull()
+        expect((screen.getByRole('button', { name: 'Rewrite' }) as HTMLButtonElement).disabled).toBe(false)
     })
 
     it('says why when Brio couldn’t write one, and sends nothing', async () => {

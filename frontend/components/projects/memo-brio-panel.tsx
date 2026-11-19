@@ -395,7 +395,7 @@ export interface MemoBrioPanelProps {
     actionError: string | null
     /** Its notes changed since Brio read them. */
     changedSinceRead: boolean
-    /** Read the memo with Brio: its minutes and RAID suggestions, 2 credits. */
+    /** Read the memo with Brio: its minutes and RAID suggestions. */
     onRead: () => void
     /** Accepts one suggestion with what the person changed. Throws an error carrying the words to show. */
     onAccept: (item: MemoRaidSuggestion, changes: MemoSuggestionChanges) => Promise<void>
@@ -421,7 +421,7 @@ export interface MemoBrioPanelProps {
  */
 export const MEMO_COLUMN_HEAD = '@[1040px]:h-[53px]'
 
-export const MEMO_READ_TIP = 'Read this memo with Brio · 2 credits · minutes and RAID'
+export const MEMO_READ_TIP = 'Read this memo with Brio · minutes and RAID'
 
 export function MemoBrioPanel({
     memo,
@@ -505,7 +505,7 @@ export function MemoBrioPanel({
     )
 
     const sparkle = (
-        <Hint label={<span className="flex flex-col gap-0.5"><span>Read this memo with <Brio /></span><span className="opacity-70">2 credits · minutes and RAID</span></span>}>
+        <Hint label={<span className="flex flex-col gap-0.5"><span>Read this memo with <Brio /></span><span className="opacity-70">Minutes and RAID</span></span>}>
             <button
                 type="button"
                 onClick={() => { if (!reading) onRead() }}
@@ -588,7 +588,7 @@ export function MemoBrioPanel({
                             <p className="px-5 py-6 text-small text-fg-muted">
                                 {readOnly
                                     ? <><Brio /> didn&apos;t write minutes for this memo.</>
-                                    : <><Brio /> hasn&apos;t written minutes for this memo yet. The sparkle reads it: 2 credits.</>}
+                                    : <><Brio /> hasn&apos;t written minutes for this memo yet. The sparkle reads it.</>}
                             </p>
                         )}
                     </div>

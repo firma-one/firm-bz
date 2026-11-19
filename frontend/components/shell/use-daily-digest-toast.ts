@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { checkDailyReminderDigest } from "@/lib/actions/user-reminders"
 import { useToast } from "@/components/ui/toast"
 
@@ -11,6 +12,7 @@ import { useToast } from "@/components/ui/toast"
  */
 export function useDailyDigestToast() {
     const { addToast } = useToast()
+    const router = useRouter()
     useEffect(() => {
         let cancelled = false
         void checkDailyReminderDigest()
@@ -19,7 +21,10 @@ export function useDailyDigestToast() {
                 addToast({
                     type: r.overdue > 0 ? "warning" : "info",
                     title: r.count === 1 ? "1 reminder needs you today" : `${r.count} reminders need you today`,
-                    message: r.overdue > 0 ? `${r.overdue} overdue. Open your Inbox to review them.` : "Open your Inbox to review them.",
+                    message: r.overdue > 0 ? `${r.overdue} overdue.` : "They're waiting in your Inbox.",
+                    // The way there, rather than words pointing at the sidebar (Deepak, 2026-11-19).
+                    action: { label: "Open Inbox", onClick: () => router.push("/d/u/inbox") },
+                    duration: 10_000,
                 })
             })
             .catch(() => {})

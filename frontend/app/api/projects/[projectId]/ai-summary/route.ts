@@ -6,14 +6,16 @@ import { resolveProjectContext } from '@/lib/resolve-project-context'
 import { canManageProject } from '@/lib/permission-helpers'
 import { logger } from '@/lib/logger'
 import { isAiConfigured, AI_EFFORT, AI_MODEL } from '@/lib/ai/client'
-import { getGuardedAnthropic, meterAiCall, aiFailureResponse } from '@/lib/ai/guarded-client'
-import { BRIO_SUMMARY_FAILED } from '@/lib/ai/brio-failure'
+import { getGuardedAnthropic, aiFailureResponse } from '@/lib/ai/guarded-client'
+import { BRIO_SUMMARY_FAILED, brioWritingFailure } from '@/lib/ai/brio-failure'
+import { afterResponse } from '@/lib/server/after-response'
 import { computeEngagementInsights } from '@/lib/insights/engagement-insights'
 import { buildEngagementContext } from '@/lib/ai/engagement-chat'
 import {
-    SUMMARY_MAX_TOKENS, SUMMARY_SYSTEM_PROMPT, fingerprintInsights, readInsightsSummary,
+    SUMMARY_SYSTEM_PROMPT, fingerprintInsights, readInsightsSummary,
 } from '@/lib/ai/engagement-summary'
 import { vaultForEngagement } from '@/lib/ai/known-entities'
+import { AI_MAX_TOKENS } from '@/lib/ai/features'
 
 /**
  * POST /api/projects/[projectId]/ai-summary
@@ -85,7 +87,7 @@ export async function POST(
 
         const modelStream = await client.messages.create({
             model: AI_MODEL,
-            max_tokens: SUMMARY_MAX_TOKENS,
+            max_tokens: AI_MAX_TOKENS.summary,
             output_config: { effort: AI_EFFORT.summary },
             system: SUMMARY_SYSTEM_PROMPT,
             messages: [{
@@ -106,93 +108,85 @@ export async function POST(
         })
 
         const generatedAt = new Date().toISOString()
-        // Set when the client stops reading (Stop, or it left the page): the model is stopped too,
-        // and nothing is metered or saved.
-        let cancelled = false
+        // Set when the reader goes (the pane closed, the page left). The model is NOT stopped: its tokens
+        // are paid for either way, so the draft is finished and saved for when they come back
+        // (2026-11-19). The function is kept alive until then (`afterResponse`).
+        let readerGone = false
 
         const body = new ReadableStream<Uint8Array>({
-            async start(controller) {
-                let full = ''
-                try {
-                    controller.enqueue(line({ type: 'meta', generatedAt }))
-
-                    // Streaming reports tokens across two events: input with message_start,
-                    // output with message_delta at the end.
-                    let inputTokens = 0
-                    let outputTokens = 0
+            start(controller) {
+                const send = (o: unknown) => {
+                    if (readerGone) return
+                    try { controller.enqueue(line(o)) } catch { readerGone = true }
+                }
+                const work = (async () => {
+                    let full = ''
                     let stopReason: string | null = null
-                    for await (const event of modelStream) {
-                        if (event.type === 'message_start') {
-                            inputTokens = event.message.usage?.input_tokens ?? 0
-                        } else if (event.type === 'message_delta') {
-                            outputTokens = event.usage?.output_tokens ?? 0
-                            stopReason = event.delta?.stop_reason ?? stopReason
-                        } else if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-                            full += event.delta.text
-                            controller.enqueue(line({ type: 'delta', text: event.delta.text }))
+                    try {
+                        send({ type: 'meta', generatedAt })
+                        for await (const event of modelStream) {
+                            if (event.type === 'message_delta') {
+                                stopReason = event.delta?.stop_reason ?? stopReason
+                            } else if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+                                full += event.delta.text
+                                send({ type: 'delta', text: event.delta.text })
+                            }
                         }
-                    }
 
-                    if (cancelled) return
-                    const content = full.trim()
-                    // A declined or cut-off summary is not saved as a draft: a Lead could approve
-                    // half a summary without noticing its last sections are missing.
-                    if (!content || stopReason === 'refusal' || stopReason === 'max_tokens') {
-                        controller.enqueue(line({ type: 'error', message: BRIO_SUMMARY_FAILED }))
-                        return
-                    }
+                        const content = full.trim()
+                        // A declined or cut-off summary is not saved as a draft: a Lead could approve
+                        // half a summary without noticing its last sections are missing. The call is
+                        // metered all the same, by the client (lib/ai/metered-client.ts).
+                        if (!content || stopReason === 'refusal' || stopReason === 'max_tokens') {
+                            logger.warn('AI summary not saved', 'AiSummary', { projectId, stopReason, textChars: content.length })
+                            send({ type: 'error', message: brioWritingFailure({ stopReason, empty: !content }, 'the summary', BRIO_SUMMARY_FAILED) })
+                            return
+                        }
 
-                    // Metered only on a complete stream, matching persistence: an aborted
-                    // generation produces no draft and no charge.
-                    await meterAiCall(scope, { inputTokens, outputTokens })
-
-                    // Persist only after a complete stream, so an aborted generation leaves no
-                    // half-written draft behind.
-                    //
-                    // Settings are read again here, not reused from before the stream: generation
-                    // can take two minutes, and writing the old copy back would revert anything saved
-                    // meanwhile, an internal memo or an approval of the previous draft.
-                    const fresh = await prisma.engagement.findUnique({
-                        where: { id: projectId },
-                        select: { settings: true },
-                    })
-                    const latest = (fresh?.settings as Record<string, unknown> | null) ?? {}
-                    await prisma.engagement.update({
-                        where: { id: projectId },
-                        data: {
-                            settings: {
-                                ...latest,
-                                insightsSummary: {
-                                    ...readInsightsSummary(latest),
-                                    draft: {
-                                        text: content,
-                                        generatedAt,
-                                        status: 'pending_review',
-                                        fingerprint,
-                                        reviewedAt: null,
-                                        reviewedByUserId: null,
+                        // Persist only after a complete stream, so a broken generation leaves no
+                        // half-written draft behind.
+                        //
+                        // Settings are read again here, not reused from before the stream: generation
+                        // can take two minutes, and writing the old copy back would revert anything saved
+                        // meanwhile, an internal memo or an approval of the previous draft.
+                        const fresh = await prisma.engagement.findUnique({
+                            where: { id: projectId },
+                            select: { settings: true },
+                        })
+                        const latest = (fresh?.settings as Record<string, unknown> | null) ?? {}
+                        await prisma.engagement.update({
+                            where: { id: projectId },
+                            data: {
+                                settings: {
+                                    ...latest,
+                                    insightsSummary: {
+                                        ...readInsightsSummary(latest),
+                                        draft: {
+                                            text: content,
+                                            generatedAt,
+                                            status: 'pending_review',
+                                            fingerprint,
+                                            reviewedAt: null,
+                                            reviewedByUserId: null,
+                                        },
                                     },
                                 },
                             },
-                        },
-                    })
+                        })
 
-                    controller.enqueue(line({ type: 'done', content, generatedAt }))
-                } catch (error) {
-                    // Stopped on purpose: the abort surfaces here as an error, but it is not one.
-                    if (cancelled) return
-                    // The credit gate runs before the stream (getGuardedAnthropic above), so a
-                    // limit never lands here; the outer catch answers it. This is the model or the
-                    // save failing part-way, and nothing was saved.
-                    logger.error('AI summary stream error:', error as Error)
-                    controller.enqueue(line({ type: 'error', message: BRIO_SUMMARY_FAILED }))
-                } finally {
-                    try { controller.close() } catch { /* already closed by the client leaving */ }
-                }
+                        send({ type: 'done', content, generatedAt })
+                    } catch (error) {
+                        // The model or the save failing part-way; nothing was saved.
+                        logger.error('AI summary stream error:', error as Error)
+                        send({ type: 'error', message: BRIO_SUMMARY_FAILED })
+                    } finally {
+                        if (!readerGone) try { controller.close() } catch { /* already closed */ }
+                    }
+                })()
+                afterResponse(() => work)
             },
             cancel() {
-                cancelled = true
-                modelStream.controller.abort()
+                readerGone = true
             },
         })
 

@@ -1,8 +1,6 @@
 import 'server-only'
 import Anthropic from '@anthropic-ai/sdk'
 import { logger } from '@/lib/logger'
-import { maskingClient } from './masked-client'
-import type { Vault } from './pseudonymize'
 
 // Haiku is the default for every call in this codebase so far: the work is short-form
 // summarization and grounded Q&A over a pre-computed payload, not deep reasoning.
@@ -62,30 +60,21 @@ export function extractText(message: Anthropic.Message): string {
 /**
  * Every AI feature here is an enhancement over a page that already works, so an API failure
  * must never surface as a broken page — callers render without the AI section instead.
+ *
+ * `client` is the gated, metered, masked one from `getGuardedAnthropic` (lib/ai/guarded-client.ts):
+ * the call is charged however it ends, a refusal and an error included (no free calls, 2026-11-19).
  */
 export async function completeText(params: {
+    client: Anthropic
     system: string
     userMessage: string
     /** Room for the thinking as well as the answer: thinking counts toward it. */
     maxTokens: number
     effort: 'low' | 'medium' | 'high'
     label: string
-    /**
-     * Called with the token counts when the call succeeds, so the caller can meter it.
-     *
-     * A hook rather than a changed return type: every existing caller wants the text and nothing
-     * else, and metering must never be able to fail the completion — hence the catch below.
-     */
-    onUsage?: (usage: { inputTokens: number; outputTokens: number }) => void | Promise<void>
-    /** What the model may read, as for getGuardedAnthropic (§14 item 5): required, null only when the firm turned it off. */
-    vault: Vault | null
 }): Promise<string | null> {
-    const raw = getAnthropic()
-    if (!raw) return null
-    const client = params.vault ? maskingClient(raw, params.vault) : raw
-
     try {
-        const message = await client.messages.create({
+        const message = await params.client.messages.create({
             model: AI_MODEL,
             max_tokens: params.maxTokens,
             output_config: { effort: params.effort },
@@ -98,16 +87,10 @@ export async function completeText(params: {
             logger.warn(`AI completion declined (${params.label})`)
             return null
         }
-        if (params.onUsage) {
-            try {
-                await params.onUsage({
-                    inputTokens: message.usage.input_tokens,
-                    outputTokens: message.usage.output_tokens,
-                })
-            } catch (error) {
-                // Metering is bookkeeping; losing a row must not cost the user their result.
-                logger.error(`AI usage hook failed (${params.label}):`, error as Error)
-            }
+        if (message.stop_reason === 'max_tokens') {
+            // Cut off: half an answer is not an answer. Logged, so a cap too small for the work shows.
+            logger.warn(`AI completion cut off at its cap (${params.label}, ${params.maxTokens} tokens)`)
+            return null
         }
         return extractText(message) || null
     } catch (error) {

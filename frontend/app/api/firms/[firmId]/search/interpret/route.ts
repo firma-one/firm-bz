@@ -7,7 +7,6 @@ import { isAiConfigured } from '@/lib/ai/client'
 import { aiLimitResponse } from '@/lib/ai/guarded-client'
 import { buildInterpretCacheKey, getCachedInterpretation, setCachedInterpretation } from '@/lib/ai/interpret-cache'
 import { interpretSearchQuery, type InterpretCandidates } from '@/lib/ai/search-interpreter'
-import { recordAiUsage } from '@/lib/ai/usage'
 import { vaultForFirms } from '@/lib/ai/known-entities'
 
 // Local, not exported: Next.js only permits route handlers and its own config keys to be
@@ -94,7 +93,7 @@ export async function POST(
         const cacheKey = buildInterpretCacheKey(firmId, user.id, text, candidates)
         const cached = getCachedInterpretation(cacheKey)
         if (cached) {
-            // No recordAiUsage: no model call was made, so no credits are consumed.
+            // No usage row: no model call was made, so no credits are consumed.
             return NextResponse.json({ chips: cached.chips, residualText: cached.residualText, ambiguity: cached.ambiguity, cached: true })
         }
 
@@ -106,14 +105,7 @@ export async function POST(
         // Interpretation is an enhancement: on failure the caller searches the raw text instead.
         if (!result) return NextResponse.json({ chips: [], residualText: text, degraded: true })
 
-        await recordAiUsage({
-            firmId,
-            userId: user.id,
-            feature: 'searchInterpret',
-            inputTokens: result.usage.inputTokens,
-            outputTokens: result.usage.outputTokens,
-        })
-
+        // Metered by the client (lib/ai/metered-client.ts), the failed interpretations above included.
         setCachedInterpretation(cacheKey, { chips: result.chips, residualText: result.residualText, ambiguity: result.ambiguity })
         return NextResponse.json({ chips: result.chips, residualText: result.residualText, ambiguity: result.ambiguity })
     } catch (error) {

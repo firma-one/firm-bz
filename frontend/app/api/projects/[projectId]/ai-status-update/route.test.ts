@@ -32,6 +32,8 @@ vi.mock('@/lib/ai/client', () => ({
 vi.mock('@/lib/ai/credit-cap', () => ({ assertWithinAiCreditCap: creditCap, AiCreditLimitError: LimitError }))
 vi.mock('@/lib/ai/usage', () => ({ recordAiUsage: vi.fn() }))
 vi.mock('@/lib/ai/stream-draft', () => ({ streamDraft }))
+// The billing group the gate charges the call to (lib/ai/guarded-client.ts).
+vi.mock('@/lib/prisma', () => ({ prisma: { firm: { findUnique: async () => ({ groupId: 'g1' }) } } }))
 vi.mock('@/lib/ai/status-update', () => ({
     STATUS_UPDATE_SYSTEM_PROMPT: 'system',
     buildStatusUpdatePrompt: () => 'facts',
@@ -57,8 +59,10 @@ beforeEach(() => {
 describe('POST /api/projects/[projectId]/ai-status-update', () => {
     it('streams a draft for a Lead, as feature statusUpdate', async () => {
         expect(await (await post()).text()).toBe('stream')
+        // Gated, and so metered, as statusUpdate on the firm's group (lib/ai/guarded-client.ts).
+        expect(creditCap).toHaveBeenCalledWith({ groupId: 'g1', feature: 'statusUpdate' })
         expect(streamDraft).toHaveBeenCalledWith(expect.objectContaining({
-            scope: expect.objectContaining({ feature: 'statusUpdate' }),
+            client: expect.objectContaining({ messages: expect.anything() }),
             user: 'facts',
         }))
     })

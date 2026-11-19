@@ -398,7 +398,7 @@ export function AddMemoSheet({
                                         <li className="py-2">
                                             <label className="flex cursor-pointer items-start gap-2.5 text-small text-fg">
                                                 <Checkbox className="mt-0.5" checked={identify} onCheckedChange={(v) => setIdentify(v === true)} disabled={saving} />
-                                                <span>Summarize the new notes and suggest RAID items <span className="text-fg-muted">· 2 credits</span></span>
+                                                <span>Summarize the new notes and suggest RAID items</span>
                                             </label>
                                         </li>
                                     )}

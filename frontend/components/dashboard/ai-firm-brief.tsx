@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { AlertCircle, Check, Clock, Copy, Sparkles, Square } from 'lucide-react'
+import { AlertCircle, Check, Clock, Copy, Sparkles } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
 import { formatRelativeTime } from '@/lib/utils'
 import { ASSISTANT, ASSISTANT_POLICY, BRIO_GREEN } from '@/lib/ai/assistant'
@@ -25,7 +25,9 @@ export interface FirmBrief {
  * `available` is false when the model isn't configured, or there is no brief to show.
  *
  * The rewrite streams (`streamText` grows as Brio writes) and the brief on screen is replaced only
- * when it completes; `stop` ends it early and keeps the old one.
+ * when it completes. There is no Stop (2026-11-19): a rewrite takes seconds, its tokens are paid for
+ * either way, and the server finishes and saves it even if the reader leaves, so the next visit
+ * shows the new brief (.claude/plans/ai-metering-by-tokens.md, Cancellation).
  *
  * A failed load is `loadError`, with the reason, so the card says it couldn't load rather than
  * vanishing as though the firm had no brief; a failed rewrite is `refreshError`, with the route's
@@ -143,9 +145,9 @@ export function useFirmBrief(firmId: string) {
             }
             if (!finished) throw new Error(BRIO_BRIEF_FAILED)
         } catch (e) {
-            // Stopped on purpose: the old brief simply stays. Anything else, say why — the user
-            // pressed a button, and silence reads as "nothing happened".
-            if (!(ctrl.signal.aborted && ctrl.signal.reason === 'stopped')) {
+            // The page was left: nothing to say, and the server saves the brief anyway. Anything
+            // else, say why: the user pressed a button, and silence reads as "nothing happened".
+            if (!(ctrl.signal.aborted && ctrl.signal.reason === 'left')) {
                 const reason = ctrl.signal.reason === 'timeout'
                     ? `${ASSISTANT.name} took too long.`
                     : !answered && e instanceof TypeError
@@ -163,19 +165,17 @@ export function useFirmBrief(firmId: string) {
         }
     }, [firmId, accessToken, refreshing])
 
-    /** Ends the rewrite now; the brief on screen stays as it was. */
-    const stop = useCallback(() => abortRef.current?.abort('stopped'), [])
-    // Leaving the page stops it, rather than writing into a card no one sees.
-    useEffect(() => () => abortRef.current?.abort('stopped'), [])
+    // Leaving the page stops reading, rather than writing into a card no one sees. The server
+    // carries on and saves the new brief for the next visit.
+    useEffect(() => () => abortRef.current?.abort('left'), [])
 
     return {
-        brief, loading, refreshing, streamText, refreshError, loadError, refresh, stop, reload,
+        brief, loading, refreshing, streamText, refreshError, loadError, refresh, reload,
         // A failed load keeps the card, saying so, rather than leaving the Overview without it.
         available: configured && (loading || !!brief || !!loadError),
     }
 }
 
-const CONTROL = 'inline-flex h-7 items-center gap-1.5 rounded-control border border-line bg-surface px-2 text-small transition-colors hover:border-line-strong hover:bg-surface-hover disabled:cursor-default disabled:opacity-50'
 /** The header's actions: 28px icon buttons, as on the engagement summary. */
 const ICON_BUTTON = 'inline-flex h-7 w-7 items-center justify-center rounded-control text-fg-muted transition-colors duration-ui-fast hover:bg-surface-hover hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action/30 disabled:cursor-default disabled:opacity-50'
 
@@ -184,7 +184,7 @@ const ICON_BUTTON = 'inline-flex h-7 w-7 items-center justify-center rounded-con
  * "Rewrite with Brio". Presentational: the Overview feeds it from useFirmBrief, the tour from its
  * sample data.
  */
-export function FirmBriefCard({ brief, loading = false, refreshing = false, streamText = '', refreshError = null, loadError = null, onReload, onRewrite, onStop, source = 'your current data', reading = 'your firm’s data' }: {
+export function FirmBriefCard({ brief, loading = false, refreshing = false, streamText = '', refreshError = null, loadError = null, onReload, onRewrite, source = 'your current data', reading = 'your firm’s data' }: {
     brief: FirmBrief | null
     loading?: boolean
     /** Why there is no brief to show, when loading it failed. Shown in its place, quietly. */
@@ -198,8 +198,6 @@ export function FirmBriefCard({ brief, loading = false, refreshing = false, stre
     refreshError?: string | null
     /** Omitted where a rewrite isn't possible. */
     onRewrite?: () => void
-    /** Ends the rewrite and keeps the brief as it was. */
-    onStop?: () => void
     /** What it was written from, for the line under it. */
     source?: string
     /** What Brio reads before writing ("your firm's data"). */
@@ -243,18 +241,14 @@ export function FirmBriefCard({ brief, loading = false, refreshing = false, stre
                     )}
                 </div>
                 <div className="flex shrink-0 items-center gap-0.5 print:hidden">
-                    {/* As on the engagement summary: icon actions named by a Hint and an aria-label;
-                        Stop stays a labeled button while Brio writes. */}
+                    {/* As on the engagement summary: icon actions named by a Hint and an aria-label.
+                        While Brio writes, the header says so and there is nothing to press (no Stop). */}
                     <Hint label={copied ? 'Copied' : 'Copy as Markdown'}>
                         <button type="button" onClick={copy} disabled={busy} aria-label="Copy the brief as Markdown" className={ICON_BUTTON}>
                             {copied ? <Check className="h-4 w-4 text-status-done-icon" /> : <Copy className="h-4 w-4" />}
                         </button>
                     </Hint>
-                    {refreshing && onStop ? (
-                        <button type="button" onClick={onStop} className={`${CONTROL} text-fg-muted hover:text-fg`}>
-                            <Square className="h-3 w-3 fill-current" /> Stop
-                        </button>
-                    ) : onRewrite && (
+                    {onRewrite && !refreshing && (
                         <Hint label={<>Rewrite with <Brio /></>}>
                             <button type="button" onClick={onRewrite} disabled={busy} aria-label={`Rewrite with ${ASSISTANT.name}`} className={ICON_BUTTON}>
                                 <Sparkles className="h-4 w-4" style={{ color: BRIO_GREEN }} />

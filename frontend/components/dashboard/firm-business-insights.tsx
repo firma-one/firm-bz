@@ -132,7 +132,6 @@ export function FirmBusinessInsights({ firmId, firmSlug, groupSlug }: FirmBusine
             loadError={brief.loadError}
             onReload={brief.reload}
             onRewrite={brief.refresh}
-            onStop={brief.stop}
         />
     ) : null
 

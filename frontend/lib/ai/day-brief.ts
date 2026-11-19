@@ -12,7 +12,8 @@ import { getUserNotificationPrefs } from '@/lib/notification-prefs'
 import { statusOf } from '@/lib/ui/status'
 import { ASSISTANT } from './assistant'
 import { AI_EFFORT, AI_MODEL, extractText } from './client'
-import { getGuardedAnthropic, meterAiCall, usageOf, type AiScope } from './guarded-client'
+import { getGuardedAnthropic, type AiScope } from './guarded-client'
+import { AI_MAX_TOKENS } from './features'
 import { vaultForFirms } from '@/lib/ai/known-entities'
 
 /*
@@ -24,17 +25,17 @@ import { vaultForFirms } from '@/lib/ai/known-entities'
  * anything Home would not show them. Per person, so reminders are fine here; the firm brief, cached
  * firm-wide, must leave them out.
  *
- * Cached on UserPersonalization.dayBrief, once per local day. Free (CREDIT_WEIGHTS.dayBrief = 0),
- * so the credit cap never stops it: one generation per person per day, plus Rewrite only when what
- * a person changed has changed (fingerprintDayBrief), is its guard.
+ * Cached on UserPersonalization.dayBrief, once per local day. Charged like any call and gated like
+ * any call: one generation per person per day, plus Rewrite only when what a person changed has
+ * changed (fingerprintDayBrief), keeps it to a handful.
  *
  * Server-only, not 'use server': every helper here takes a userId, and as server actions any
  * signed-in user could read another person's day. The route (app/api/me/day-brief) takes the user
  * from the session.
  */
 
-/** Room for the thinking as well as the answer: thinking counts toward it on Haiku 5.5. */
-export const DAY_BRIEF_MAX_TOKENS = 2000
+/** Room for the thinking as well as the answer: thinking counts toward it on Haiku 5.5 (lib/ai/features.ts). */
+export const DAY_BRIEF_MAX_TOKENS = AI_MAX_TOKENS.dayBrief
 
 /** The agenda's week: today and the next six days, as Home's Agenda draws it. */
 const WEEK_DAYS = 7
@@ -517,9 +518,9 @@ export type DayBriefResult =
     | { ok: false; reason: 'unconfigured' | 'failed' }
 
 /**
- * Writes the brief. Through getGuardedAnthropic (the one gate, with the person's own limits) and
- * meterAiCall (the ledger), on the group of the firm the brief draws most from. The day's first brief
- * is free (`dayBrief`); a Rewrite that replaces it costs a credit (`dayBriefRewrite`). A refusal, an
+ * Writes the brief. Through getGuardedAnthropic (the one gate, with the person's own limits, metering
+ * every call), on the group of the firm the brief draws most from (or the person's first firm). Both
+ * the day's first brief (`dayBrief`) and a Rewrite (`dayBriefRewrite`) are charged. A refusal, an
  * answer cut off at the token cap, or an empty answer is a failure, never a brief. Provider errors and
  * limits throw, for the route's catch.
  */
@@ -543,15 +544,12 @@ export async function generateDayBrief(
         system: DAY_BRIEF_SYSTEM_PROMPT,
         messages: [{ role: 'user', content: renderDayBriefRequest(input) }],
     })
-    // A declined brief is a failure, never a brief, and not metered (as completeText).
-    if (message.stop_reason === 'refusal') return { ok: false, reason: 'failed' }
-    try {
-        await meterAiCall(scope, usageOf(message))
-    } catch (error) {
-        // Metering is bookkeeping; losing a row must not cost the person their brief.
-        logger.error('AI usage metering failed (day-brief):', error as Error)
+    // Declined or cut off: a failure, never a brief. Metered all the same, by the client
+    // (lib/ai/metered-client.ts): the tokens were spent.
+    if (message.stop_reason === 'refusal' || message.stop_reason === 'max_tokens') {
+        logger.warn(`Your brief not written (${feature}): ${message.stop_reason}`)
+        return { ok: false, reason: 'failed' }
     }
-    if (message.stop_reason === 'max_tokens') return { ok: false, reason: 'failed' }
 
     const text = cleanDayBrief(extractText(message))
     return text ? { ok: true, text } : { ok: false, reason: 'failed' }

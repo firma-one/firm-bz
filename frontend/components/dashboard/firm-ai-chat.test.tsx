@@ -44,7 +44,7 @@ describe('FirmAiChat', () => {
     it('carries the mock’s caption', () => {
         renderPanel()
         expect(screen.getByText(FIRM_CHAT_CAPTION)).toBeTruthy()
-        expect(FIRM_CHAT_CAPTION).toBe('Firm admins only. Brio reports what the data shows. Decisions stay with you. 1 credit per answer.')
+        expect(FIRM_CHAT_CAPTION).toBe('Firm admins only. Brio reports what the data shows. Decisions stay with you.')
     })
 
     it('links the engagements the server resolved, opens them in place, and offers the follow-ups', async () => {

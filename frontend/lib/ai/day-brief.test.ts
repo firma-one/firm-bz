@@ -3,7 +3,7 @@ import type { ReminderWithContext } from '@/lib/reminders/reminder-types'
 import type { MyWork } from '@/lib/home/my-work'
 import type { CalendarEvent } from '@/lib/calendar/calendar-data'
 
-const { prisma, loaders, create, meter, guard } = vi.hoisted(() => ({
+const { prisma, loaders, create, record, guard } = vi.hoisted(() => ({
     prisma: {
         userPersonalization: { findUnique: vi.fn(), upsert: vi.fn(async () => ({})), updateMany: vi.fn(async () => ({ count: 1 })) },
         engagementDocument: { findMany: vi.fn(async () => [] as { id: string; docId: string | null }[]) },
@@ -15,7 +15,7 @@ const { prisma, loaders, create, meter, guard } = vi.hoisted(() => ({
         computeDueReminders: vi.fn(),
     },
     create: vi.fn(),
-    meter: vi.fn(async () => {}),
+    record: vi.fn(async () => ({ credits: 1, costMicros: 1000 })),
     guard: vi.fn(),
 }))
 
@@ -28,11 +28,12 @@ vi.mock('@/lib/home/my-work', () => ({ getMyWork: loaders.getMyWork }))
 vi.mock('@/lib/calendar/calendar-data', () => ({ loadCalendarData: loaders.loadCalendarData }))
 vi.mock('@/lib/reminders/reminder-service', () => ({ computeDueReminders: loaders.computeDueReminders }))
 vi.mock('@/lib/notification-prefs', () => ({ getUserNotificationPrefs: async () => ({ timezone: 'Europe/London', remindersDigest: { lastNotifiedDate: null } }) }))
-vi.mock('@/lib/ai/guarded-client', () => ({
-    getGuardedAnthropic: guard,
-    meterAiCall: meter,
-    usageOf: (m: { usage: { input_tokens: number; output_tokens: number } }) => ({ inputTokens: m.usage.input_tokens, outputTokens: m.usage.output_tokens }),
-}))
+vi.mock('@/lib/ai/guarded-client', () => ({ getGuardedAnthropic: guard }))
+// The ledger write, under the real metering client the gate hands out (lib/ai/metered-client.ts).
+vi.mock('@/lib/ai/usage', () => ({ recordAiUsage: record }))
+
+import type Anthropic from '@anthropic-ai/sdk'
+import { meteredClient } from './metered-client'
 
 import {
     buildDayBriefInput,
@@ -119,7 +120,9 @@ const build = (s: DayBriefSources = sources(), now = NOW) => buildDayBriefInput(
 
 beforeEach(() => {
     vi.clearAllMocks()
-    guard.mockResolvedValue({ messages: { create } })
+    // As the gate does: the SDK client, metered for the scope it was asked for, on group g1.
+    guard.mockImplementation(async (scope: { firmId?: string | null; userId?: string | null; feature: 'dayBrief' }) =>
+        meteredClient({ messages: { create } } as unknown as Anthropic, { groupId: 'g1', ...scope }))
 })
 
 describe('buildDayBriefInput', () => {
@@ -255,12 +258,15 @@ describe('generateDayBrief', () => {
         ...over,
     })
 
-    it('writes through the guarded client, records a free dayBrief row on the top firm, and sends no sampling settings', async () => {
+    it('writes through the guarded client, records one charged dayBrief row on the top firm, and sends no sampling settings', async () => {
         create.mockResolvedValue(reply())
         const result = await generateDayBrief(build(), { userId: 'u1' })
         expect(result).toEqual({ ok: true, text: '**Two threads wait**: QSR-9.\n\nQSR-12 is due tomorrow.' })
         expect(guard).toHaveBeenCalledWith({ firmId: 'f1', userId: 'u1', feature: 'dayBrief' }, { vault: null })
-        expect(meter).toHaveBeenCalledWith({ firmId: 'f1', userId: 'u1', feature: 'dayBrief' }, { inputTokens: 900, outputTokens: 300 })
+        expect(record).toHaveBeenCalledTimes(1)
+        expect(record).toHaveBeenCalledWith(expect.objectContaining({
+            groupId: 'g1', firmId: 'f1', userId: 'u1', feature: 'dayBrief', inputTokens: 900, outputTokens: 300, status: 'ok', estimated: false,
+        }))
         const params = create.mock.calls[0][0]
         expect(params).toMatchObject({ max_tokens: DAY_BRIEF_MAX_TOKENS, output_config: { effort: 'low' }, system: DAY_BRIEF_SYSTEM_PROMPT })
         expect(params).not.toHaveProperty('temperature')
@@ -268,15 +274,18 @@ describe('generateDayBrief', () => {
         expect(params).not.toHaveProperty('top_k')
     })
 
-    it('a refusal is a failure, never a brief, and is not metered', async () => {
+    it('a refusal is a failure, never a brief, and is still metered: the tokens were spent', async () => {
         create.mockResolvedValue(reply({ stop_reason: 'refusal' }))
         expect(await generateDayBrief(build(), { userId: 'u1' })).toEqual({ ok: false, reason: 'failed' })
-        expect(meter).not.toHaveBeenCalled()
+        expect(record).toHaveBeenCalledTimes(1)
+        expect(record).toHaveBeenCalledWith(expect.objectContaining({ groupId: 'g1', feature: 'dayBrief', status: 'refused', stopReason: 'refusal' }))
     })
 
-    it('an answer cut off at the token cap is a failure', async () => {
+    it('an answer cut off at the token cap is a failure, and is still metered', async () => {
         create.mockResolvedValue(reply({ stop_reason: 'max_tokens' }))
         expect(await generateDayBrief(build(), { userId: 'u1' })).toEqual({ ok: false, reason: 'failed' })
+        expect(record).toHaveBeenCalledTimes(1)
+        expect(record).toHaveBeenCalledWith(expect.objectContaining({ groupId: 'g1', feature: 'dayBrief', status: 'cut_off', stopReason: 'max_tokens' }))
     })
 
     it('says so when no model is configured', async () => {

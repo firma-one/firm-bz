@@ -11,7 +11,8 @@ import type { DemoFirm } from '@/lib/demo/static-demo-data'
  * since it reads "today" and the server's day may not be the visitor's.
  *
  * "Rewrite with Brio" is simulated, as on the tour's Engagement Summary: a moment "reading", then
- * the brief typed out a couple of words at a time, with Stop.
+ * the brief typed out a couple of words at a time, with nothing to press while it writes (no Stop,
+ * as in the app).
  */
 export function DemoFirmBrief({ firm }: { firm: DemoFirm }) {
     const [brief, setBrief] = useState<FirmBrief | null>(null)
@@ -51,12 +52,6 @@ export function DemoFirmBrief({ firm }: { firm: DemoFirm }) {
         }, 900)
     }
 
-    const stop = () => {
-        stopTyping()
-        setRefreshing(false)
-        setStreamText('')
-    }
-
     return (
         <div data-demo-tour="firm-brief" className="flex min-w-0 flex-1 flex-col [&>*]:flex-1">
             <FirmBriefCard
@@ -65,7 +60,6 @@ export function DemoFirmBrief({ firm }: { firm: DemoFirm }) {
                 refreshing={refreshing}
                 streamText={streamText}
                 onRewrite={rewrite}
-                onStop={stop}
                 source="the demo firm’s sample data"
                 reading="the demo firm’s data"
             />

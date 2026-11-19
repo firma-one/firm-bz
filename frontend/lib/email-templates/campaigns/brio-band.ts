@@ -118,6 +118,6 @@ export function meetBrioBand(ctx: CampaignContext, imageFolder: string): string 
       ${checkLine('Your clients get answers only from what they can already see, never your internal notes.')}
       ${checkLine('Leaves Mitigation and Next Steps to the engagement lead, by design.')}
     `)}
-    ${para('25 Brio credits a month on the free plan, 500 on Standard. One credit is one answer, summary, draft or morning brief, and reading a call memo for its minutes and RAID is two. Your clients can ask Brio only once you turn that on.', { color: '#B5C9C1', size: 13, margin: '18px 0 0' })}
+    ${para('25 Brio credits a month on the free plan, 500 on Standard. Credits follow the work: a quick answer takes one, a long read takes a few. Your clients can ask Brio only once you turn that on.', { color: '#B5C9C1', size: 13, margin: '18px 0 0' })}
   `)
 }
