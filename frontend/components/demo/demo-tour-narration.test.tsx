@@ -114,6 +114,23 @@ describe('a tour card read aloud', () => {
         expect(h.setNarration).not.toHaveBeenCalled()
     })
 
+    it('waits for the tap with its clock at the start, instead of running on silently', async () => {
+        vi.useFakeTimers()
+        try {
+            const props = cardProps()
+            render(<TourTooltip {...props} />)
+            await act(async () => {})
+            expect(screen.getByRole('button', { name: 'Tap to hear' })).toBeTruthy()
+            await act(async () => {
+                vi.advanceTimersByTime(60_000)
+            })
+            expect(screen.getByRole('progressbar', { name: 'Time on this step' }).getAttribute('aria-valuenow')).toBe('0')
+            expect(props.controls.next).not.toHaveBeenCalled()
+        } finally {
+            vi.useRealTimers()
+        }
+    })
+
     it('plays the tour on again when Tap to hear is pressed while it is paused', async () => {
         const card = renderCard()
         await act(async () => {})

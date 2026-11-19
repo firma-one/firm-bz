@@ -248,12 +248,15 @@ export function TourTooltip({ backProps, closeProps, primaryProps, skipProps, st
         heard: () => (voice.status === 'ended' ? Infinity : (voice.position() ?? 0) / 1000),
         restartKey: index,
     })
-    const held = paused || (hovered && !reading)
+    // Refused by the browser, the card waits for "Tap to hear" rather than running on silently: its
+    // clock stays at the start, so the voice, the words and the bar all begin together on the tap.
+    const refused = voice.status === 'refused'
+    const held = paused || refused || (hovered && !reading)
     const progress = useAutoplay({
         index,
         on: autoplay,
         held,
-        waiting: voice.status === 'loading',
+        waiting: voice.status === 'loading' || refused,
         duration: reading && clip ? clip.seconds * 1000 + NARRATION_BEAT_MS : card.duration,
         follow: voice.position,
         read: () => cardRef.current?.innerText ?? '',
@@ -287,7 +290,7 @@ export function TourTooltip({ backProps, closeProps, primaryProps, skipProps, st
                     )}
                     <h3 data-tour-spoken className="text-ui font-semibold text-fg">{step.title as React.ReactNode}</h3>
                 </div>
-                {clip && voice.status === 'refused' && (
+                {clip && refused && (
                     // Narration is on but the browser held the voice until a click on this page: one click starts it.
                     <Hint label="Your browser waits for a click before Brio can speak" side="bottom">
                         <button
@@ -304,7 +307,7 @@ export function TourTooltip({ backProps, closeProps, primaryProps, skipProps, st
                         </button>
                     </Hint>
                 )}
-                {clip && voice.status !== 'refused' && (
+                {clip && !refused && (
                     <Hint label={narration ? 'Stop reading aloud' : 'Read aloud'} side="bottom">
                         <button
                             type="button"
