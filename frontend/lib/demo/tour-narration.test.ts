@@ -73,7 +73,7 @@ describe('tour narration', () => {
         const [askBrio] = tourSteps('brio')
         const text = narrationEntries().find((entry) => entry.key === 'brio-1')?.text
         // Brio's "AI" subscript is hidden from screen readers, so the narrator says "Brio".
-        expect(text).toMatch(/^Ask Brio\. Ask Brio about this engagement/)
+        expect(text).toMatch(/^Ask Brio\. Get answers instead of digging\. Ask Brio what/)
         expect(text).not.toContain('AI')
         expect(narrationClip(askBrio)).toEqual({
             src: '/tour/narration/brio-1.m4a',
@@ -84,22 +84,23 @@ describe('tour narration', () => {
 
     it('says a title once when the copy opens with it', () => {
         const text = (key: string) => narrationEntries().find((entry) => entry.key === key)?.text
-        // "Home", then "Home picks up where you left off": not "Home. Home picks up…".
-        expect(text('home-1')).toMatch(/^Home picks up where you left off/)
-        expect(text('firm-overview-1')).toMatch(/^Overview shows business insights/)
+        // "Minutes", then "Minutes ready to send…": not "Minutes. Minutes ready to send…".
+        expect(text('memos-3')).toMatch(/^Minutes ready to send/)
+        expect(text('billing-1')).toMatch(/^Billing is in the profile menu/)
         // A card whose copy opens otherwise still says its title first.
-        expect(text('inbox-1')).toMatch(/^Inbox\. Reminders/)
+        expect(text('inbox-1')).toMatch(/^Inbox\. The follow-ups/)
+        expect(text('home-1')).toMatch(/^Home\. Start every day/)
         // The title still comes up on the card as Brio starts.
-        const [overview] = tourSteps('firm-overview')
-        const times = revealTimes(shownWords(overview), spokenWords('firm-overview-1'))
-        const first = spokenWords('firm-overview-1')[0][1]
-        expect(cardWords(overview).title.map((_, i) => times[i] <= first)).toEqual([true, true])
+        const minutes = tourSteps('memos')[2]
+        const times = revealTimes(shownWords(minutes), spokenWords('memos-3'))
+        const first = spokenWords('memos-3')[0][1]
+        expect(cardWords(minutes).title.map((_, i) => times[i] <= first)).toEqual([true])
     })
 
     it('says a pinned word in the sense the copy means', () => {
-        // "Every client workspace for your firm lives here": the verb, not the plural of "life".
-        const text = narrationEntries().find((entry) => entry.key === 'all-clients-1')?.text
-        expect(text).toContain('your firm [lives](/lˈɪvz/) here')
+        // "Everything for this engagement lives here": the verb, not the plural of "life".
+        const text = narrationEntries().find((entry) => entry.key === 'engagement-overview-1')?.text
+        expect(text).toContain('engagement [lives](/lˈɪvz/) here')
     })
 
     it('pauses at punctuation, longest between sentences, without slowing the words', () => {
@@ -113,13 +114,13 @@ describe('tour narration', () => {
         const { sentence = 0, clause = 0, comma = 0 } = NARRATION_PAUSES
         expect(sentence).toBeGreaterThan(clause)
         expect(clause).toBeGreaterThan(comma)
-        // "Inbox. Reminders from due dates, …" and "Home picks up where you left off: recent pages, this week's agenda, …"
+        // "Inbox. The follow-ups …" and "Home picks up where you left off: recent pages, this week's agenda, …"
         expect(gapAfter('inbox-1', 'Inbox')).toBeGreaterThanOrEqual(sentence)
         expect(gapAfter('home-1', 'off')).toBeGreaterThanOrEqual(clause)
         expect(gapAfter('home-1', 'pages')).toBeGreaterThanOrEqual(comma)
-        // "Overview shows business insights: revenue pipeline, …" and "The engagement in one row: its health score, the time left, …"
-        expect(gapAfter('firm-overview-1', 'insights')).toBeGreaterThanOrEqual(clause)
-        expect(gapAfter('engagement-overview-2', 'row')).toBeGreaterThanOrEqual(clause)
+        // "…without building a report: revenue pipeline, …" and "…in one glance: its health score, the time left, …"
+        expect(gapAfter('firm-overview-1', 'report')).toBeGreaterThanOrEqual(clause)
+        expect(gapAfter('engagement-overview-2', 'glance')).toBeGreaterThanOrEqual(clause)
         expect(gapAfter('engagement-overview-2', 'score')).toBeGreaterThanOrEqual(comma)
         // Between words with no mark, no pause.
         expect(gapAfter('home-1', 'picks')).toBeLessThan(0.05)
