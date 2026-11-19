@@ -3,6 +3,13 @@ import { act, render, screen, within, fireEvent, cleanup, renderHook, waitFor } 
 import { StrictMode } from 'react'
 import { RaidTab, RaidTabView, checkStatusTip, useRaidCounts, type RaidHandlers } from './raid-tab'
 import { demoRaidLog } from '@/components/demo/demo-raid'
+
+/** Picks a type in the Add pane's dropdown. */
+async function pickType(name: string) {
+    Element.prototype.scrollIntoView ??= () => {}
+    await act(async () => { fireEvent.keyDown(screen.getByRole('combobox', { name: 'Type' }), { key: 'Enter' }) })
+    await act(async () => { fireEvent.keyDown(screen.getByRole('option', { name: new RegExp(`^${name}`) }), { key: 'Enter' }) })
+}
 import { RAID_CHANGED_EVENT, dueDay, nextWeekStart, type RaidItemView, type RaidLogPayload } from '@/lib/raid/raid-shared'
 
 /**
@@ -295,14 +302,25 @@ describe('RaidTabView', { timeout: 20_000 }, () => {
         expect(within(screen.getByTestId('raid-suggestion-raid-suggest-pricing')).queryByRole('combobox')).toBeNull()
     })
 
-    it('adds in a side pane titled for its type, asking a priority only for a Risk or an Issue', () => {
-        render(<RaidTabView log={demoRaidLog(NOW)} engagementBase="" readOnly={false} now={NOW} {...handlers()} />)
+    it('adds in a side pane with no type chosen, titled for the type once picked, asking a priority only for a Risk or an Issue', async () => {
+        const h = handlers()
+        render(<RaidTabView log={demoRaidLog(NOW)} engagementBase="" readOnly={false} now={NOW} {...h} />)
         fireEvent.click(screen.getByRole('button', { name: 'Add' }))
         const pane = screen.getByRole('dialog')
+        expect(within(pane).getByRole('heading', { name: 'New entry' })).toBeTruthy()
+        expect(within(pane).getByRole('combobox', { name: 'Type' }).textContent).toBe('Choose a type')
+        expect(within(pane).queryByRole('radiogroup', { name: 'Priority' })).toBeNull()
+        // Nothing goes in until a type is picked.
+        fireEvent.change(within(pane).getByLabelText('Title'), { target: { value: 'Brand guidelines missing' } })
+        await act(async () => { fireEvent.click(within(pane).getByRole('button', { name: 'Add to the log' })) })
+        expect(within(pane).getByRole('alert').textContent).toBe('Choose a type.')
+        expect(h.onAdd).not.toHaveBeenCalled()
+
+        await pickType('Risk')
         expect(within(pane).getByRole('heading', { name: 'New Risk' })).toBeTruthy()
         const priority = within(pane).getByRole('radiogroup', { name: 'Priority' })
         expect(within(priority).getByRole('radio', { name: 'Medium' }).getAttribute('aria-checked')).toBe('true')
-        fireEvent.click(within(pane).getByRole('radio', { name: 'Decision' }))
+        await pickType('Decision')
         expect(within(pane).getByRole('heading', { name: 'New Decision' })).toBeTruthy()
         expect(within(pane).queryByRole('radiogroup', { name: 'Priority' })).toBeNull()
         expect(within(pane).queryByLabelText(/^Mitigation/)).toBeNull()
@@ -319,7 +337,7 @@ describe('RaidTabView', { timeout: 20_000 }, () => {
         const h = handlers()
         render(<RaidTabView log={demoRaidLog(NOW)} engagementBase="" readOnly={false} now={NOW} {...h} />)
         fireEvent.click(screen.getByRole('button', { name: 'Add' }))
-        fireEvent.click(screen.getByRole('radio', { name: 'Action' }))
+        await pickType('Action')
         expect(screen.queryByRole('radiogroup', { name: 'Priority' })).toBeNull()
         expect(screen.getByRole('combobox', { name: 'Owner' }).textContent).toBe('You')
         const due = screen.getByLabelText('Due') as HTMLInputElement
@@ -338,7 +356,7 @@ describe('RaidTabView', { timeout: 20_000 }, () => {
         const h = handlers()
         render(<RaidTabView log={demoRaidLog(NOW)} engagementBase="" readOnly={false} now={NOW} {...h} />)
         fireEvent.click(screen.getByRole('button', { name: 'Add' }))
-        fireEvent.click(screen.getByRole('radio', { name: 'Issue' }))
+        await pickType('Issue')
         fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Brand guidelines missing' } })
         await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Add to the log' })) })
         // A Risk or an Issue a person adds starts at Medium.
@@ -357,6 +375,7 @@ describe('RaidTabView', { timeout: 20_000 }, () => {
             return null
         })
         fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+        await pickType('Issue')
         fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Brand guidelines missing' } })
         await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Add to the log' })) })
         expect(screen.getByTestId('raid-row-raid-new').getAttribute('data-flash')).toBe('true')

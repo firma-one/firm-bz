@@ -361,7 +361,7 @@ const TYPE_HINT: Record<RaidType, string> = {
 /** Low to High, as a person reads a scale; the picker in the table lists High first. */
 const PRIORITY_SCALE: readonly RaidPriority[] = ['LOW', 'MEDIUM', 'HIGH']
 
-/** A row of choices, one pressed, in the pane: the type and a Risk's or an Issue's priority. */
+/** A row of choices, one pressed, in the pane: a Risk's or an Issue's priority. */
 function Segmented<T extends string>({ label, value, options, onChange }: {
     label: string
     value: T
@@ -397,14 +397,14 @@ function Segmented<T extends string>({ label, value, options, onChange }: {
  */
 function AddItemSheet({ open, initialType, members, onAdd, onOpenChange }: {
     open: boolean
-    /** The type filter's, when one is on. */
-    initialType: RaidType
+    /** The type filter's, when one is on; otherwise none, so the person picks it on purpose. */
+    initialType: RaidType | null
     members: RaidMember[]
     onAdd: (input: RaidNewItem) => Promise<string | null>
     onOpenChange: (open: boolean) => void
 }) {
     const titleId = useId()
-    const [type, setType] = useState<RaidType>(initialType)
+    const [type, setType] = useState<RaidType | null>(initialType)
     const [priority, setPriority] = useState<RaidPriority>('MEDIUM')
     const [title, setTitle] = useState('')
     const [notes, setNotes] = useState('')
@@ -416,6 +416,7 @@ function AddItemSheet({ open, initialType, members, onAdd, onOpenChange }: {
 
     const submit = async (e: React.FormEvent) => {
         e.preventDefault()
+        if (!type) { setError('Choose a type.'); return }
         if (!title.trim()) { setError('Give the entry a title.'); return }
         if (isAction && !dueDate) { setError('Choose a due date.'); return }
         setBusy(true)
@@ -437,26 +438,39 @@ function AddItemSheet({ open, initialType, members, onAdd, onOpenChange }: {
                 <form onSubmit={(e) => void submit(e)} className="flex min-h-0 flex-1 flex-col" aria-label="Add a RAID entry">
                     <div className="flex flex-col gap-1 border-b border-line px-5 pb-3.5 pt-4">
                         <div className="flex items-center gap-2 pr-8">
-                            <RaidTypeBadge type={type} decorative />
-                            <SheetTitle className="text-h3 text-fg">New {RAID_TYPE_LABEL[type]}</SheetTitle>
+                            {type && <RaidTypeBadge type={type} decorative />}
+                            <SheetTitle className="text-h3 text-fg">{type ? `New ${RAID_TYPE_LABEL[type]}` : 'New entry'}</SheetTitle>
                         </div>
-                        <SheetDescription className="text-small text-fg-muted">{TYPE_HINT[type]} Internal only.</SheetDescription>
+                        <SheetDescription className="text-small text-fg-muted">{type ? TYPE_HINT[type] : 'Choose its type first.'} Internal only.</SheetDescription>
                     </div>
                     <div className="flex min-h-0 flex-1 flex-col gap-[18px] overflow-y-auto px-5 py-[18px]">
                         <div className="flex flex-col gap-1.5">
-                            <span className="text-caption text-fg-muted">Type</span>
-                            <Segmented
-                                label="Type"
-                                value={type}
-                                onChange={setType}
-                                options={RAID_TYPES.map((t) => ({ value: t, label: RAID_TYPE_LABEL[t], badge: t }))}
-                            />
+                            <span id={`${titleId}-type`} className="text-caption text-fg-muted">Type</span>
+                            <Select value={type ?? undefined} onValueChange={(v) => { setType(v as RaidType); setError(null) }}>
+                                <SelectTrigger aria-labelledby={`${titleId}-type`} className="h-9 text-small" autoFocus={!type}>
+                                    <SelectValue placeholder="Choose a type">
+                                        {/* The pick alone: its hint is already under the pane's title. */}
+                                        {type && <span className="inline-flex items-center gap-2"><RaidTypeBadge type={type} decorative small />{RAID_TYPE_LABEL[type]}</span>}
+                                    </SelectValue>
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {RAID_TYPES.map((t) => (
+                                        <SelectItem key={t} value={t}>
+                                            <span className="inline-flex items-center gap-2">
+                                                <RaidTypeBadge type={t} decorative small />
+                                                {RAID_TYPE_LABEL[t]}
+                                                <span className="text-fg-subtle">{TYPE_HINT[t]}</span>
+                                            </span>
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
                         </div>
                         <div className="flex flex-col gap-1.5">
                             <label htmlFor={titleId} className="text-caption text-fg-muted">Title</label>
-                            <Input id={titleId} value={title} maxLength={RAID_TITLE_MAX} onChange={(e) => setTitle(e.target.value)} placeholder="Short, in your words" autoFocus />
+                            <Input id={titleId} value={title} maxLength={RAID_TITLE_MAX} onChange={(e) => setTitle(e.target.value)} placeholder="Short, in your words" autoFocus={!!type} />
                         </div>
-                        {hasPriority(type) && (
+                        {type && hasPriority(type) && (
                             <div className="flex flex-col gap-1.5">
                                 <span className="text-caption text-fg-muted">Priority</span>
                                 <Segmented
@@ -488,7 +502,7 @@ function AddItemSheet({ open, initialType, members, onAdd, onOpenChange }: {
                                 </div>
                             </div>
                         )}
-                        {type !== 'DECISION' && (
+                        {type && type !== 'DECISION' && (
                             <div className="flex flex-col gap-1.5">
                                 <label htmlFor={`${titleId}-notes`} className="text-caption text-fg-muted">
                                     {isAction ? 'Next step' : 'Mitigation · next step'} <span className="text-fg-subtle">(optional)</span>
@@ -981,10 +995,10 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
 
             {!readOnly && (
                 <AddItemSheet
-                    // A fresh pane for each opening: empty, on the type the log is filtered to.
+                    // A fresh pane for each opening: empty, on the type the log is filtered to, else on none.
                     key={addKey}
                     open={adding}
-                    initialType={typeFilter === 'ALL' ? 'RISK' : typeFilter}
+                    initialType={typeFilter === 'ALL' ? null : typeFilter}
                     members={log.members}
                     onOpenChange={setAdding}
                     onAdd={async (input) => {
