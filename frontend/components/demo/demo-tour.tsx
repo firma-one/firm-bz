@@ -87,13 +87,15 @@ function useAutoplay({ index, on, held, waiting = false, duration, follow, read,
     return progress
 }
 
-type VoiceStatus = 'off' | 'loading' | 'playing' | 'ended' | 'blocked'
+type VoiceStatus = 'off' | 'loading' | 'playing' | 'ended' | 'refused' | 'failed'
 
 /**
  * A step card read aloud: plays the step's clip when the card opens, holds it while the tour is
- * paused or the page is hidden, and stops it when the card goes. `blocked` when the browser won't
- * play it (no click on the page yet, say) or the clip won't load (a dropped connection): the card
- * then runs as if narration were off. `position`
+ * paused or the page is hidden, and stops it when the card goes. `refused` when the browser won't
+ * play it before the visitor has clicked on the page (a "How this works" link opens the tour in a
+ * new tab, so its first card has had no click): the card runs as if narration were off and offers
+ * "Tap to hear", whose click (`listen`) is the gesture the browser waits for. `failed` when the clip
+ * won't load (a dropped connection): the card runs as if narration were off. `position`
  * is how far the clip has played (ms) while it's playing, for Autoplay's clock to follow; `words`,
  * when each word in the clip is spoken, for the card to reveal its words as they're read.
  */
@@ -120,8 +122,17 @@ function useNarration({ index, src, timings, paused }: { index: number; src: str
     // short by a pause (the card moving on mid-start) rejects too, and isn't a refusal.
     const play = (audio: HTMLAudioElement) =>
         audio.play().catch((error: DOMException) => {
-            if (error.name === 'NotAllowedError' && audioRef.current === audio) setStatus('blocked')
+            if (error.name === 'NotAllowedError' && audioRef.current === audio) setStatus('refused')
         })
+
+    // Called from the visitor's click, so the browser lets the clip play: a refused card is read from the start.
+    const listen = () => {
+        const audio = audioRef.current
+        if (!audio) return
+        audio.currentTime = 0
+        setStatus('loading')
+        void play(audio)
+    }
 
     useEffect(() => {
         if (!src) {
@@ -135,7 +146,7 @@ function useNarration({ index, src, timings, paused }: { index: number; src: str
         const onEnded = () => setStatus('ended')
         // A clip that won't load, or breaks off partway, isn't coming: the card goes on without it,
         // rather than waiting faint for a voice.
-        const onError = () => setStatus('blocked')
+        const onError = () => setStatus('failed')
         audio.addEventListener('playing', onPlaying)
         audio.addEventListener('ended', onEnded)
         audio.addEventListener('error', onError)
@@ -175,7 +186,7 @@ function useNarration({ index, src, timings, paused }: { index: number; src: str
         return audio && status === 'playing' && !audio.ended ? audio.currentTime * 1000 : null
     }, [status])
 
-    return { status, position, words }
+    return { status, position, words, listen }
 }
 
 /** The highlight that keeps a card's words faint (still legible) until they're spoken. */
@@ -201,7 +212,7 @@ const UNSPOKEN_COLOR = 'color-mix(in srgb, var(--ui-fg-subtle) 45%, transparent)
  * Joyride's button props carry a `title`, which would show the browser's native tooltip; it is
  * dropped in favor of the visible labels.
  */
-function TourTooltip({ backProps, closeProps, primaryProps, skipProps, step, index, isLastStep, tooltipProps, controls }: TooltipRenderProps) {
+export function TourTooltip({ backProps, closeProps, primaryProps, skipProps, step, index, isLastStep, tooltipProps, controls }: TooltipRenderProps) {
     const { mode, paused, setPaused, narration, setNarration } = useDemoTour()
     const { title: _back, ...back } = backProps
     const { title: _close, ...close } = closeProps
@@ -276,7 +287,24 @@ function TourTooltip({ backProps, closeProps, primaryProps, skipProps, step, ind
                     )}
                     <h3 data-tour-spoken className="text-ui font-semibold text-fg">{step.title as React.ReactNode}</h3>
                 </div>
-                {clip && (
+                {clip && voice.status === 'refused' && (
+                    // Narration is on but the browser held the voice until a click on this page: one click starts it.
+                    <Hint label="Your browser waits for a click before Brio can speak" side="bottom">
+                        <button
+                            type="button"
+                            onClick={() => {
+                                // Asking to hear Brio is asking the tour to go on: a paused Autoplay plays again.
+                                if (autoplay && paused) setPaused(false)
+                                voice.listen()
+                            }}
+                            className="-mt-1 flex h-6 shrink-0 items-center gap-1 rounded-control px-1.5 text-caption font-medium text-action transition-colors hover:bg-surface-hover"
+                        >
+                            <Volume2 className="h-3.5 w-3.5" aria-hidden />
+                            Tap to hear
+                        </button>
+                    </Hint>
+                )}
+                {clip && voice.status !== 'refused' && (
                     <Hint label={narration ? 'Stop reading aloud' : 'Read aloud'} side="bottom">
                         <button
                             type="button"
