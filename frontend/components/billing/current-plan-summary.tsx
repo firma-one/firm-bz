@@ -134,36 +134,27 @@ export function AiCreditsRow({ usage }: { usage: BillingPlanUsage | null | undef
     const ai = usage?.aiCredits ?? null
     if (!ai) return null
 
-    // Ordered firm-scoped first, then engagement-scoped, so the two halves of the product read
-    // as groups rather than an arbitrary list. Labels name the surface the credit was spent on.
+    // Where the credits went, by what a person did, so every Brio feature is named by the row it sits
+    // in (Deepak, 2026-11-19: the old rows hid memo reads and the RAID check under "summaries and
+    // drafts"). Every credit-spending feature is in exactly one row, so the rows add up to the total.
+    // Since 2026-11-19 a call takes what its tokens cost (lib/ai/pricing.ts), so a row's number is
+    // credits, not calls, and every call counts, failed and stopped ones included (named under the
+    // legend).
     //
-    // One categorical color per feature (the chart palette in ui-tokens.css), like a context-usage
-    // breakdown: the question this answers is "which feature spent the credits", so each one needs
-    // its own hue — muted, and never a status hue. Firm features are the cool pair (slate, teal),
-    // engagement features the warm three. What's left of the allowance is the gray track, listed
-    // last as "Remaining".
+    // One categorical color per row (the five-color chart palette in ui-tokens.css), muted and never a
+    // status hue. What's left of the allowance is the gray track, listed last as "Remaining".
     const chart = (c: string) => `var(--ui-chart-${c})`
-    //
-    // Doc Search's Ask Brio mode is hidden (2026-10-15), so it no longer spends credits and its row
-    // is left out — unless this period already has credits from it, which stay listed so the rows
-    // still add up to the total. It drops off by itself when the period rolls over.
-    // A row may total several features. The features added 2026-11-12 join the row they belong
-    // with rather than taking new hues (the palette above has no more to spare): the firm assistant
-    // and Your brief's rewrites with firm briefs, drafts, notes and the RAID check with the
-    // engagement's other writing, Reviewers' questions with the engagement chat. Every
-    // credit-spending feature is in a row, so the rows still add up to the total. Since 2026-11-19 a
-    // call takes what its tokens cost (lib/ai/pricing.ts), so a row's number is credits, not calls:
-    // most calls take 1, a long memo read a few.
-    // Every call counts, failed and stopped ones included; those are named under the legend.
     const sumOf = (keys: readonly (keyof typeof ai.byFeature)[]) => keys.reduce((n, k) => n + (ai.byFeature[k] ?? 0), 0)
-    const featureRows: Array<{ key: string; keys: readonly (keyof typeof ai.byFeature)[]; label: string; fill: string }> = [
-        { key: 'brief', keys: ['brief', 'firmChat', 'dayBrief', 'dayBriefRewrite'], label: 'Briefs and assistant', fill: chart('slate') },
-        { key: 'searchInterpret', keys: ['searchInterpret'], label: 'Firm Doc Search', fill: chart('teal') },
-        { key: 'summary', keys: ['summary', 'statusUpdate', 'replyDraft', 'nudgeDraft', 'notesProposals', 'raidCheck', 'memoRaid', 'memoMinutes'], label: 'Engagement summaries and drafts', fill: chart('purple') },
-        { key: 'chat', keys: ['chat', 'reviewerChat'], label: 'Engagement assistant chat', fill: chart('pink') },
-        { key: 'filesAgent', keys: ['filesAgent'], label: 'Files agent', fill: chart('brown') },
+    const featureRows: Array<{ key: string; keys: readonly (keyof typeof ai.byFeature)[]; label: string; fill: string; onlyWhenUsed?: boolean }> = [
+        { key: 'briefs', keys: ['dayBrief', 'dayBriefRewrite', 'brief'], label: 'Your brief and Firm brief', fill: chart('slate') },
+        // Doc Search's Ask mode asks Brio a question too (hidden since 2026-10-15, so usually nothing).
+        { key: 'questions', keys: ['chat', 'firmChat', 'reviewerChat', 'searchInterpret'], label: 'Questions to Brio', fill: chart('pink') },
+        { key: 'writing', keys: ['summary', 'statusUpdate', 'replyDraft', 'nudgeDraft'], label: 'Summaries, updates and drafts', fill: chart('purple') },
+        { key: 'memos', keys: ['memoMinutes', 'memoRaid', 'notesProposals', 'raidCheck'], label: 'Memos and RAID', fill: chart('teal') },
+        // Not released yet: listed only once it has spent credits, so the rows still add up.
+        { key: 'filesAgent', keys: ['filesAgent'], label: 'Files agent', fill: chart('brown'), onlyWhenUsed: true },
     ]
-    const AI_FEATURES = featureRows.filter((f) => f.key !== 'searchInterpret' || sumOf(f.keys) > 0)
+    const AI_FEATURES = featureRows.filter((f) => !f.onlyWhenUsed || sumOf(f.keys) > 0)
     const fmt = (n: number) => (n % 1 === 0 ? String(n) : n.toFixed(1))
     const since = new Date(ai.periodStartIso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
 

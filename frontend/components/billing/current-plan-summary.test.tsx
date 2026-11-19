@@ -23,23 +23,31 @@ function usage(byFeature: Partial<Record<AiFeature, number>>, unfinished = { cal
 }
 
 describe('AiCreditsRow', () => {
-    it('counts the newer features in the row they belong with, so the rows add up to the total', () => {
-        render(<AiCreditsRow usage={usage({ brief: 1, firmChat: 2, summary: 1, statusUpdate: 1, replyDraft: 1, chat: 1, reviewerChat: 3 })} />)
-        const bar = screen.getByLabelText(/Briefs and assistant: 3/)
-        expect(bar.getAttribute('aria-label')).toMatch(/Engagement summaries and drafts: 3/)
-        expect(bar.getAttribute('aria-label')).toMatch(/Engagement assistant chat: 4/)
+    it('puts every Brio feature in exactly one row, so the rows add up to the total', () => {
+        // One credit in each of the 16 features.
+        const all = { brief: 1, dayBrief: 1, dayBriefRewrite: 1, chat: 1, firmChat: 1, reviewerChat: 1, searchInterpret: 1,
+            summary: 1, statusUpdate: 1, replyDraft: 1, nudgeDraft: 1, memoMinutes: 1, memoRaid: 1, notesProposals: 1, raidCheck: 1, filesAgent: 1 }
+        render(<AiCreditsRow usage={usage(all)} />)
+        const label = screen.getByLabelText(/Your brief and Firm brief: 3/).getAttribute('aria-label')!
+        expect(label).toMatch(/Questions to Brio: 4/)
+        expect(label).toMatch(/Summaries, updates and drafts: 4/)
+        expect(label).toMatch(/Memos and RAID: 4/)
+        expect(label).toMatch(/Files agent: 1/)
+        const total = (label.match(/: \d+(?:\.\d+)?/g) ?? []).reduce((n, m) => n + Number(m.slice(2)), 0)
+        expect(total).toBe(16)
     })
 
-    it('leaves Doc Search out now that Ask Brio is hidden', () => {
-        render(<AiCreditsRow usage={usage({ brief: 1, chat: 2 })} />)
-        expect(screen.getByText('Briefs and assistant')).toBeTruthy()
-        expect(screen.getByText('Engagement assistant chat')).toBeTruthy()
-        expect(screen.queryByText('Firm Doc Search')).toBeNull()
+    it('names memo reads and the RAID check apart from summaries and drafts', () => {
+        render(<AiCreditsRow usage={usage({ memoMinutes: 2, memoRaid: 3, summary: 1 })} />)
+        const label = screen.getByLabelText(/Memos and RAID: 5/).getAttribute('aria-label')!
+        expect(label).toMatch(/Summaries, updates and drafts: 1/)
     })
 
-    it('still lists Doc Search when this period already spent credits on it, so the rows add up', () => {
-        render(<AiCreditsRow usage={usage({ brief: 1, searchInterpret: 0.5 })} />)
-        expect(screen.getByText('Firm Doc Search')).toBeTruthy()
+    it('leaves the Files agent out until it has spent credits (it is not released)', () => {
+        render(<AiCreditsRow usage={usage({ dayBrief: 1, chat: 2 })} />)
+        expect(screen.getByText('Your brief and Firm brief')).toBeTruthy()
+        expect(screen.getByText('Questions to Brio')).toBeTruthy()
+        expect(screen.queryByText('Files agent')).toBeNull()
     })
 
     it('names the unfinished calls and the credits they took, in one quiet line', () => {
@@ -67,7 +75,7 @@ describe('AiCreditsRow', () => {
 
     it('shows credits that are not whole calls as credits', () => {
         render(<AiCreditsRow usage={usage({ memoMinutes: 2.5 })} />)
-        expect(screen.getByLabelText(/Engagement summaries and drafts: 2\.5/)).toBeTruthy()
+        expect(screen.getByLabelText(/Memos and RAID: 2\.5/)).toBeTruthy()
         expect(screen.queryByText(/\bcalls?\b/)).toBeNull()
     })
 })
