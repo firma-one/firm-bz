@@ -31,7 +31,7 @@ import {
     checkRaidLogsDaily,
 } from "@/lib/inngest/functions";
 import { recheckCustomDomainsDaily } from "@/lib/inngest/custom-domain-functions";
-import { syncAiUsageToPolarCron, reconcileAiUsageWithPolarMonthly, checkAnthropicBillMonthly } from "@/lib/inngest/ai-usage-functions";
+import { syncAiUsageToPolarCron, reconcileAiUsageWithPolarMonthly } from "@/lib/inngest/ai-usage-functions";
 
 export const { GET, POST, PUT } = serve({
     client: inngest,
@@ -67,6 +67,5 @@ export const { GET, POST, PUT } = serve({
         recheckCustomDomainsDaily,
         syncAiUsageToPolarCron,
         reconcileAiUsageWithPolarMonthly,
-        checkAnthropicBillMonthly,
         ],
 });

@@ -157,4 +157,4 @@ Sources: polar.sh/docs/features/usage-based-billing/introduction, /credits, /bil
 5. Cancellation changes (summary first), mirrored on /tour.
 6. Dollar backstop and the admin notice.
 7. Billing page: credits by feature, failed calls shown; marketing copy updated ("one credit is one answer").
-8. Monthly check against Anthropic's Usage and Cost API.
+8. ~~Monthly check against Anthropic's Usage and Cost API.~~ Dropped (Deepak, 2026-11-19): a safety net he doesn't want; the gate's guard test and the self-metering client cover it.

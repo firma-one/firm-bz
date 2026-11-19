@@ -135,7 +135,6 @@ AnchorFirm (has subscription)
 - AI usage to Polar (`lib/billing/polar-ai-usage-sync.ts`, `.claude/plans/ai-metering-by-tokens.md` step 3):
   - `POLAR_AI_EVENTS=true` turns on the 10-minute sync of AI usage ledger rows to Polar as `ai_usage` events. Off by default; set it only once the meter exists in Polar. Needs the `events:write` token scope.
   - `POLAR_AI_CREDITS_METER_ID`: the Polar meter that sums `credits` over `ai_usage` events. The monthly reconciliation (the 2nd, 08:00 UTC) compares it with the ledger per group and skips when unset. Needs `meters:read`.
-- `ANTHROPIC_ADMIN_KEY`: an Anthropic Admin API key (sk-ant-admin...), read by the monthly check of the ledger against Anthropic's bill (`lib/ai/anthropic-cost-check.ts`, the 2nd, 08:30 UTC). Skipped when unset.
 
 ## Security
 
