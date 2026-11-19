@@ -6,8 +6,8 @@ import { narrationClip } from '@/lib/demo/tour-narration'
 /**
  * Narration when the browser refuses to play (Deepak, 2026-11-19): a "How this works" link opens the
  * tour in a new tab, where nothing has been clicked yet, so the first card's clip is refused
- * (NotAllowedError). The card must not claim to be reading aloud; it offers "Tap to hear", and that
- * one click starts the clip.
+ * (NotAllowedError). The card waits at the start and offers Play; that one click starts the clip,
+ * with narration left on (the speaker turns it off).
  */
 
 const h = vi.hoisted(() => ({ setNarration: vi.fn(), setPaused: vi.fn(), paused: false }))
@@ -86,19 +86,24 @@ describe('a tour card read aloud', () => {
         renderCard()
         await act(async () => {})
         expect(FakeAudio.instances[0].playCalls).toBeGreaterThan(0)
-        expect(screen.queryByRole('button', { name: 'Tap to hear' })).toBeNull()
+        expect(screen.queryByRole('button', { name: 'Play' })).toBeNull()
+        expect(screen.getByRole('button', { name: 'Pause' })).toBeTruthy()
         expect(screen.getByRole('button', { name: 'Stop reading aloud' }).getAttribute('aria-pressed')).toBe('true')
     })
 
-    it('offers Tap to hear, not an "on" speaker, when the browser refuses to play, and plays on that click', async () => {
+    it('offers Play, with narration left on, when the browser refuses to play, and plays on that click', async () => {
         renderCard()
         await act(async () => {})
         const audio = FakeAudio.instances[0]
         const refusedCalls = audio.playCalls
         expect(refusedCalls).toBeGreaterThan(0)
-        // The speaker no longer claims Brio is reading.
-        expect(screen.queryByRole('button', { name: 'Stop reading aloud' })).toBeNull()
-        const tap = screen.getByRole('button', { name: 'Tap to hear' })
+        // Narration stays on, and can still be turned off; Play replaces Pause and leads, ahead of Next.
+        expect(screen.getByRole('button', { name: 'Stop reading aloud' }).getAttribute('aria-pressed')).toBe('true')
+        expect(screen.queryByRole('button', { name: 'Pause' })).toBeNull()
+        expect(screen.queryByText('Tap to hear')).toBeNull()
+        // Play is the only way on: no Next or Back beside it.
+        expect(screen.queryByRole('button', { name: /^(Next|Finish|Back)$/ })).toBeNull()
+        const tap = screen.getByRole('button', { name: 'Play' })
 
         // The click is the gesture the browser waits for: the same clip plays, from the start.
         FakeAudio.refuse = false
@@ -109,18 +114,42 @@ describe('a tour card read aloud', () => {
         expect(audio.playCalls).toBe(refusedCalls + 1)
         expect(audio.currentTime).toBe(0)
         expect(FakeAudio.instances).toHaveLength(1)
-        expect(screen.queryByRole('button', { name: 'Tap to hear' })).toBeNull()
+        // Playing: the card is back to its usual controls.
+        expect(screen.queryByRole('button', { name: 'Play' })).toBeNull()
+        expect(screen.getByRole('button', { name: 'Pause' })).toBeTruthy()
         expect(screen.getByRole('button', { name: 'Stop reading aloud' })).toBeTruthy()
         expect(h.setNarration).not.toHaveBeenCalled()
     })
 
-    it('waits for the tap with its clock at the start, instead of running on silently', async () => {
+    it('leaves Next out of a single feature in Autopilot, which moves on by itself, and keeps it for the whole tour', async () => {
+        FakeAudio.refuse = false
+        const feature = render(<TourTooltip {...cardProps()} />)
+        await act(async () => {})
+        expect(screen.queryByRole('button', { name: /^(Next|Finish)$/ })).toBeNull()
+        feature.unmount()
+
+        const whole = cardProps()
+        whole.step.data.wholeTour = true
+        render(<TourTooltip {...whole} />)
+        await act(async () => {})
+        expect(screen.getByRole('button', { name: /^(Next|Finish)$/ })).toBeTruthy()
+    })
+
+    it('lets the visitor turn narration off instead of pressing Play', async () => {
+        h.setNarration.mockClear()
+        renderCard()
+        await act(async () => {})
+        fireEvent.click(screen.getByRole('button', { name: 'Stop reading aloud' }))
+        expect(h.setNarration).toHaveBeenCalledWith(false)
+    })
+
+    it('waits for Play with its clock at the start, instead of running on silently', async () => {
         vi.useFakeTimers()
         try {
             const props = cardProps()
             render(<TourTooltip {...props} />)
             await act(async () => {})
-            expect(screen.getByRole('button', { name: 'Tap to hear' })).toBeTruthy()
+            expect(screen.getByRole('button', { name: 'Play' })).toBeTruthy()
             await act(async () => {
                 vi.advanceTimersByTime(60_000)
             })
@@ -131,26 +160,26 @@ describe('a tour card read aloud', () => {
         }
     })
 
-    it('plays the tour on again when Tap to hear is pressed while it is paused', async () => {
+    it('plays the tour on again when Play is pressed while it is paused', async () => {
         const card = renderCard()
         await act(async () => {})
         h.paused = true
         card.rerender()
         FakeAudio.refuse = false
         await act(async () => {
-            fireEvent.click(screen.getByRole('button', { name: 'Tap to hear' }))
+            fireEvent.click(screen.getByRole('button', { name: 'Play' }))
         })
         expect(h.setPaused).toHaveBeenCalledWith(false)
         expect(FakeAudio.instances[0].paused).toBe(false)
     })
 
-    it('runs silent with the speaker as it was when the clip fails to load, rather than asking for a tap', async () => {
+    it('runs silent with the speaker as it was when the clip fails to load, rather than asking for Play', async () => {
         FakeAudio.refuse = false
         renderCard()
         await act(async () => {
             FakeAudio.instances[0].dispatchEvent(new Event('error'))
         })
-        expect(screen.queryByRole('button', { name: 'Tap to hear' })).toBeNull()
+        expect(screen.queryByRole('button', { name: 'Play' })).toBeNull()
         expect(screen.getByRole('button', { name: 'Stop reading aloud' })).toBeTruthy()
     })
 })

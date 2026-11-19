@@ -93,8 +93,8 @@ type VoiceStatus = 'off' | 'loading' | 'playing' | 'ended' | 'refused' | 'failed
  * A step card read aloud: plays the step's clip when the card opens, holds it while the tour is
  * paused or the page is hidden, and stops it when the card goes. `refused` when the browser won't
  * play it before the visitor has clicked on the page (a "How this works" link opens the tour in a
- * new tab, so its first card has had no click): the card runs as if narration were off and offers
- * "Tap to hear", whose click (`listen`) is the gesture the browser waits for. `failed` when the clip
+ * new tab, so its first card has had no click): the card waits and offers Play, whose click
+ * (`listen`) is the gesture the browser waits for. `failed` when the clip
  * won't load (a dropped connection): the card runs as if narration were off. `position`
  * is how far the clip has played (ms) while it's playing, for Autoplay's clock to follow; `words`,
  * when each word in the clip is spoken, for the card to reveal its words as they're read.
@@ -248,9 +248,14 @@ export function TourTooltip({ backProps, closeProps, primaryProps, skipProps, st
         heard: () => (voice.status === 'ended' ? Infinity : (voice.position() ?? 0) / 1000),
         restartKey: index,
     })
-    // Refused by the browser, the card waits for "Tap to hear" rather than running on silently: its
-    // clock stays at the start, so the voice, the words and the bar all begin together on the tap.
+    // Refused by the browser, the card waits for Play rather than running on silently: its clock stays
+    // at the start, so the voice, the words and the bar all begin together on that click. Narration
+    // stays on (the speaker turns it off); Play is the click the browser waits for.
     const refused = voice.status === 'refused'
+    const start = () => {
+        if (autoplay && paused) setPaused(false)
+        voice.listen()
+    }
     const held = paused || refused || (hovered && !reading)
     const progress = useAutoplay({
         index,
@@ -290,24 +295,7 @@ export function TourTooltip({ backProps, closeProps, primaryProps, skipProps, st
                     )}
                     <h3 data-tour-spoken className="text-ui font-semibold text-fg">{step.title as React.ReactNode}</h3>
                 </div>
-                {clip && refused && (
-                    // Narration is on but the browser held the voice until a click on this page: one click starts it.
-                    <Hint label="Your browser waits for a click before Brio can speak" side="bottom">
-                        <button
-                            type="button"
-                            onClick={() => {
-                                // Asking to hear Brio is asking the tour to go on: a paused Autoplay plays again.
-                                if (autoplay && paused) setPaused(false)
-                                voice.listen()
-                            }}
-                            className="-mt-1 flex h-6 shrink-0 items-center gap-1 rounded-control px-1.5 text-caption font-medium text-action transition-colors hover:bg-surface-hover"
-                        >
-                            <Volume2 className="h-3.5 w-3.5" aria-hidden />
-                            Tap to hear
-                        </button>
-                    </Hint>
-                )}
-                {clip && !refused && (
+                {clip && (
                     <Hint label={narration ? 'Stop reading aloud' : 'Read aloud'} side="bottom">
                         <button
                             type="button"
@@ -340,7 +328,7 @@ export function TourTooltip({ backProps, closeProps, primaryProps, skipProps, st
                     {card.wholeTour ? 'Skip tour' : 'Skip'}
                 </button>
                 <div className="ml-auto flex items-center gap-1.5">
-                    {autoplay && (
+                    {autoplay && !refused && (
                         <Hint label={paused ? 'Play' : 'Pause'} side="bottom">
                             <button
                                 type="button"
@@ -352,8 +340,19 @@ export function TourTooltip({ backProps, closeProps, primaryProps, skipProps, st
                             </button>
                         </Hint>
                     )}
-                    {index > 0 && <Button {...back} type="button" variant="ghost" size="sm">Back</Button>}
-                    <Button {...next} type="button" size="sm">{isLastStep ? 'Finish' : 'Next'}</Button>
+                    {refused ? (
+                        // Waiting for its first click: Play is the one thing to press.
+                        <Button type="button" size="sm" onClick={start}>
+                            <Play className="h-3.5 w-3.5" aria-hidden />
+                            Play
+                        </Button>
+                    ) : (
+                        <>
+                            {index > 0 && <Button {...back} type="button" variant="ghost" size="sm">Back</Button>}
+                            {/* A single feature's tour in Autopilot moves on by itself; its end offers the next feature. */}
+                            {(card.wholeTour || !autoplay) && <Button {...next} type="button" size="sm">{isLastStep ? 'Finish' : 'Next'}</Button>}
+                        </>
+                    )}
                 </div>
             </div>
         </div>
