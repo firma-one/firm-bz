@@ -119,6 +119,38 @@ export function RaidTypeBadge({ type, decorative = false, small = false }: {
 }
 
 /**
+ * The type of an entry a person or Brio wrote, changeable after it's in the log (Deepak, 2026-11-19: an
+ * Action added as a Risk by mistake). The letter, like the plain cell, with the four to choose from.
+ */
+function RaidTypePicker({ value, onChange, label, disabled }: {
+    value: RaidType
+    onChange: (type: RaidType) => void
+    /** "Type of …", for screen readers. */
+    label: string
+    disabled?: boolean
+}) {
+    return (
+        <Select value={value} onValueChange={(v) => onChange(v as RaidType)} disabled={disabled}>
+            <SelectTrigger aria-label={label} className="-mx-1 h-7 w-auto gap-1 border-transparent bg-transparent px-1 text-small hover:bg-surface-hover">
+                <SelectValue>
+                    <RaidTypeBadge type={value} decorative />
+                </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+                {RAID_TYPES.map((t) => (
+                    <SelectItem key={t} value={t}>
+                        <span className="inline-flex items-center gap-2">
+                            <RaidTypeBadge type={t} decorative small />
+                            {RAID_TYPE_LABEL[t]}
+                        </span>
+                    </SelectItem>
+                ))}
+            </SelectContent>
+        </Select>
+    )
+}
+
+/**
  * A link out of the RAID log. In the app, a plain link to another tab's path. On /tour, where links are
  * a query of the page's own (`?tab=…`, raid-shared.ts), it moves in the page as the tour's tabs do: a
  * full load would start the tour over, its panel open again.
@@ -553,7 +585,7 @@ export interface RaidHandlers {
     onAccept: (item: RaidItemView, priority?: RaidPriority, title?: string) => Promise<string | null>
     onDismiss: (item: RaidItemView) => Promise<string | null>
     onAdd: (input: RaidNewItem) => Promise<string | null>
-    onEdit: (item: RaidItemView, patch: { title?: string | null; notes?: string | null; ownerUserId?: string | null; priority?: RaidPriority; dueDate?: string | null }) => Promise<string | null>
+    onEdit: (item: RaidItemView, patch: { title?: string | null; notes?: string | null; ownerUserId?: string | null; priority?: RaidPriority; dueDate?: string | null; type?: RaidType }) => Promise<string | null>
     onClose: (item: RaidItemView) => Promise<string | null>
     onReopen: (item: RaidItemView) => Promise<string | null>
 }
@@ -1077,7 +1109,18 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
                                 const more = item.sources.length - 1
                                 return (
                                     <NotionTableRow key={item.id} data-testid={`raid-row-${item.id}`} data-flash={flash.has(item.id) || undefined} className={cn('transition-colors duration-1000', flash.has(item.id) && 'bg-action/[0.07]')}>
-                                        <NotionTableCell><RaidTypeBadge type={item.type} /></NotionTableCell>
+                                        <NotionTableCell>
+                                            {!readOnly && !auto && isLive(item) ? (
+                                                <RaidTypePicker
+                                                    value={item.type}
+                                                    onChange={(type) => void run(item, () => handlers.onEdit(item, { type }))}
+                                                    label={`Type of ${item.title}`}
+                                                    disabled={busyIds.has(item.id)}
+                                                />
+                                            ) : (
+                                                <RaidTypeBadge type={item.type} />
+                                            )}
+                                        </NotionTableCell>
                                         {!actionsOnly && (
                                             <NotionTableCell className="whitespace-nowrap">
                                                 {item.priority && !readOnly && isLive(item) ? (

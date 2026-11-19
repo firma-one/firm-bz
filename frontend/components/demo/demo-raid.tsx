@@ -6,7 +6,9 @@ import { RaidOverviewView } from '@/components/projects/raid/raid-overview-card'
 import {
     RAID_CHANGED_EVENT,
     autoLineFor,
+    hasPriority,
     liveStatusFor,
+    nextWeekStart,
     raidOpenCount,
     priorityOf,
     shortDay,
@@ -270,8 +272,27 @@ export function DemoRaidTab({ engagementBase = '' }: { engagementBase?: string }
             return null
         },
         onEdit: async (target, patch) => {
+            // A new type takes its own fields, as the app's store does.
+            const retype = (i: RaidItemView): Partial<RaidItemView> => {
+                const type = patch.type
+                if (!type || type === i.type) return {}
+                const isAction = type === 'ACTION'
+                const owner = isAction ? i.ownerUserId ?? ME.userId : i.ownerUserId
+                return {
+                    type,
+                    status: i.status === 'CLOSED' ? 'CLOSED' : liveStatusFor(type),
+                    closedReason: i.closedReason?.replace(/^(Done|Closed)\b/, isAction ? 'Done' : 'Closed') ?? null,
+                    priority: hasPriority(type) ? i.priority ?? 'MEDIUM' : null,
+                    prioritySetByPerson: hasPriority(type),
+                    dueDate: isAction ? i.dueDate ?? nextWeekStart() : null,
+                    overdue: false,
+                    ownerUserId: owner,
+                    ownerName: MEMBERS.find((m) => m.userId === owner)?.name ?? null,
+                }
+            }
             mapItem(target.id, (i) => ({
                 ...i,
+                ...retype(i),
                 ...(patch.title !== undefined && patch.title ? { title: patch.title } : {}),
                 ...(patch.notes !== undefined ? { notes: patch.notes } : {}),
                 ...(patch.priority ? { priority: patch.priority, prioritySetByPerson: true } : {}),

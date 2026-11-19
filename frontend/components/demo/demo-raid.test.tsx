@@ -65,6 +65,21 @@ describe('DemoRaidTab', { timeout: 20_000 }, () => {
         expect(link('raid-row-raid-overdue', 'Deliverables')).toBe('?tab=board')
     })
 
+    it("changes the type of a person's own entry; one the engagement's data keeps has none to change", async () => {
+        Element.prototype.scrollIntoView ??= () => {}
+        render(<DemoRaidTab />)
+        const bar = screen.getByRole('toolbar', { name: 'Filter the RAID log' })
+        expect(within(screen.getByTestId('raid-row-raid-pace')).queryByRole('combobox', { name: /^Type of / })).toBeNull()
+
+        const picker = within(screen.getByTestId('raid-row-raid-letter')).getByRole('combobox', { name: /^Type of / })
+        await act(async () => { fireEvent.keyDown(picker, { key: 'Enter' }) })
+        await act(async () => { fireEvent.keyDown(screen.getByRole('option', { name: 'Risk' }), { key: 'Enter' }) })
+        expect(within(bar).getByRole('button', { name: 'Risks 3' })).toBeTruthy()
+        expect(within(bar).getByRole('button', { name: 'Actions 1' })).toBeTruthy()
+        // A Risk has a priority: Medium, to change.
+        expect(within(screen.getByTestId('raid-row-raid-letter')).getByRole('combobox', { name: /^Priority of / }).textContent).toContain('Medium')
+    })
+
     it('dismissing a suggestion drops it', async () => {
         render(<DemoRaidTab />)
         fireEvent.click(screen.getByTestId('raid-suggested-view'))

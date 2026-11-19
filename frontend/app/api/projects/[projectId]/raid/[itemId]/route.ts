@@ -19,9 +19,10 @@ export const dynamic = 'force-dynamic'
  * - "accept": { priority?, title?, type?, dueDate? } a suggestion joins the log (Open, Recorded for a decision), or
  *   merges into the entry it adds to. On a memo the person may change its type first; an accepted Action is theirs.
  * - "dismiss": a suggestion is turned down.
- * - "edit": { title?, notes?, ownerUserId?, priority?, dueDate? }. Titles only for entries a person or Brio wrote; a
+ * - "edit": { title?, notes?, ownerUserId?, priority?, dueDate?, type? }. Titles and types only for entries a person or Brio wrote; a
  *   priority (HIGH, MEDIUM, LOW) only on a Risk or an Issue, and the sync keeps it from then on; a due date
- *   (YYYY-MM-DD, or null to clear) only on an Action.
+ *   (YYYY-MM-DD, or null to clear) only on an Action. A new type takes its own fields: a priority for a Risk or an
+ *   Issue, a due date and an owner for an Action.
  * - "close" / "reopen".
  *
  * A Lead or a Contributor · Full Access (lib/raid/raid-access.ts). A completed engagement is read only.
@@ -58,6 +59,7 @@ export async function PATCH(
                     ...('ownerUserId' in body ? { ownerUserId: body.ownerUserId } : {}),
                     ...('priority' in body ? { priority: body.priority } : {}),
                     ...('dueDate' in body ? { dueDate: body.dueDate } : {}),
+                    ...('type' in body ? { type: body.type } : {}),
                 })
                 return NextResponse.json({ data: { id: itemId } })
             case 'close':
