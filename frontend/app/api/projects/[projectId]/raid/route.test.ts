@@ -28,6 +28,7 @@ const h = vi.hoisted(() => {
         close: vi.fn(),
         reopen: vi.fn(),
         count: vi.fn(async () => 7),
+        suggestedCount: vi.fn(async () => 2),
         runRaidCheck: vi.fn(),
     }
 })
@@ -67,6 +68,7 @@ vi.mock('@/lib/raid/raid-store', () => ({
     closeRaidItem: h.close,
     reopenRaidItem: h.reopen,
     raidOpenCountFor: h.count,
+    raidSuggestedCountFor: h.suggestedCount,
     lastCheckedAtOf: (s: { raid?: { lastCheckedAt?: string } }) => s?.raid?.lastCheckedAt ?? null,
     raidActor: (u: { id: string }) => ({ userId: u.id, firstName: 'Alex' }),
 }))
@@ -141,8 +143,8 @@ describe('who', () => {
         expect(h.sync).toHaveBeenCalledWith('p1', 'f1')
     })
 
-    it('answers the count alone for the Discussions switch', async () => {
-        expect(await (await get('?view=count')).json()).toEqual({ data: { count: 7 } })
+    it('answers the counts alone for the RAID tab: entries, and suggestions waiting for its dot', async () => {
+        expect(await (await get('?view=count')).json()).toEqual({ data: { count: 7, suggested: 2 } })
         expect(h.loadRaidLog).not.toHaveBeenCalled()
     })
 })

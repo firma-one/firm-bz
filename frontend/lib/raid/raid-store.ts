@@ -281,6 +281,11 @@ export async function raidOpenCountFor(engagementId: string): Promise<number> {
     return prisma.engagementRaidItem.count({ where: { engagementId, status: { in: ['OPEN', 'RECORDED'] } } })
 }
 
+/** Brio's suggestions waiting on the log: the dot on the RAID tab. */
+export async function raidSuggestedCountFor(engagementId: string): Promise<number> {
+    return prisma.engagementRaidItem.count({ where: { engagementId, status: 'SUGGESTED' } })
+}
+
 /** When Brio last read this engagement's conversation (engagement.settings.raid.lastCheckedAt). */
 export function lastCheckedAtOf(settings: unknown): string | null {
     const raw = ((settings ?? {}) as { raid?: { lastCheckedAt?: unknown } }).raid?.lastCheckedAt

@@ -28,7 +28,7 @@ describe('RaidOverviewView', { timeout: 20_000 }, () => {
         expect(screen.getByText('2 decisions')).toBeTruthy()
         expect(screen.queryByText(/assumption/i)).toBeNull()
         // A memo's suggestion waits on the memo, so it isn't one to review here.
-        expect(screen.getByRole('link', { name: '2 suggestions to review' }).getAttribute('href')).toBe('/d/e/q2/raid')
+        expect(screen.getByRole('link', { name: '2 suggestions to review' }).getAttribute('href')).toBe('/d/e/q2/raid?view=suggested')
         expect(screen.getByRole('link', { name: /Open RAID log/ }).getAttribute('href')).toBe('/d/e/q2/raid')
     })
 

@@ -4,7 +4,7 @@ import { blockIfEngagementCompleted } from '@/lib/engagement-access'
 import { isAiConfigured } from '@/lib/ai/client'
 import { raidFailureResponse, raidRouteAccess } from '@/lib/raid/raid-access'
 import { syncRaidSignals } from '@/lib/raid/raid-sync'
-import { addRaidItem, lastCheckedAtOf, loadRaidLog, raidActor, raidOpenCountFor } from '@/lib/raid/raid-store'
+import { addRaidItem, lastCheckedAtOf, loadRaidLog, raidActor, raidOpenCountFor, raidSuggestedCountFor } from '@/lib/raid/raid-store'
 import { conversationStateOf, loadConversationStamps } from '@/lib/raid/raid-fingerprint'
 import type { RaidLogPayload } from '@/lib/raid/raid-shared'
 
@@ -17,7 +17,7 @@ export const dynamic = 'force-dynamic'
  * suggestions, the people an entry can be given to, when Brio last read the conversation and whether it
  * has changed since (lib/raid/raid-fingerprint.ts). The free entries (status, health, the Board) are
  * brought up to date first (lib/raid/raid-sync.ts), except on a completed engagement, which is read
- * only. `?view=count` answers only the number of live entries, for the Discussions switch.
+ * only. `?view=count` answers only the number of live entries and of suggestions waiting, for the RAID tab.
  *
  * POST /api/projects/[projectId]/raid
  *
@@ -42,7 +42,8 @@ export async function GET(
         if (!readOnly) await syncRaidSignals(projectId, access.ctx.firmId)
 
         if (request.nextUrl.searchParams.get('view') === 'count') {
-            return NextResponse.json({ data: { count: await raidOpenCountFor(projectId) } })
+            const [count, suggested] = await Promise.all([raidOpenCountFor(projectId), raidSuggestedCountFor(projectId)])
+            return NextResponse.json({ data: { count, suggested } })
         }
 
         const [log, stamps] = await Promise.all([loadRaidLog(projectId), loadConversationStamps(projectId)])

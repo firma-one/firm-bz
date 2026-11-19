@@ -2,6 +2,7 @@
 
 import { BarChart3, ClipboardList, Folder, LayoutGrid, MessagesSquare, PenTool, Settings, ShieldAlert, Users } from 'lucide-react'
 import { RaidInfo } from './raid/raid-info'
+import { BRIO_GREEN } from '@/lib/ai/assistant'
 import { TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Tag } from '@/components/ui/tag'
 import { AccessLock } from '@/components/ui/access-lock'
@@ -29,6 +30,8 @@ export type EngagementTabsConfig = {
     memberCount?: number
     /** Open and waiting RAID entries: what the RAID tab's number counts. */
     raidCount?: number
+    /** Brio's suggestions waiting in the RAID log: a dot on its tab while there are any. */
+    raidSuggested?: number
     enableBetaFeatures?: boolean
     canViewInternalTabs: boolean
     /** The RAID log: a Lead or a Contributor · Full Access, not viewing as a Reviewer or Limited Access. */
@@ -82,6 +85,15 @@ export function EngagementTabsList({ pendingTab, ...c }: EngagementTabsConfig & 
                     RAID
                     <RaidInfo nested />
                     {count(c.raidCount)}
+                    {!!c.raidSuggested && (
+                        <span
+                            className="h-1.5 w-1.5 shrink-0 rounded-full"
+                            style={{ backgroundColor: BRIO_GREEN }}
+                            role="img"
+                            aria-label={`${c.raidSuggested} ${c.raidSuggested === 1 ? 'suggestion waits' : 'suggestions wait'}`}
+                            data-testid="raid-tab-suggested-dot"
+                        />
+                    )}
                     <AccessLock label="Internal only · Hidden from Limited Access contributors and Reviewers" />
                     {pending('raid')}
                 </TabsTrigger>

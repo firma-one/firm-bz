@@ -24,7 +24,7 @@ import type { LwCrmEngagementStatus } from '@/lib/actions/project'
 import { EngagementHeader } from './engagement-header'
 import { EngagementTabsList, engagementChromeKey, engagementTabGuide, rememberEngagementChrome, type EngagementTabsConfig } from './engagement-tabs'
 import { HorizontalScroll } from '@/components/ui/horizontal-scroll'
-import { RaidTab, useRaidCount } from './raid/raid-tab'
+import { RaidTab, useRaidCounts } from './raid/raid-tab'
 
 /** The counts the tab row shows beside its labels. Loaded behind the page, never waited for. */
 export type EngagementBadgeCounts = {
@@ -210,7 +210,7 @@ export function EngagementWorkspace({
     // switch keeps the header and tab row on screen and only the body shows a skeleton.
     // The RAID log has its own tab (it was Discussions › RAID): for the same people as Memos.
     const canViewRaid = hasInternalDiscussions({ canEdit, canViewInternal: canViewInternalTabs, viewingAsRestrictedRole: isExternalPersona })
-    const raidCount = useRaidCount(canViewRaid ? projectId : null)
+    const raidCounts = useRaidCounts(canViewRaid ? projectId : null)
     const tabsConfig: EngagementTabsConfig = {
         clientConnectorType,
         sharesCount,
@@ -218,7 +218,8 @@ export function EngagementWorkspace({
         wikiPageCount,
         auditCount,
         memberCount,
-        raidCount: raidCount ?? undefined,
+        raidCount: raidCounts?.count,
+        raidSuggested: raidCounts?.suggested,
         enableBetaFeatures,
         canViewInternalTabs: Boolean(canViewInternalTabs),
         canViewRaid,

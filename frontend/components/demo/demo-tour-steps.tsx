@@ -587,7 +587,7 @@ export const NODE_STEPS: Record<TourNodeId, TourStep[]> = {
         {
             target: '[data-demo-tour="engagement-raid-tab"]',
             title: 'RAID log',
-            content: <p>The engagement&apos;s Risks, Actions, Issues and Decisions, for your team only, each marked by its first letter. Filter by kind, and switch between what&apos;s open and what&apos;s closed.</p>,
+            content: <p>The engagement&apos;s Risks, Actions, Issues and Decisions, for your team only, each marked by its first letter. Filter by kind, switch between what&apos;s open and what&apos;s closed, and Add your own in a side pane.</p>,
             route: engAt({ tab: 'raid' }),
             placement: 'bottom',
             skipScroll: true,
@@ -625,9 +625,9 @@ export const NODE_STEPS: Record<TourNodeId, TourStep[]> = {
             skipScroll: true,
         },
         {
-            target: '[data-demo-tour="raid-brio-check"]',
+            target: '[data-demo-tour="raid-suggested"]',
             title: <><Brio />&apos;s suggestions</>,
-            content: <p><Brio /> reads threads with new messages once a day, or now with the sparkle, and suggests what to log. What it finds in a memo waits on the memo. The plus adds your own.</p>,
+            content: <p><Brio /> reads threads with new messages once a day, or now with the sparkle, and suggests what to log. Suggestions wait here, each with the line it came from, until someone accepts or dismisses them. A memo&apos;s wait on the memo.</p>,
             route: engAt({ tab: 'raid' }),
             placement: 'bottom',
             skipScroll: true,

@@ -15,8 +15,7 @@ import { DemoFileList } from '@/components/demo/demo-file-list'
 import { DemoEngagementOverview } from '@/components/demo/demo-engagement-overview'
 import { DemoEngagementBoard } from '@/components/demo/demo-engagement-board'
 import { DemoEngagementComments } from '@/components/demo/demo-engagement-comments'
-import { DemoRaidTab, demoRaidLog } from '@/components/demo/demo-raid'
-import { raidOpenCount } from '@/lib/raid/raid-shared'
+import { DemoRaidTab, useDemoRaidCounts } from '@/components/demo/demo-raid'
 import { DISCUSSIONS_MEMO_PARAM, DISCUSSIONS_VIEW_PARAM } from '@/components/projects/discussions-switch'
 import { DemoEngagementAudit } from '@/components/demo/demo-engagement-audit'
 import { DemoEngagementMembers } from '@/components/demo/demo-engagement-members'
@@ -40,6 +39,7 @@ export function DemoEngagementWorkspace({ client, engagement }: DemoEngagementWo
     const router = useRouter()
     const pathname = usePathname()
     const searchParams = useSearchParams()
+    const raidCounts = useDemoRaidCounts()
 
     const tabParam = searchParams.get('tab') || 'analytics'
     const currentTab = VALID_TABS.has(tabParam) ? tabParam : 'analytics'
@@ -105,7 +105,8 @@ export function DemoEngagementWorkspace({ client, engagement }: DemoEngagementWo
                             sharesCount={deliverableCount}
                             auditCount={undefined}
                             memberCount={4}
-                            raidCount={raidOpenCount(demoRaidLog().items)}
+                            raidCount={raidCounts.count}
+                            raidSuggested={raidCounts.suggested}
                             canViewInternalTabs={true}
                             canViewRaid={true}
                             canManage={true}

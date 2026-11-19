@@ -1,11 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { RaidTabView, type RaidHandlers, type RaidNewItem } from '@/components/projects/raid/raid-tab'
 import { RaidOverviewView } from '@/components/projects/raid/raid-overview-card'
 import {
+    RAID_CHANGED_EVENT,
     autoLineFor,
     liveStatusFor,
+    raidOpenCount,
     priorityOf,
     shortDay,
     type RaidItemView,
@@ -13,6 +15,7 @@ import {
     type RaidMember,
     type RaidSourceView,
     type RaidType,
+    type RaidChangedDetail,
 } from '@/lib/raid/raid-shared'
 
 /**
@@ -296,7 +299,34 @@ export function DemoRaidTab({ engagementBase = '' }: { engagementBase?: string }
         },
     }
 
+    // The tab row's count and dot follow the log here, as the app's do.
+    useEffect(() => {
+        window.dispatchEvent(new CustomEvent<RaidChangedDetail>(RAID_CHANGED_EVENT, {
+            detail: { projectId: TOUR_RAID_ID, count: raidOpenCount(log.items), suggested: log.suggestions.length },
+        }))
+    }, [log])
+
     return <RaidTabView log={log} engagementBase={engagementBase} readOnly={false} {...handlers} />
+}
+
+/** What the tour's RAID tab announces itself as, in place of an engagement id. */
+const TOUR_RAID_ID = 'tour'
+
+/** The tour's RAID tab count and suggestion dot: the canned log's, then whatever the tab says. */
+export function useDemoRaidCounts(): { count: number; suggested: number } {
+    const [counts, setCounts] = useState(() => {
+        const l = demoRaidLog()
+        return { count: raidOpenCount(l.items), suggested: l.suggestions.length }
+    })
+    useEffect(() => {
+        const onChange = (e: Event) => {
+            const d = (e as CustomEvent<RaidChangedDetail>).detail
+            if (d?.projectId === TOUR_RAID_ID) setCounts({ count: d.count, suggested: d.suggested ?? 0 })
+        }
+        window.addEventListener(RAID_CHANGED_EVENT, onChange)
+        return () => window.removeEventListener(RAID_CHANGED_EVENT, onChange)
+    }, [])
+    return counts
 }
 
 /** The Overview's RAID card on /tour, over the same canned log. */

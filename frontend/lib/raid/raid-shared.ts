@@ -468,6 +468,11 @@ export function raidLogHref(engagementBase: string): string {
     return engagementBase ? `${engagementBase}/raid` : '?tab=raid'
 }
 
+/** The RAID log opened on Brio's suggestions, its Suggested view. */
+export function raidSuggestedHref(engagementBase: string): string {
+    return engagementBase ? `${engagementBase}/raid?view=suggested` : '?tab=raid&view=suggested'
+}
+
 /**
  * Where a source chip goes: the discussion, the memo in Files, the item on the Board, or for health the
  * Overview chart it comes from (`…/analytics`, the Overview's own path: the bare engagement URL reopens
@@ -503,6 +508,8 @@ export const RAID_CHANGED_EVENT = 'firma:raid-changed'
 export interface RaidChangedDetail {
     projectId: string
     count: number
+    /** Brio's suggestions waiting: the dot on the RAID tab. */
+    suggested?: number
 }
 
 // ── The firm's open risks and issues (Firm Overview) ──────────────────────────────────────────

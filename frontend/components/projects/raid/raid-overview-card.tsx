@@ -8,6 +8,7 @@ import { failureFrom, failureReason } from '@/lib/files/action-failure'
 import {
     firstNameOf,
     raidLogHref,
+    raidSuggestedHref,
     raidOverviewOf,
     shortDay,
     dueDay,
@@ -79,7 +80,7 @@ export function RaidOverviewView({ log, engagementBase, loadError, onRetry }: {
                 actions={(
                     <>
                         {overview && overview.suggestionCount > 0 && (
-                            <RaidLink href={href} className="text-small font-medium text-action hover:underline">
+                            <RaidLink href={raidSuggestedHref(engagementBase)} className="text-small font-medium text-action hover:underline">
                                 {overview.suggestionCount} {plural(overview.suggestionCount, 'suggestion', 'suggestions')} to review
                             </RaidLink>
                         )}
