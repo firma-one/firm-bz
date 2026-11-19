@@ -286,7 +286,7 @@ function InlineText({ value, placeholder, label, maxLength, onSave, className }:
                     if (e.key === 'Enter') { e.preventDefault(); void commit() }
                     if (e.key === 'Escape') { e.preventDefault(); setDraft(value ?? ''); setEditing(false) }
                 }}
-                className="h-7 min-w-[12rem] px-2 text-small"
+                className="h-7 w-full min-w-0 px-2 text-small"
             />
         )
     }
@@ -294,7 +294,8 @@ function InlineText({ value, placeholder, label, maxLength, onSave, className }:
         <button
             type="button"
             onClick={() => { setDraft(value ?? ''); setEditing(true) }}
-            className={cn('-mx-1 rounded-control px-1 text-left hover:bg-surface-hover', className)}
+            className={cn('-mx-1 block max-w-[calc(100%+0.5rem)] truncate rounded-control px-1 text-left hover:bg-surface-hover', className)}
+            title={value ?? undefined}
             aria-label={`${label}: ${value || 'none'}. Edit`}
         >
             {value || <span className="text-fg-subtle">{placeholder}</span>}
@@ -311,7 +312,7 @@ function OwnerCell({ item, members, readOnly, onChange }: {
     readOnly: boolean
     onChange: (ownerUserId: string | null) => void
 }) {
-    if (readOnly || !isLive(item)) return item.ownerName ? <span>{item.ownerName}</span> : <span className="text-fg-subtle">·</span>
+    if (readOnly || !isLive(item)) return item.ownerName ? <span className="block truncate" title={item.ownerName}>{item.ownerName}</span> : <span className="text-fg-subtle">·</span>
     // Someone no longer on the engagement still shows as the owner until changed.
     const options = item.ownerUserId && !members.some((m) => m.userId === item.ownerUserId)
         ? [...members, { userId: item.ownerUserId, name: item.ownerName ?? 'Former member' }]
@@ -320,9 +321,10 @@ function OwnerCell({ item, members, readOnly, onChange }: {
         <Select value={item.ownerUserId ?? NO_OWNER} onValueChange={(v) => onChange(v === NO_OWNER ? null : v)}>
             <SelectTrigger
                 aria-label={`Owner of ${item.title}`}
-                className="-mx-1 h-7 w-auto min-w-[6rem] gap-1 border-transparent bg-transparent px-1 text-small hover:bg-surface-hover"
+                className="-mx-1 h-7 w-auto min-w-[6rem] max-w-[calc(100%+0.5rem)] gap-1 border-transparent bg-transparent px-1 text-small hover:bg-surface-hover"
+                title={item.ownerName ?? undefined}
             >
-                <SelectValue placeholder="Assign">{item.ownerName ?? <span className="text-fg-subtle">Assign</span>}</SelectValue>
+                <SelectValue placeholder="Assign">{item.ownerName ? <span className="truncate">{item.ownerName}</span> : <span className="text-fg-subtle">Assign</span>}</SelectValue>
             </SelectTrigger>
             <SelectContent>
                 <SelectItem value={NO_OWNER}>No owner</SelectItem>
@@ -1103,18 +1105,20 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
                             : stateFilter === 'open' ? 'Nothing open here.' : actionsOnly ? 'Nothing done here yet.' : 'Nothing closed here yet.'}
                     </p>
                 ) : (
-                    <NotionTable data-demo-tour="raid-table">
+                    // Fixed columns, so the log fits a full-screen window: Item and Mitigation take what's left
+                    // and cut long text short (the whole of it on hover); Raised shows on wide screens only.
+                    <NotionTable data-demo-tour="raid-table" className="min-w-[60rem] table-fixed">
                         <NotionTableHeader>
                             <NotionTableHead icon={<Shapes />} className="w-[72px]">Type</NotionTableHead>
-                            {!actionsOnly && <NotionTableHead icon={<SignalHigh />} className="w-[112px]">Priority</NotionTableHead>}
+                            {!actionsOnly && <NotionTableHead icon={<SignalHigh />} className="w-[100px]">Priority</NotionTableHead>}
                             <NotionTableHead icon={<TypeIcon />}>{actionsOnly ? 'Action' : 'Item'}</NotionTableHead>
-                            <NotionTableHead icon={<Link2 />}>Source</NotionTableHead>
-                            <NotionTableHead icon={<UserRound />}>Owner</NotionTableHead>
-                            <NotionTableHead icon={<CalendarDays />}>Due</NotionTableHead>
-                            <NotionTableHead icon={<ListChecks />}>{actionsOnly ? 'Next step' : 'Mitigation · next step'}</NotionTableHead>
-                            <NotionTableHead icon={<CircleDot />}>Status</NotionTableHead>
-                            <NotionTableHead icon={<Clock3 />}>Raised</NotionTableHead>
-                            {!readOnly && <NotionTableActionsHead />}
+                            <NotionTableHead icon={<Link2 />} className="w-[140px]">Source</NotionTableHead>
+                            <NotionTableHead icon={<UserRound />} className="w-[136px]">Owner</NotionTableHead>
+                            <NotionTableHead icon={<CalendarDays />} className="w-[164px]">Due</NotionTableHead>
+                            <NotionTableHead icon={<ListChecks />} className="w-[15%]">{actionsOnly ? 'Next step' : 'Mitigation · next step'}</NotionTableHead>
+                            <NotionTableHead icon={<CircleDot />} className="w-[100px]">Status</NotionTableHead>
+                            <NotionTableHead icon={<Clock3 />} className="hidden w-[84px] 2xl:table-cell">Raised</NotionTableHead>
+                            {!readOnly && <NotionTableActionsHead className="w-[40px]" />}
                         </NotionTableHeader>
                         <NotionTableBody>
                             {rows.map((item) => {
@@ -1149,7 +1153,7 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
                                                 )}
                                             </NotionTableCell>
                                         )}
-                                        <NotionTableCell className="min-w-[16rem] max-w-[28rem]">
+                                        <NotionTableCell className="overflow-hidden">
                                             <span className="flex min-w-0 items-center gap-1.5">
                                                 {readOnly || auto ? (
                                                     <span className="block truncate font-medium text-fg" title={item.title}>{item.title}</span>
@@ -1167,13 +1171,13 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
                                                 {isLegacyAssumption(item) && <Tag color="gray">Assumption</Tag>}
                                             </span>
                                         </NotionTableCell>
-                                        <NotionTableCell className="whitespace-nowrap">
-                                            <span className="inline-flex items-center gap-1" title={item.autoLine ?? undefined}>
+                                        <NotionTableCell className="overflow-hidden whitespace-nowrap">
+                                            <span className="flex min-w-0 items-center gap-1" title={item.autoLine ?? undefined}>
                                                 {source && <RaidSourceChip source={source} engagementBase={engagementBase} />}
                                                 {more > 0 && <span className="text-caption text-fg-subtle" title={item.sources.slice(1).map((s) => s.label).join('\n')}>+{more}</span>}
                                             </span>
                                         </NotionTableCell>
-                                        <NotionTableCell className="whitespace-nowrap">
+                                        <NotionTableCell className="overflow-hidden whitespace-nowrap">
                                             <OwnerCell
                                                 item={item}
                                                 members={log.members}
@@ -1184,7 +1188,7 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
                                         <NotionTableCell className="whitespace-nowrap">
                                             <DueCell item={item} readOnly={readOnly} onChange={(dueDate) => run(item, () => handlers.onEdit(item, { dueDate }))} />
                                         </NotionTableCell>
-                                        <NotionTableCell className="min-w-[12rem] max-w-[22rem]">
+                                        <NotionTableCell className="overflow-hidden">
                                             {item.type === 'DECISION' || isLegacyAssumption(item) ? (
                                                 <span className="text-fg-subtle">·</span>
                                             ) : readOnly || !isLive(item) ? (
@@ -1204,7 +1208,7 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
                                                 <RaidStatusTag item={item} />
                                             </span>
                                         </NotionTableCell>
-                                        <NotionTableCell className="whitespace-nowrap text-fg-muted">{shortDay(item.raisedAt)}</NotionTableCell>
+                                        <NotionTableCell className="hidden whitespace-nowrap text-fg-muted 2xl:table-cell">{shortDay(item.raisedAt)}</NotionTableCell>
                                         {!readOnly && (
                                             <NotionTableActions>
                                                 {(isLive(item) || item.canReopen) && (
